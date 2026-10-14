@@ -267,6 +267,7 @@ impl Frontend {
             carets,
             legend,
         });
+        self.upload_cart_menu_faces(compositor);
         let sockets = slot_store::Core::PICKER
             .iter()
             .map(|c| {
@@ -349,6 +350,40 @@ impl Frontend {
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);
         self.upload_wallpaper(compositor);
+    }
+
+    /// The cart menu's words, each value dim and lit: built once, as the quick menu's are.
+    fn upload_cart_menu_faces(&mut self, compositor: &mut Compositor) {
+        use slot_ui::{cart_menu_label_face, cart_menu_value_face, CartRow};
+        let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
+        let labels = CartRow::ALL.iter().map(|r| up(cart_menu_label_face(*r))).collect();
+        let mut values = |names: Vec<&str>| -> Vec<[(TexId, u32, u32); 2]> {
+            names
+                .into_iter()
+                .map(|n| [false, true].map(|lit| up(cart_menu_value_face(n, lit))))
+                .collect()
+        };
+        let mut colour_names: Vec<&str> = slot_ui::colour_choices().iter().map(|(n, _)| *n).collect();
+        // A colour picked elsewhere (Cart Studio) shows as Custom, after all the named ones.
+        colour_names.push("Custom");
+        let colours = values(colour_names);
+        let finishes = values(slot_ui::FINISHES.iter().map(|f| slot_ui::finish_name(*f)).collect());
+        let shapes = values(slot_ui::SHAPES.to_vec());
+        let cores = values(slot_store::Core::PICKER.iter().map(|c| c.text()).collect());
+        let carets = [false, true].map(|right| up(quick_caret_face(right)));
+        let legend = slot_ui::cart_menu_legend_faces().map(|f| {
+            let (tex, w, _) = up(f);
+            (tex, w)
+        });
+        self.session.app_mut().set_cart_menu_faces(slot_ui::CartMenuFaces {
+            labels,
+            colours,
+            finishes,
+            shapes,
+            cores,
+            carets,
+            legend,
+        });
     }
 
     fn upload_wallpaper(&mut self, compositor: &mut Compositor) {

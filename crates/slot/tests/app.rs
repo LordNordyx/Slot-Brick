@@ -12,7 +12,7 @@ use slot::video_mode::{video_mode_for, VideoMode, VIDEO_MODE_FILE};
 use slot_gfx::WHOLE_TEXTURE;
 use slot_input::{Action, Btn, RawEvent};
 use slot_retro::ButtonMask;
-use slot_store::{write_slot_state, Cart, Core, Platform, SlotState};
+use slot_store::{write_slot_state, Cart, Core, Platform, ShellFinish, SlotState};
 use slot_ui::{
     board_at, grown, lid_at, lid_from, on_board, opening, shelf_cart_at, Draw, Icon, Placed, TexId,
     BOARD_W, CART_H, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, LID_TURN, SLIDE_UP,
@@ -787,10 +787,23 @@ fn let_it_hop(app: &mut App) {
     app.update(0.25);
 }
 
+/// The core picker, as START reaches it: the cart menu, down to EMULATOR, A. On a cart with
+/// no emulator choice A on its last row resets the cart instead, which changes nothing here.
+fn open_picker(app: &mut App) {
+    app.apply(Action::GbaDown(Btn::Start));
+    if app.cart_menu().is_none() {
+        return;
+    }
+    while !matches!(app.cart_menu(), Some((slot_ui::CartRow::Emulator | slot_ui::CartRow::Reset, _))) {
+        app.apply(Action::GbaDown(Btn::Down));
+    }
+    app.apply(Action::GbaDown(Btn::A));
+}
+
 fn start_on(mut pressed: App, mut untouched: App) -> (Option<Core>, f32, bool) {
     fake_picker_faces(&mut pressed);
     fake_picker_faces(&mut untouched);
-    pressed.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut pressed);
     let_it_hop(&mut pressed);
     let_it_hop(&mut untouched);
     let moved = frame(&pressed) != frame(&untouched);
@@ -821,7 +834,7 @@ fn start_on_the_shelf_opens_the_core_picker_on_the_carts_current_core() {
     let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     assert_eq!(app.selected_stem(), Some("Emerald"));
 
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     assert_eq!(
         app.core_picker(),
         Some(Core::Mgba),
@@ -831,7 +844,7 @@ fn start_on_the_shelf_opens_the_core_picker_on_the_carts_current_core() {
     let_it_close(&mut app);
 
     slot_store::write_selected_core(d.path(), "Emerald", Core::Gpsp).unwrap();
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     assert_eq!(
         app.core_picker(),
         Some(Core::Gpsp),
@@ -843,7 +856,7 @@ fn start_on_the_shelf_opens_the_core_picker_on_the_carts_current_core() {
 fn choosing_a_core_writes_it_and_closes() {
     let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.apply(Action::GbaDown(Btn::A));
 
@@ -865,7 +878,7 @@ fn choosing_a_core_writes_it_and_closes() {
 fn b_closes_the_picker_without_writing() {
     let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.apply(Action::GbaDown(Btn::B));
     let_it_close(&mut app);
@@ -882,7 +895,7 @@ fn b_closes_the_picker_without_writing() {
 fn the_chip_goes_where_the_arrow_points_and_does_not_wrap() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
 
     app.apply(Action::GbaDown(Btn::Left));
     assert_eq!(
@@ -916,7 +929,7 @@ fn the_chip_goes_where_the_arrow_points_and_does_not_wrap() {
 fn a_shelf_refusal_does_not_shake_once_the_picker_takes_over() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     app.refuse();
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     assert_eq!(
         app.shelf_shake(),
         0.0,
@@ -928,7 +941,7 @@ fn a_shelf_refusal_does_not_shake_once_the_picker_takes_over() {
 fn back_mid_hop_turns_round_and_onward_does_nothing() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.update(0.05);
 
@@ -952,7 +965,7 @@ fn back_mid_hop_turns_round_and_onward_does_nothing() {
 fn a_mid_hop_writes_where_the_chip_is_heading() {
     let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.update(0.05);
     app.apply(Action::GbaDown(Btn::A));
@@ -962,7 +975,7 @@ fn a_mid_hop_writes_where_the_chip_is_heading() {
 #[test]
 fn the_a_that_saved_does_not_start_the_cart() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.apply(Action::GbaDown(Btn::A));
     let_it_close(&mut app);
@@ -980,7 +993,7 @@ fn the_a_that_saved_does_not_start_the_cart() {
 fn presses_during_the_close_and_keys_the_picker_does_not_use_do_nothing() {
     let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     for key in [Btn::Up, Btn::Down, Btn::Start, Btn::Select] {
         app.apply(Action::GbaDown(key));
         assert_eq!(
@@ -1006,7 +1019,7 @@ fn presses_during_the_close_and_keys_the_picker_does_not_use_do_nothing() {
 fn shutting_the_lid_closes_the_picker_without_writing() {
     let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.apply(Action::LidClose);
     assert_eq!(app.core_picker(), None, "the picker survived the lid");
@@ -1016,7 +1029,7 @@ fn shutting_the_lid_closes_the_picker_without_writing() {
 #[test]
 fn the_picker_swallows_the_shelf_arrows() {
     let (_d, mut app) = on_shelf(&["Emerald", "Metroid Fusion"]);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.apply(Action::GbaDown(Btn::B));
     assert_eq!(
@@ -1030,7 +1043,7 @@ fn the_picker_swallows_the_shelf_arrows() {
 fn opening_the_picker_lets_go_of_a_play_hold_already_armed() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     app.apply(Action::GbaDown(Btn::A));
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaUp(Btn::A));
     app.update(0.6);
     assert!(
@@ -1044,7 +1057,7 @@ fn opening_the_picker_lets_go_of_a_play_hold_already_armed() {
 fn opening_the_picker_lets_go_of_a_direction_still_held() {
     let (_d, mut app) = on_shelf(&["Emerald", "Metroid Fusion", "Zzz"]);
     app.apply(Action::GbaDown(Btn::Right));
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.update(0.6);
     assert_eq!(
         app.selected_stem(),
@@ -1056,7 +1069,7 @@ fn opening_the_picker_lets_go_of_a_direction_still_held() {
 #[test]
 fn the_picker_does_not_open_on_an_empty_shelf() {
     let (_d, mut app) = on_shelf(&[]);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     assert_eq!(app.core_picker(), None);
 }
 
@@ -1264,7 +1277,7 @@ fn let_it_open(app: &mut App) {
 fn the_open_cart_rests_over_the_shelf_with_its_lid_turned() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     let out = frame(&app);
 
@@ -1360,7 +1373,7 @@ fn the_open_cart_rests_over_the_shelf_with_its_lid_turned() {
 fn the_sockets_and_the_seated_chip_rest_on_whole_pixels() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     let out = frame(&app);
 
@@ -1382,7 +1395,7 @@ fn the_neighbours_dim_to_a_quarter_while_a_cart_is_open() {
     let faces = vec![TexId::from_raw(920), TexId::from_raw(921)];
     app.set_faces(faces.clone());
     fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     let out = frame(&app);
 
@@ -1403,7 +1416,7 @@ fn the_neighbours_dim_to_a_quarter_while_a_cart_is_open() {
 fn the_seated_chip_moves_to_the_socket_it_hopped_to() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     let_it_hop(&mut app);
@@ -1435,7 +1448,7 @@ fn the_highlighted_cart_becomes_the_lid_rather_than_a_second_cart() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
     let rest = resting_cart(&frame(&app));
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let out = frame(&app);
 
     let standing = out
@@ -1526,7 +1539,7 @@ fn the_highlighted_cart_becomes_the_lid_rather_than_a_second_cart() {
 fn mid_hop_the_chip_is_blank_tipped_and_off_the_board() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     let (_, seated, _) = turned_at(&frame(&app), f.chips[0]).expect("no seated chip");
 
@@ -1562,7 +1575,7 @@ fn mid_hop_the_chip_is_blank_tipped_and_off_the_board() {
 fn the_chip_alone_shakes_when_refused() {
     let (_d, mut app) = on_shelf(&["Emerald", "Metroid Fusion", "Zzz"]);
     let f = fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     let before = frame(&app);
     app.apply(Action::GbaDown(Btn::Left));
@@ -1588,7 +1601,7 @@ fn the_chip_alone_shakes_when_refused() {
 fn closing_puts_the_cart_back_on_the_shelf() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_picker_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     let_it_open(&mut app);
     app.apply(Action::GbaDown(Btn::B));
 
@@ -1649,7 +1662,7 @@ fn the_open_waits_on_the_shelf_for_its_faces() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_boot_faces(&mut app);
     let rest = resting_cart(&frame(&app));
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.update(0.3);
     assert_plain_shelf(&frame(&app), &f, "while its faces are built");
 
@@ -1689,7 +1702,7 @@ fn the_open_starts_anyway_when_the_faces_never_come() {
     app.apply(Action::GbaUp(Btn::Left));
     assert_eq!(app.selected_stem(), Some("Emerald"));
 
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.update(1.499);
     assert_plain_shelf(&frame(&app), &f, "a hair under the cap");
 
@@ -1723,7 +1736,7 @@ fn the_fallback_open_lifts_the_shelfs_own_face_for_the_lid() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let shelf_faces = [TexId::from_raw(950), TexId::from_raw(951)];
     app.set_faces(shelf_faces.to_vec());
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.update(1.501);
     let_it_open(&mut app);
 
@@ -1742,7 +1755,7 @@ fn the_real_faces_replace_the_fallback_once_they_arrive() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let shelf_faces = [TexId::from_raw(950), TexId::from_raw(951)];
     app.set_faces(shelf_faces.to_vec());
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.update(1.501);
     let_it_open(&mut app);
     assert!(
@@ -1764,7 +1777,7 @@ fn the_real_faces_replace_the_fallback_once_they_arrive() {
 fn arrows_pressed_while_the_cart_waits_move_nothing() {
     let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
     let f = fake_boot_faces(&mut app);
-    app.apply(Action::GbaDown(Btn::Start));
+    open_picker(&mut app);
     app.apply(Action::GbaDown(Btn::Right));
     app.set_core_board_faces(f.board, f.lid);
     app.update(0.016);
@@ -2310,4 +2323,104 @@ fn home_x_does_nothing_on_the_shelf() {
     s.app_mut().apply(slot_input::Action::PictureToggle);
     assert_eq!(video_mode_for(d.path(), "Emerald"), VideoMode::Actual);
     assert_eq!(s.app().toast(), None);
+}
+
+fn press(app: &mut App, btn: Btn) {
+    app.apply(Action::GbaDown(btn));
+}
+
+fn rows_of(app: &mut App) -> Vec<slot_ui::CartRow> {
+    let first = app.cart_menu().expect("no cart menu").0;
+    let mut rows = vec![first];
+    loop {
+        press(app, Btn::Down);
+        let row = app.cart_menu().unwrap().0;
+        if row == first {
+            return rows;
+        }
+        rows.push(row);
+    }
+}
+
+fn saved_shell(d: &tempfile::TempDir, stem: &str) -> Option<String> {
+    slot_store::ini::value(d.path(), slot_store::LABELS_SHELL_FILE, stem)
+}
+
+#[test]
+fn start_opens_a_cart_menu_with_the_rows_the_cart_has() {
+    use slot_ui::CartRow::*;
+    let (_d, mut gba) = on_shelf(&["Emerald", "Zzz"]);
+    press(&mut gba, Btn::Start);
+    assert_eq!(rows_of(&mut gba), vec![Colour, Finish, Emulator, Reset]);
+    let (_d, mut gb) = on_shelf_gb(&["Tetris", "Zzz"]);
+    press(&mut gb, Btn::Start);
+    assert_eq!(rows_of(&mut gb), vec![Colour, Finish, Shape, Reset]);
+    assert_eq!(gb.cart_menu().unwrap().1, None, "a cart nobody changed wears its own plastic");
+}
+
+#[test]
+fn a_colour_and_a_finish_are_previewed_then_saved_with_a() {
+    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    press(&mut app, Btn::Start);
+    press(&mut app, Btn::Right);
+    let red = app.cart_menu().unwrap().1.expect("the first colour after Original is no change");
+    assert_eq!(red.finish, ShellFinish::Solid);
+    press(&mut app, Btn::Down);
+    press(&mut app, Btn::Right);
+    let clear = app.cart_menu().unwrap().1.unwrap();
+    assert_eq!((clear.colour, clear.finish), (red.colour, ShellFinish::Clear));
+    assert_eq!(saved_shell(&d, "Emerald"), None, "saved before A");
+    press(&mut app, Btn::A);
+    assert!(app.cart_menu().is_none(), "A did not close the menu");
+    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some(clear.to_value().as_str()));
+    // A restart reads it back.
+    let carts = slot_store::scan(d.path()).unwrap();
+    let emerald = carts.iter().find(|c| c.stem == "Emerald").unwrap();
+    assert_eq!(emerald.shell, Some(clear));
+}
+
+#[test]
+fn b_puts_the_cart_back_as_it_was_and_saves_nothing() {
+    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    press(&mut app, Btn::Start);
+    press(&mut app, Btn::Right);
+    press(&mut app, Btn::Right);
+    assert!(app.cart_menu().unwrap().1.is_some());
+    press(&mut app, Btn::B);
+    assert!(app.cart_menu().is_none());
+    assert_eq!(saved_shell(&d, "Emerald"), None);
+    press(&mut app, Btn::Start);
+    assert_eq!(app.cart_menu().unwrap().1, None, "the cart still wears the cancelled plastic");
+}
+
+#[test]
+fn reset_brings_back_the_games_own_plastic_over_any_other_layer() {
+    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    press(&mut app, Btn::Start);
+    press(&mut app, Btn::Right);
+    press(&mut app, Btn::A);
+    assert!(saved_shell(&d, "Emerald").is_some());
+    press(&mut app, Btn::Start);
+    press(&mut app, Btn::Up);
+    assert_eq!(app.cart_menu().unwrap().0, slot_ui::CartRow::Reset);
+    press(&mut app, Btn::A);
+    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some("auto"));
+    press(&mut app, Btn::Start);
+    assert_eq!(app.cart_menu().unwrap().1, None);
+}
+
+#[test]
+fn a_colour_from_cart_studio_shows_as_custom_and_is_kept() {
+    let d = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
+    std::fs::write(d.path().join(slot_store::LABELS_SHELL_FILE), "Emerald = auto 123456 glitter\n").unwrap();
+    let (d, mut app) = booted_on_shelf(d);
+    press(&mut app, Btn::Start);
+    let custom = app.cart_menu().unwrap().1.expect("the Cart Studio choice was lost");
+    assert_eq!((custom.colour, custom.finish), ([0x12, 0x34, 0x56], ShellFinish::Glitter));
+    // Round the colours and back: Custom is still there.
+    press(&mut app, Btn::Right);
+    press(&mut app, Btn::Left);
+    assert_eq!(app.cart_menu().unwrap().1, Some(custom));
+    press(&mut app, Btn::A);
+    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some("auto 123456 glitter"), "an unchanged choice was rewritten");
 }

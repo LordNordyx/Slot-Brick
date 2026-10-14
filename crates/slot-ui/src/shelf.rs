@@ -120,6 +120,16 @@ impl Shelf {
         self.faces.get_mut(i).and_then(|f| f.replace(tex))
     }
 
+    /// Puts cart `i` in another plastic or shape; its face, now out of date, is handed back.
+    pub fn set_shell(&mut self, i: usize, shell: Option<slot_store::ShellChoice>) -> Option<TexId> {
+        let cart = self.carts.get_mut(i)?;
+        cart.shell = shell;
+        if let Some(s) = self.shells.get_mut(i) {
+            *s = gb_shell_of(cart);
+        }
+        self.take_face(i)
+    }
+
     pub fn take_face(&mut self, i: usize) -> Option<TexId> {
         self.faces.get_mut(i).and_then(Option::take)
     }

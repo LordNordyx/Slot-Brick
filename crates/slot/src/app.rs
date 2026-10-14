@@ -8,8 +8,9 @@ use slot_input::{Action, Btn, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
-    format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Platform, Shader,
-    SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
+    format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Outline, Platform,
+    Shader, ShellChoice, ShellFinish, SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX,
+    BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
     VOLUME_MAX,
 };
 use slot_ui::{
@@ -288,6 +289,9 @@ pub struct App {
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
     core_picker: Option<CorePicker>,
+    /// START on a cart: its plastic, shape and emulator.
+    cart_menu: Option<CartMenu>,
+    cart_menu_faces: Option<slot_ui::CartMenuFaces>,
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
     core_faces_stem: Option<String>,
@@ -440,6 +444,8 @@ impl App {
             power_menu: None,
             power_menu_faces: Vec::new(),
             core_picker: None,
+            cart_menu: None,
+            cart_menu_faces: None,
             core_board_face: None,
             core_lid_face: None,
             core_faces_stem: None,
@@ -1407,8 +1413,9 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                _ if self.cart_menu.is_some() => self.cart_menu_input(action),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
-                    self.open_core_picker()
+                    self.open_cart_menu()
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
                 Action::GbaDown(Btn::Up) => self.jump_letter(-1),
@@ -2400,6 +2407,9 @@ impl App {
         if let Some(picker) = self.core_picker_shown() {
             self.draw_core_picker(&picker, out);
         }
+        if let Some(menu) = &self.cart_menu {
+            self.draw_cart_menu(menu, out);
+        }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
         }
@@ -2473,6 +2483,15 @@ impl App {
 
     pub fn set_shutdown_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
         self.shutdown_faces = faces;
+    }
+
+    pub fn set_cart_menu_faces(&mut self, faces: slot_ui::CartMenuFaces) {
+        self.cart_menu_faces = Some(faces);
+    }
+
+    /// The cart menu's open row and the cart's shell choice so far, while it is open.
+    pub fn cart_menu(&self) -> Option<(slot_ui::CartRow, Option<ShellChoice>)> {
+        self.cart_menu.as_ref().map(|m| (m.row, m.chosen()))
     }
 
     pub fn set_power_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
@@ -2978,6 +2997,98 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn open_cart_menu(&mut self) {
+        if self.root.is_none() {
+            return;
+        }
+        let index = self.shelf().index;
+        let Some(cart) = self.shelf().carts.get(index).cloned() else {
+            return;
+        };
+        let core = slot_store::core_for(self.root.as_deref().unwrap(), &cart.stem);
+        self.cart_menu = Some(CartMenu::open(&cart, index, core));
+        self.shelf_mut().release_hold();
+        self.play_held = None;
+    }
+
+    fn cart_menu_input(&mut self, action: Action) {
+        let Some(mut menu) = self.cart_menu.take() else {
+            return;
+        };
+        let before = menu.chosen();
+        match action {
+            Action::GbaDown(Btn::Up) => menu.step_row(-1),
+            Action::GbaDown(Btn::Down) => menu.step_row(1),
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => menu.step_value(-1),
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => menu.step_value(1),
+            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => {
+                return self.preview_shell(menu.index, menu.before);
+            }
+            Action::GbaDown(Btn::A) => {
+                if menu.row == slot_ui::CartRow::Reset {
+                    menu.reset();
+                    self.preview_shell(menu.index, None);
+                }
+                self.save_shell(&menu);
+                if menu.row == slot_ui::CartRow::Emulator {
+                    self.open_core_picker();
+                }
+                return;
+            }
+            _ => {}
+        }
+        if menu.chosen() != before {
+            self.preview_shell(menu.index, menu.chosen());
+        }
+        self.cart_menu = Some(menu);
+    }
+
+    /// The cart on the shelf wears `shell`; its face is rebuilt for the next frame.
+    fn preview_shell(&mut self, index: usize, shell: Option<ShellChoice>) {
+        let stale = self.shelf_mut().set_shell(index, shell);
+        self.stale_faces.extend(stale);
+    }
+
+    /// Keeps the menu's choice: in Labels/cart_shell.ini, the layer that wins, with "auto"
+    /// for the game's own plastic so no other layer brings an old choice back.
+    fn save_shell(&mut self, menu: &CartMenu) {
+        let chosen = menu.chosen();
+        if chosen == menu.before {
+            return;
+        }
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let Some(stem) = self.shelf().carts.get(menu.index).map(|c| c.stem.clone()) else {
+            return;
+        };
+        let value = chosen.map_or("auto".to_string(), |c| c.to_value());
+        let written = slot_store::ini::write(&root, slot_store::LABELS_SHELL_FILE, &stem, &value);
+        if let Err(e) = &written {
+            eprintln!("slot: cart shell: {e}");
+        }
+        self.card_failing.store(written.is_err(), Ordering::Relaxed);
+    }
+
+    fn draw_cart_menu(&self, menu: &CartMenu, out: &mut Vec<Draw>) {
+        let cart = self.shelf().carts.get(menu.index);
+        let face = self.shelf().face(menu.index).zip(cart).map(|(tex, cart)| {
+            let (w, h) = slot_ui::cart_box(cart.platform);
+            (tex, w, h)
+        });
+        slot_ui::CartMenuView {
+            rows: &menu.rows,
+            row: menu.row,
+            colour: menu.colour,
+            finish: menu.finish,
+            shape: menu.shape,
+            core: menu.core,
+            cart: face,
+            faces: self.cart_menu_faces.as_ref(),
+        }
+        .draw(out);
     }
 
     fn open_core_picker(&mut self) {
@@ -3820,5 +3931,129 @@ fn draw_menu_rows(
             tex,
             alpha: 1.0,
         });
+    }
+}
+
+/// START on a cart: the rows it has and each one's value, as indices into the menu's faces.
+#[derive(Clone)]
+struct CartMenu {
+    index: usize,
+    rows: Vec<slot_ui::CartRow>,
+    row: slot_ui::CartRow,
+    colours: Vec<(&'static str, Option<slot_ui::Shell>)>,
+    colour: usize,
+    finish: usize,
+    shape: usize,
+    core: usize,
+    /// The game's own plastic: what Original and a cleared choice show.
+    own: slot_ui::Shell,
+    /// The cart's choice when the menu opened, put back by B.
+    before: Option<ShellChoice>,
+}
+
+const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
+
+fn finish_of(finish: ShellFinish) -> slot_ui::Finish {
+    match finish {
+        ShellFinish::Solid => slot_ui::Finish::Solid,
+        ShellFinish::Clear => slot_ui::Finish::Translucent,
+        ShellFinish::Glitter => slot_ui::Finish::Glitter,
+    }
+}
+
+fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
+    match finish {
+        slot_ui::Finish::Solid => ShellFinish::Solid,
+        slot_ui::Finish::Translucent => ShellFinish::Clear,
+        slot_ui::Finish::Glitter => ShellFinish::Glitter,
+    }
+}
+
+impl CartMenu {
+    fn open(cart: &Cart, index: usize, core: Core) -> Self {
+        use slot_ui::CartRow;
+        let mut plain = cart.clone();
+        plain.shell = None;
+        plain.read_header();
+        let own = slot_ui::shell_for(&plain);
+        let mut colours = slot_ui::colour_choices();
+        let finish_at = |f: slot_ui::Finish| slot_ui::FINISHES.iter().position(|x| *x == f).unwrap_or(0);
+        let (colour, finish, shape) = match cart.shell {
+            None => (0, finish_at(own.finish), 0),
+            Some(choice) => {
+                let finish = finish_of(choice.finish);
+                let colour = match colours.iter().position(|(_, s)| s.is_some_and(|s| s.colour == choice.colour)) {
+                    Some(at) => at,
+                    // A colour from elsewhere (Cart Studio): offered as "Custom", last.
+                    None => {
+                        colours.push(("Custom", Some(slot_ui::Shell { colour: choice.colour, finish })));
+                        colours.len() - 1
+                    }
+                };
+                (colour, finish_at(finish), OUTLINES.iter().position(|o| *o == choice.outline).unwrap_or(0))
+            }
+        };
+        let mut rows = vec![CartRow::Colour, CartRow::Finish];
+        if matches!(cart.platform, Platform::Gb | Platform::Gbc) {
+            rows.push(CartRow::Shape);
+        }
+        if cart.platform == Platform::Gba {
+            rows.push(CartRow::Emulator);
+        }
+        rows.push(CartRow::Reset);
+        CartMenu {
+            index,
+            rows,
+            row: CartRow::Colour,
+            colours,
+            colour,
+            finish,
+            shape,
+            core: Core::PICKER.iter().position(|c| *c == core).unwrap_or(0),
+            own,
+            before: cart.shell,
+        }
+    }
+
+    /// The shell these values make: None while they are all the game's own.
+    fn chosen(&self) -> Option<ShellChoice> {
+        let picked = self.colours[self.colour].1;
+        let finish = slot_ui::FINISHES[self.finish];
+        let outline = OUTLINES[self.shape];
+        if picked.is_none() && finish == self.own.finish && outline == Outline::Auto {
+            return None;
+        }
+        Some(ShellChoice {
+            outline,
+            colour: picked.map_or(self.own.colour, |s| s.colour),
+            finish: shell_finish(finish),
+        })
+    }
+
+    fn step_row(&mut self, by: isize) {
+        let n = self.rows.len() as isize;
+        let at = self.rows.iter().position(|r| *r == self.row).unwrap_or(0) as isize;
+        self.row = self.rows[(at + by).rem_euclid(n) as usize];
+    }
+
+    fn step_value(&mut self, by: isize) {
+        let step = |v: usize, n: usize| (v as isize + by).rem_euclid(n as isize) as usize;
+        match self.row {
+            slot_ui::CartRow::Colour => {
+                self.colour = step(self.colour, self.colours.len());
+                // A colour comes in the plastic it was sold in; Finish can change it after.
+                let finish = self.colours[self.colour].1.map_or(self.own.finish, |s| s.finish);
+                self.finish = slot_ui::FINISHES.iter().position(|f| *f == finish).unwrap_or(0);
+            }
+            slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
+            slot_ui::CartRow::Shape => self.shape = step(self.shape, OUTLINES.len()),
+            slot_ui::CartRow::Emulator | slot_ui::CartRow::Reset => {}
+        }
+    }
+
+    fn reset(&mut self) {
+        self.colour = 0;
+        self.finish = slot_ui::FINISHES.iter().position(|f| *f == self.own.finish).unwrap_or(0);
+        self.shape = 0;
     }
 }

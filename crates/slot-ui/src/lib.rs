@@ -6,6 +6,7 @@ mod barcode;
 mod battery;
 mod board;
 mod cart;
+mod cart_menu;
 mod clock;
 mod draw;
 mod footer;
@@ -42,6 +43,10 @@ pub use cart::{
     nes_label_panel, seated_box, snes_cart_shadow, snes_label_panel, CartFace, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H,
     GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, NES_CART_H, NES_CART_W, NES_LABEL_H, NES_LABEL_W, NES_LABEL_X,
     NES_LABEL_Y, SNES_CART_H, SNES_CART_W, SNES_LABEL_H, SNES_LABEL_W, SNES_LABEL_X, SNES_LABEL_Y,
+};
+pub use cart_menu::{
+    cart_menu_label_face, cart_menu_legend_faces, cart_menu_value_face, colour_choices,
+    finish_name, CartMenuFaces, CartMenuView, CartRow, FINISHES, SHAPES,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
