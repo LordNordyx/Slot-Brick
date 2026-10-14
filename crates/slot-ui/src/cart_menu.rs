@@ -103,8 +103,8 @@ pub struct CartMenuFaces {
     pub finishes: Vec<[(TexId, u32, u32); 2]>,
     pub shapes: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    /// Cancel, change, save, reset.
-    pub legend: [(TexId, u32); 4],
+    /// Cancel, change, save, reset, search (the label row's Y).
+    pub legend: [(TexId, u32); 5],
 }
 
 /// What the menu shows: the rows this cart has, the one selected, each row's value (an
@@ -190,9 +190,10 @@ impl CartMenuView<'_> {
             push(out, tex, vx, y, w, h);
             push(out, left, vx - CARET_GAP - lw as f32, y, lw, lh);
         }
-        let [cancel, change, save, reset] = faces.legend;
+        let [cancel, change, save, reset, search] = faces.legend;
         let hints: &[(TexId, u32)] = match self.row {
             CartRow::Reset => &[cancel, reset],
+            CartRow::Label => &[cancel, change, search, save],
             _ => &[cancel, change, save],
         };
         for (tex, w, x) in centred_hints(hints, LEGEND_GAP) {
@@ -225,12 +226,13 @@ pub fn label_caption_face(value: &str, lit: bool, wide: bool) -> UndoFace {
     text_face(value, if lit { MENU_INK } else { DIM_INK }, if wide { 440.0 } else { 200.0 })
 }
 
-pub fn cart_menu_legend_faces() -> [UndoFace; 4] {
+pub fn cart_menu_legend_faces() -> [UndoFace; 5] {
     [
         hint_face("B", "Cancel"),
         arrows_hint_face("Change"),
         hint_face("A", "Save"),
         hint_face("A", "Reset"),
+        hint_face("Y", "Search"),
     ]
 }
 

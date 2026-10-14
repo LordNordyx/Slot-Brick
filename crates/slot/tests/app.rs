@@ -2532,6 +2532,8 @@ fn the_label_row_searches_only_online_and_b_leaves_the_label_as_it_was() {
     }
     press(&mut app, Btn::Right);
     assert_eq!(app.label_caption(), Some(("Connect to Wi-Fi first".to_string(), false)), "searched with no network");
+    press(&mut app, Btn::Y);
+    assert_eq!(app.label_caption(), Some(("Connect to Wi-Fi first".to_string(), false)), "typed a search with no network");
     press(&mut app, Btn::B);
     assert!(app.cart_menu().is_none());
     assert_eq!(app.label_caption(), None);
