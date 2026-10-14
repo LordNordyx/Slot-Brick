@@ -104,14 +104,14 @@ const SNES_PAL_LABEL: (u32, u32, u32, u32) = {
     (x0, y0, x1 - x0, y1 - y0)
 };
 
-/// The Famicom cart's landscape recess (famicom_cart.svg's face: 20.8..217.5 of 240,
-/// 156..251.4 of 288).
+/// The Famicom cart's landscape label (famicom_cart.svg's face: 27.1..212.9 of 240,
+/// 160.7..256.9 of 288), shaped as cart_art.rs cuts it from pictures of the cart.
 pub const fn famicom_label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
     (
-        (w * 87 + 500) / 1000,
-        (h * 542 + 500) / 1000,
-        (w * 906 + 500) / 1000,
-        (h * 873 + 500) / 1000,
+        (w * 113 + 500) / 1000,
+        (h * 558 + 500) / 1000,
+        (w * 887 + 500) / 1000,
+        (h * 892 + 500) / 1000,
     )
 }
 
@@ -363,7 +363,7 @@ fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
 
 pub fn cart_face(cart: &Cart) -> CartFace {
     let (lw, lh) = label_size(cart);
-    let art = cart.label.as_deref().and_then(|p| art::cover(p, lw, lh));
+    let art = cart.label.as_deref().and_then(|p| art::label_fit(p, lw, lh));
     cart_face_with(cart, art)
 }
 

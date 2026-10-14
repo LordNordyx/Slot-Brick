@@ -922,3 +922,18 @@ fn a_famicom_cart_is_small_and_landscape_and_wears_its_chosen_colour() {
     assert_eq!(fc.finish, Finish::Solid, "a Famicom cart took a finish");
     assert_eq!(shell_for(&nes("Mario (Japan)", pink(Outline::Notched))), NES_SHELL);
 }
+
+#[test]
+fn a_tall_label_on_a_wide_cart_is_shown_whole_and_a_wide_one_still_fills() {
+    let d = tmp_root();
+    // A NES label: tall, its title in blue across the top.
+    write_label(&d, "tall.png", 100, 200, |_, y| if y < 20 { [0, 0, 255] } else { [255, 0, 0] });
+    let tall = d.path().join("Labels/GBA/tall.png");
+    let blue = |rgba: &[u8]| rgba.chunks_exact(4).filter(|p| p[2] > 200 && p[0] < 50).count();
+    assert_eq!(blue(&slot_ui::cover(&tall, 300, 150).unwrap()), 0, "cover kept the top: the test proves nothing");
+    let fitted = slot_ui::label_fit(&tall, 300, 150).unwrap();
+    assert!(blue(&fitted) > 300, "the title was cut off a tall label on a wide cart");
+    write_label(&d, "wide.png", 200, 100, |x, _| [x as u8, 0, 0]);
+    let wide = d.path().join("Labels/GBA/wide.png");
+    assert_eq!(slot_ui::label_fit(&wide, 300, 140), slot_ui::cover(&wide, 300, 140), "a wide label was not filled");
+}

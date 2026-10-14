@@ -122,6 +122,7 @@ impl Frontend {
         #[cfg(feature = "brick")]
         let session_root = platform.root().to_path_buf();
         let mut session = Session::boot(platform.root().to_path_buf());
+        label_cache::forget_old(platform.root());
         let stale = label_cache::stale(platform.root(), session.app().carts());
         let rebuild = (!stale.is_empty()).then(|| {
             eprintln!("slot: label cache: {} new labels", stale.len());

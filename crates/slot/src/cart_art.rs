@@ -36,6 +36,9 @@ struct CartPhoto {
     index: &'static str,
     aspect: (f32, f32),
     label: [f32; 4],
+    /// Where the label's art is surely printed: mostly not plastic coloured, or there is none.
+    art: [f32; 4],
+    /// Plain plastic, which gives the cart's colour.
     side: [f32; 4],
     plain: [[f32; 4]; 2],
 }
@@ -46,6 +49,7 @@ const NES_PHOTO: CartPhoto = CartPhoto {
     index: "System/nes-cart-labels.txt",
     aspect: (1.08, 1.16),
     label: [0.405, 0.006, 0.865, 0.680],
+    art: [0.405, 0.006, 0.865, 0.680],
     side: [0.02, 0.3, 0.065, 0.6],
     plain: [[0.42, 0.73, 0.85, 0.80], [0.885, 0.1, 0.93, 0.6]],
 };
@@ -56,12 +60,33 @@ const SNES_PHOTO: CartPhoto = CartPhoto {
     index: "System/snes-cart-labels.txt",
     aspect: (0.62, 0.67),
     label: [0.200, 0.008, 0.807, 0.432],
+    art: [0.200, 0.008, 0.807, 0.432],
     side: [0.04, 0.35, 0.10, 0.65],
     plain: [[0.25, 0.47, 0.75, 0.55], [0.88, 0.2, 0.97, 0.8]],
 };
 
-fn photo_spec(platform: Platform) -> Option<&'static CartPhoto> {
-    [&NES_PHOTO, &SNES_PHOTO].into_iter().find(|p| p.platform == platform)
+/// The Famicom cart: a wide label over most of the front, plain plastic right of it and
+/// below; the connector tab underneath. Makers placed the label a little differently, so
+/// this takes its middle; the plastic is read below it, as the edges are shaded.
+const FAMICOM_PHOTO: CartPhoto = CartPhoto {
+    platform: Platform::Nes,
+    index: "System/famicom-cart-labels.txt",
+    aspect: (0.6, 0.7),
+    label: [0.09, 0.125, 0.91, 0.74],
+    art: [0.25, 0.25, 0.75, 0.65],
+    side: [0.3, 0.9, 0.7, 0.95],
+    plain: [[0.1, 0.9, 0.9, 0.97], [0.955, 0.2, 0.975, 0.7]],
+};
+
+/// The pictures a cart's label is cut from: a NES game on the Famicom cart takes a Famicom
+/// cart's label, falling back to the NES one's (shown whole, as it is tall).
+fn photo_specs(cart: &Cart) -> &'static [&'static CartPhoto] {
+    match cart.platform {
+        Platform::Nes if slot_ui::nes_famicom_of(cart) => &[&FAMICOM_PHOTO, &NES_PHOTO],
+        Platform::Nes => &[&NES_PHOTO],
+        Platform::Snes => &[&SNES_PHOTO],
+        _ => &[],
+    }
 }
 
 const LISTING_MAX: usize = 8 << 20;
@@ -150,8 +175,8 @@ struct Sources<'a> {
     labels: Option<HashMap<u32, String>>,
     crcs: Crcs,
     games: Games,
-    /// Each console's picture list, read when its first cart needs it.
-    photos: HashMap<Platform, PhotoIndex>,
+    /// Each picture list (by its file), read when its first cart needs it.
+    photos: HashMap<&'static str, PhotoIndex>,
 }
 
 fn run(
@@ -187,9 +212,18 @@ fn run(
                 name: cart.stem.clone(),
             });
             // No label scan (homebrew, most hacks): the shelf's file-name label stays.
-            let outcome = match photo_spec(cart.platform) {
-                Some(spec) => fetch_photo_label(cart, spec, &mut src)?,
-                None => fetch_label(cart, &mut src)?,
+            let outcome = match photo_specs(cart) {
+                [] => fetch_label(cart, &mut src)?,
+                specs => {
+                    let mut outcome = Outcome::NoMatch;
+                    for spec in specs {
+                        outcome = fetch_photo_label(cart, spec, &mut src)?;
+                        if matches!(outcome, Outcome::Saved(..)) {
+                            break;
+                        }
+                    }
+                    outcome
+                }
             };
             let place = format!("{}/{}", cart.platform.dir_name(), cart.stem);
             match outcome {
@@ -318,7 +352,7 @@ fn photo_file_ok(file: &str) -> bool {
 /// picture host cannot be reached, so every other cart would wait on it too.
 fn fetch_photo_label(cart: &Cart, spec: &CartPhoto, src: &mut Sources) -> Result<Outcome, String> {
     let root = src.root;
-    let index = src.photos.entry(spec.platform).or_insert_with(|| PhotoIndex::load(root, spec));
+    let index = src.photos.entry(spec.index).or_insert_with(|| PhotoIndex::load(root, spec));
     let Some(name) = same_title_match(&cart.stem, &index.names) else {
         return Ok(Outcome::NoMatch);
     };
@@ -392,7 +426,7 @@ fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static st
     if spec.plain.iter().any(|r| share(*r) < 0.7) {
         return Err("not the standard cart");
     }
-    if share(spec.label) > 0.5 {
+    if share(spec.art) > 0.5 {
         return Err("no label on the cart");
     }
     // Rounded inward, so no sliver of plastic rides along the label's edge.
@@ -1087,6 +1121,21 @@ mod tests {
         assert_eq!(label_from_photo(&famicom, &NES_PHOTO), Err("not the cart's shape"));
         assert_eq!(label_from_photo(&cart_png(280, 312, GREY, GREY, NES_PHOTO.label), &NES_PHOTO), Err("no label on the cart"));
         assert_eq!(label_from_photo(b"<html>", &NES_PHOTO), Err("not a readable PNG"));
+    }
+
+    #[test]
+    fn a_famicom_picture_gives_a_wide_label_and_a_nes_one_is_refused() {
+        const YELLOW: [u8; 3] = [0xe8, 0xb0, 0x10];
+        let label = label_from_photo(&cart_png(400, 262, YELLOW, RED, [0.06, 0.1, 0.94, 0.76]), &FAMICOM_PHOTO)
+            .expect("the Famicom cart");
+        let (rgba, w, h) = decode_rgba(&label).unwrap();
+        assert!(w > h * 2 - 20, "{w}x{h} is not a Famicom label");
+        assert!(rgba.chunks_exact(4).all(|p| p == [0xc0, 0x20, 0x20, 255]), "plastic inside the label");
+        assert_eq!(label_from_photo(&cart_png(280, 312, GREY, RED, NES_PHOTO.label), &FAMICOM_PHOTO), Err("not the cart's shape"));
+        assert_eq!(
+            label_from_photo(&cart_png(400, 262, YELLOW, YELLOW, [0.06, 0.1, 0.94, 0.76]), &FAMICOM_PHOTO),
+            Err("no label on the cart")
+        );
     }
 
     #[test]

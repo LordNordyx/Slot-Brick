@@ -7,9 +7,30 @@ use std::thread;
 use std::time::UNIX_EPOCH;
 
 use slot_store::Cart;
-use slot_ui::{cover, label_size};
+use slot_ui::{label_fit, label_size};
 
-const DIR: &str = "System/Cache/Labels";
+/// Versioned: a label is fitted differently now (a tall one on a wide label is shown whole),
+/// so the older folder's are of no use.
+const DIR: &str = "System/Cache/Labels2";
+const OLD_DIRS: [&str; 1] = ["System/Cache/Labels"];
+
+/// Removes older label caches in the background: they can be large, the card slow.
+pub fn forget_old(root: &Path) {
+    let old: Vec<PathBuf> = OLD_DIRS.iter().map(|d| root.join(d)).filter(|d| d.is_dir()).collect();
+    if old.is_empty() {
+        return;
+    }
+    let spawned = thread::Builder::new().name("slot-label-cache".into()).spawn(move || {
+        for dir in old {
+            if let Err(e) = std::fs::remove_dir_all(&dir) {
+                eprintln!("slot: label cache: {}: {e}", dir.display());
+            }
+        }
+    });
+    if let Err(e) = spawned {
+        eprintln!("slot: label cache: {e}");
+    }
+}
 const HEAD: usize = 24;
 
 pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
@@ -20,7 +41,7 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     if let Some(art) = read(&cached, stamp, w, h) {
         return art;
     }
-    let art = cover(src, w, h);
+    let art = label_fit(src, w, h);
     if let Some(dir) = cached.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
