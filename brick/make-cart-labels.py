@@ -1,37 +1,44 @@
 #!/usr/bin/env python3
-"""Regenerate card/Slot/System/nes-cart-labels.txt from the LaunchBox Games Database.
+"""Regenerate card/Slot/System/{nes,snes}-cart-labels.txt from the LaunchBox Games Database.
 
-The slot art set behind Cart Studio has no NES label scans, so Cart Art takes NES labels
-from LaunchBox's "Cart - Front" pictures: whole-cart photos it crops the label out of
-(cart_art.rs). This keeps the NES-shaped ones (PNG cut-outs; Famicom carts, which are
-another shape, are left out) with the game's name and region, so the Brick never
-downloads the 100 MB metadata itself.
+The slot art set behind Cart Studio has no NES or SNES label scans, so Cart Art takes those
+labels from LaunchBox's "Cart - Front" pictures: whole-cart photos it crops the label out of
+(cart_art.rs). This keeps the ones of the console's standard US cart (PNG cut-outs, from the
+regions that cart was sold in; Famicom, Super Famicom and PAL SNES carts are other shapes)
+with the game's name and region, so the Brick never downloads the 100 MB metadata itself.
 
 The download is untrusted input: it is parsed with the standard library's expat (2.4+
 guards against entity expansion), and only names without control characters and file names
 of plain characters make it into the list, which the Brick checks again before any request.
 
-Usage: python3 brick/make-nes-cart-labels.py [Metadata.zip]
+Usage: python3 brick/make-cart-labels.py nes|snes [Metadata.zip]
 """
 import pathlib, sys, tempfile, urllib.request, zipfile
 import xml.etree.ElementTree as ET
 
 URL = 'https://gamesdb.launchbox-app.com/Metadata.zip'
-OUT = pathlib.Path(__file__).parent / 'card/Slot/System/nes-cart-labels.txt'
-PLATFORM = 'Nintendo Entertainment System'
-# LaunchBox regions as the No-Intro tags slot's name matching scores; Famicom regions skipped.
-REGIONS = {'North America': 'USA', 'United States': 'USA', 'Canada': 'Canada', 'World': 'World',
-           'Europe': 'Europe', 'United Kingdom': 'UK', 'Germany': 'Germany', 'France': 'France',
-           'Spain': 'Spain', 'Italy': 'Italy', 'Australia': 'Australia', 'Sweden': 'Sweden',
-           'Netherlands': 'Netherlands', '': ''}
+# LaunchBox regions as the No-Intro tags slot's name matching scores. The NES cart was the
+# same in the US and Europe; the SNES cart of Europe (and Japan) is another shape.
+AMERICAS = {'North America': 'USA', 'United States': 'USA', 'Canada': 'Canada', 'World': 'World', '': ''}
+EUROPE = {'Europe': 'Europe', 'United Kingdom': 'UK', 'Germany': 'Germany', 'France': 'France',
+          'Spain': 'Spain', 'Italy': 'Italy', 'Australia': 'Australia', 'Sweden': 'Sweden',
+          'Netherlands': 'Netherlands'}
+CONSOLES = {
+    'nes': ('Nintendo Entertainment System', {**AMERICAS, **EUROPE}),
+    'snes': ('Super Nintendo Entertainment System', AMERICAS),
+}
+if len(sys.argv) < 2 or sys.argv[1] not in CONSOLES:
+    sys.exit(__doc__)
+PLATFORM, REGIONS = CONSOLES[sys.argv[1]]
+OUT = pathlib.Path(__file__).parent / f'card/Slot/System/{sys.argv[1]}-cart-labels.txt'
 SAFE = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.')
 
 
 def metadata():
-    if len(sys.argv) > 1:
-        return zipfile.ZipFile(sys.argv[1])
+    if len(sys.argv) > 2:
+        return zipfile.ZipFile(sys.argv[2])
     tmp = tempfile.NamedTemporaryFile(suffix='.zip')
-    request = urllib.request.Request(URL, headers={'User-Agent': 'slot-brick make-nes-cart-labels'})
+    request = urllib.request.Request(URL, headers={'User-Agent': 'slot-brick make-cart-labels'})
     with urllib.request.urlopen(request, timeout=600) as r:
         while chunk := r.read(1 << 20):
             tmp.write(chunk)
@@ -65,6 +72,6 @@ for gid, name in games.items():
         for title, alt_region in [(name, '')] + names.get(gid, []):
             if alt_region in REGIONS and title and not any(ord(c) < 32 for c in title):
                 lines.add(f'{title} ({tag})\t{file}' if tag else f'{title}\t{file}')
-header = f'# NES cart pictures from the LaunchBox Games Database ({URL}): name (region), file\n'
+header = f'# {PLATFORM} cart pictures from the LaunchBox Games Database ({URL}): name (region), file\n'
 OUT.write_text(header + '\n'.join(sorted(lines)) + '\n')
 print(f'{len(lines)} names for {sum(1 for g in games if g in carts)} games; wrote {OUT}', file=sys.stderr)

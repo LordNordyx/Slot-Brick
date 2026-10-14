@@ -55,6 +55,9 @@ pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent)
 /// Every NES cart's grey.
 pub const NES_SHELL: Shell = shell([0x8e, 0x8d, 0x8a], Finish::Solid);
 
+/// The SNES cart's lighter, cooler grey.
+pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
+
 /// Famicom carts came in many plastics. A Japanese release wears one of them, picked
 /// steadily from its name: a colour in the spirit of the Famicom, not its real one.
 pub const FAMICOM_SHELLS: [Shell; 8] = [
@@ -105,6 +108,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
         Platform::Gba => gba_shell_for(&cart.code),
         Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
         Platform::Nes => nes_shell_for(&cart.stem),
+        Platform::Snes => SNES_SHELL,
     }
 }
 
@@ -225,6 +229,7 @@ pub fn shell_presets() -> Vec<(&'static str, Shell)> {
         ("Game Boy Color clear", GB_CLEAR_SHELL),
         ("Advance charcoal", DEFAULT_SHELL),
         ("NES grey", NES_SHELL),
+        ("SNES grey", SNES_SHELL),
         ("Advance Video grey", FAMILY[0].1),
     ];
     out.extend(

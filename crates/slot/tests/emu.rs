@@ -1092,3 +1092,67 @@ fn waiting_on_an_unlocked_worker_does_not_block() {
         "the wait blocked"
     );
 }
+
+/// Records every frame's buttons.
+struct Keys {
+    inner: MockCore,
+    seen: Arc<Mutex<Vec<u16>>>,
+}
+
+impl RetroCore for Keys {
+    fn load(&mut self, rom: &Path) -> Result<(), CoreError> {
+        self.inner.load(rom)
+    }
+    fn run_frame(&mut self, input: ButtonMask) {
+        self.seen.lock().unwrap().push(input.0);
+        self.inner.run_frame(input);
+    }
+    fn video_xrgb8888(&self) -> &[u8] {
+        self.inner.video_xrgb8888()
+    }
+    fn take_audio(&mut self) -> Vec<i16> {
+        self.inner.take_audio()
+    }
+    fn serialize(&mut self) -> Result<Vec<u8>, CoreError> {
+        self.inner.serialize()
+    }
+    fn unserialize(&mut self, data: &[u8]) -> Result<(), CoreError> {
+        self.inner.unserialize(data)
+    }
+    fn save_ram(&self) -> Option<Vec<u8>> {
+        self.inner.save_ram()
+    }
+    fn load_save_ram(&mut self, data: &[u8]) -> Result<(), CoreError> {
+        self.inner.load_save_ram(data)
+    }
+    fn av_info(&self) -> AvInfo {
+        self.inner.av_info()
+    }
+}
+
+fn buttons_seen(native_xy: bool) -> Vec<u16> {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let mut sink = StubSink::new();
+    sink.open(32_768).expect("the stub refused to open");
+    drain(sink.clone());
+    let core = Box::new(Keys { inner: MockCore::new(), seen: seen.clone() });
+    let emu = EmuHandle::spawn(core, PathBuf::from("mock"), sink.ring(), None, None);
+    assert!(wait_for(|| emu.state() == CoreState::Ready), "the core never finished loading");
+    emu.set_native_xy(native_xy);
+    emu.set_input(ButtonMask(ButtonMask::X | ButtonMask::Y));
+    emu.set_speed(Speed::Normal);
+    assert!(wait_for(|| seen.lock().unwrap().len() > 12), "too few frames ran");
+    let frames = seen.lock().unwrap().clone();
+    frames
+}
+
+#[test]
+fn x_and_y_are_turbo_a_and_b_but_a_snes_gets_its_own() {
+    let xy = ButtonMask::X | ButtonMask::Y;
+    let ab = ButtonMask::A | ButtonMask::B;
+    let turbo = buttons_seen(false);
+    assert!(turbo.iter().all(|m| m & xy == 0), "X or Y reached a core that has none: {turbo:?}");
+    assert!(turbo.iter().any(|m| m & ab == ab) && turbo.iter().any(|m| m & ab == 0), "no turbo: {turbo:?}");
+    let native = buttons_seen(true);
+    assert!(native.iter().skip(1).all(|m| *m == xy), "the SNES did not get X and Y as pressed: {native:?}");
+}

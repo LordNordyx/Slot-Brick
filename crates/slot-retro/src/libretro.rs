@@ -335,36 +335,56 @@ unsafe extern "C" fn video_refresh(
     }
     with_host(|h| {
         let (cw, ch) = h.canvas;
-        let cols = width.min(cw) as usize;
-        let rows = height.min(ch) as usize;
+        // A frame larger than the canvas (a SNES hi-res mode: 512 wide, or 448 lines
+        // interlaced) is halved to fit: pixels averaged across, as a TV blended them, and
+        // every other line kept. Frames that fit take the plain copy.
+        let sx = width.div_ceil(cw.max(1)).max(1) as usize;
+        let sy = height.div_ceil(ch.max(1)).max(1) as usize;
+        let cols = (width as usize / sx).min(cw as usize);
+        let rows = (height as usize / sy).min(ch as usize);
         let ox = (cw as usize - cols) / 2;
         let oy = (ch as usize - rows) / 2;
         if cols != cw as usize || rows != ch as usize {
             h.video.fill(0);
         }
+        let format = h.format;
         for y in 0..rows {
-            let src = (data as *const u8).add(y * pitch);
+            let src = (data as *const u8).add(y * sy * pitch);
             let row = ((y + oy) * cw as usize + ox) * 4;
-            match h.format {
-                PixelFormat::Xrgb8888 => {
-                    ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cols * 4);
-                }
-                PixelFormat::Rgb565 => {
-                    for x in 0..cols {
-                        let p = ptr::read_unaligned((src as *const u16).add(x));
-                        let r = ((p >> 11) & 0x1f) as u8;
-                        let g = ((p >> 5) & 0x3f) as u8;
-                        let b = (p & 0x1f) as u8;
-                        let o = row + x * 4;
-                        h.video[o] = (b << 3) | (b >> 2);
-                        h.video[o + 1] = (g << 2) | (g >> 4);
-                        h.video[o + 2] = (r << 3) | (r >> 2);
-                        h.video[o + 3] = 0;
+            if format == PixelFormat::Xrgb8888 && sx == 1 {
+                ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cols * 4);
+                continue;
+            }
+            for x in 0..cols {
+                let mut sum = [0u32; 3];
+                for k in 0..sx {
+                    for (c, v) in pixel(format, src, x * sx + k).into_iter().enumerate() {
+                        sum[c] += v as u32;
                     }
                 }
+                let o = row + x * 4;
+                for c in 0..3 {
+                    h.video[o + c] = (sum[c] / sx as u32) as u8;
+                }
+                h.video[o + 3] = 0;
             }
         }
     });
+}
+
+/// Pixel `i` of a frame row as blue, green, red.
+unsafe fn pixel(format: PixelFormat, row: *const u8, i: usize) -> [u8; 3] {
+    match format {
+        PixelFormat::Xrgb8888 => {
+            let p = row.add(i * 4);
+            [*p, *p.add(1), *p.add(2)]
+        }
+        PixelFormat::Rgb565 => {
+            let p = ptr::read_unaligned((row as *const u16).add(i));
+            let (r, g, b) = (((p >> 11) & 0x1f) as u8, ((p >> 5) & 0x3f) as u8, (p & 0x1f) as u8);
+            [(b << 3) | (b >> 2), (g << 2) | (g >> 4), (r << 3) | (r >> 2)]
+        }
+    }
 }
 
 unsafe extern "C" fn audio_sample(left: i16, right: i16) {
@@ -1620,6 +1640,29 @@ mod tests {
         let _active = Active::bind(&mut host);
 
         assert_eq!(unsafe { input_state(2, DEVICE_JOYPAD, 0, JOYPAD_MASK) }, 0);
+    }
+
+    #[test]
+    fn a_hi_res_snes_frame_is_halved_into_the_canvas() {
+        let mut host = host_with(HashMap::new(), false);
+        host.canvas = (256, 240);
+        host.video = vec![1; 256 * 240 * 4];
+        let _active = Active::bind(&mut host);
+        // 512x448, RGB565: columns alternate white and black, odd lines are red.
+        let (w, h) = (512usize, 448usize);
+        let frame: Vec<u16> = (0..w * h)
+            .map(|i| match ((i / w) % 2, i % 2) { (1, _) => 0xf800, (_, 0) => 0xffff, _ => 0 })
+            .collect();
+        unsafe {
+            with_host(|h| h.format = PixelFormat::Rgb565);
+            video_refresh(frame.as_ptr() as *const c_void, w as c_uint, h as c_uint, w * 2);
+        }
+        let video = unsafe { with_host(|h| h.video.clone()) }.unwrap();
+        let px = |x: usize, y: usize| video[(y * 256 + x) * 4..(y * 256 + x) * 4 + 3].to_vec();
+        assert_eq!(px(128, 120), vec![127, 127, 127], "a pixel pair is not averaged");
+        assert_eq!(px(0, 8), vec![127, 127, 127], "224 lines start 8 down");
+        assert_eq!(px(128, 4), vec![0, 0, 0], "the band above the picture is not cleared");
+        assert_eq!(px(128, 233), vec![0, 0, 0], "the band below the picture is not cleared");
     }
 
     #[test]

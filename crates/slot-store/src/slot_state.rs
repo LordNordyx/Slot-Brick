@@ -34,6 +34,7 @@ pub struct SlotState {
     pub shader_gba: Shader,
     pub shader_gb: Shader,
     pub shader_nes: Shader,
+    pub shader_snes: Shader,
     pub eject_save: bool,
     pub turbo: bool,
     pub rewind: bool,
@@ -53,7 +54,7 @@ pub enum Shader {
 impl Shader {
     pub const GBA: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Dot];
     pub const GB: [Shader; 3] = [Shader::Off, Shader::Grid, Shader::Simpletex];
-    /// A NES drew on a TV: no LCD to imitate, at most a pixel grid.
+    /// A NES or SNES drew on a TV: no LCD to imitate, at most a pixel grid.
     pub const NES: [Shader; 2] = [Shader::Off, Shader::Grid];
 
     pub fn name(self) -> &'static str {
@@ -109,6 +110,7 @@ impl Default for SlotState {
             shader_gba: Shader::Grid,
             shader_gb: Shader::Simpletex,
             shader_nes: Shader::Off,
+            shader_snes: Shader::Off,
             eject_save: true,
             turbo: true,
             rewind: true,
@@ -132,7 +134,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -150,6 +152,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.shader_gba.name(),
         s.shader_gb.name(),
         s.shader_nes.name(),
+        s.shader_snes.name(),
         s.eject_save as u8,
         s.turbo as u8,
         s.rewind as u8,
@@ -177,6 +180,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shader_gba = None;
     let mut shader_gb = None;
     let mut shader_nes = None;
+    let mut shader_snes = None;
     let mut eject_save = None;
     let mut turbo = None;
     let mut rewind = None;
@@ -209,6 +213,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "gb_palette" => gb_palette = GbPalette::parse(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_nes" => shader_nes = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
+            "shader_snes" => shader_snes = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
             _ => {}
         }
     }
@@ -232,6 +237,7 @@ fn parse(text: &str) -> Option<SlotState> {
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),
         shader_gb: shader_gb.unwrap_or(fallback.shader_gb),
         shader_nes: shader_nes.unwrap_or(fallback.shader_nes),
+        shader_snes: shader_snes.unwrap_or(fallback.shader_snes),
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),

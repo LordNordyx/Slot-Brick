@@ -327,7 +327,7 @@ fn the_presets_are_the_tables_plastics_each_once() {
     let presets = shell_presets();
     assert_eq!(
         presets.len(),
-        26,
+        27,
         "a table row the presets name has gone missing"
     );
     let mut names: Vec<_> = presets.iter().map(|(n, _)| *n).collect();
@@ -337,6 +337,7 @@ fn the_presets_are_the_tables_plastics_each_once() {
     let find = |n: &str| presets.iter().find(|(name, _)| *name == n).unwrap().1;
     assert_eq!(find("Game Boy grey"), DMG_SHELL);
     assert_eq!(find("NES grey"), slot_ui::NES_SHELL);
+    assert_eq!(find("SNES grey"), slot_ui::SNES_SHELL);
     assert_eq!(find("Pokémon Emerald"), gba_shell_for("BPEE"));
 }
 

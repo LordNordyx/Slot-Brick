@@ -1,6 +1,10 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- SNES: `.sfc`/`.smc` ROMs in `Slot/Games/SNES` get a shelf of SNES cartridges and run on Snes9x,
+  with save states, rewind, fast-forward and RetroAchievements. X, Y, L and R are the game's own;
+  SELECT + X switches the picture. Cart Art fetches SNES labels from LaunchBox cart pictures.
+- Slot creates the NES and SNES folders on the card itself at startup.
 - Wi-Fi comes up on its own at startup: the radio the firmware leaves blocked is repaired in the
   background, so saved networks are joined without opening the Wi-Fi menu.
 - After connecting, the Wi-Fi menu makes sure an address is asked for and waits for it, then

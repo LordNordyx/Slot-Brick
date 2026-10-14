@@ -197,6 +197,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             shader_gba: Shader::Grid,
             shader_gb: Shader::Simpletex,
             shader_nes: Shader::Off,
+            shader_snes: Shader::Off,
             eject_save: true,
             turbo: true,
             rewind: true,
@@ -218,6 +219,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         shader_gba: Shader::Dot,
         shader_gb: Shader::Off,
         shader_nes: Shader::Off,
+        shader_snes: Shader::Off,
         eject_save: false,
         turbo: false,
         rewind: false,
@@ -353,7 +355,8 @@ fn an_unreadable_platform_reads_as_a_card_that_never_said() {
     let known = "cart=Tetris\nbrightness=3\nblue_light=1\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
     for (line, want) in [
         ("cart_platform=\n", None),
-        ("cart_platform=snes\n", None),
+        ("cart_platform=n64\n", None),
+        ("cart_platform=snes\n", Some(Platform::Snes)),
         ("cart_platform=nes\n", Some(Platform::Nes)),
         ("cart_platform=gameboy\n", None),
         ("cart_platform=0\n", None),

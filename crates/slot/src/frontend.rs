@@ -342,6 +342,9 @@ impl Frontend {
         let nes = slot_ui::nes_cart_shadow();
         let nes = compositor.create_texture(nes.w, nes.h, &nes.rgba);
         self.session.app_mut().set_nes_cart_shadow(nes);
+        let snes = slot_ui::snes_cart_shadow();
+        let snes = compositor.create_texture(snes.w, snes.h, &snes.rgba);
+        self.session.app_mut().set_snes_cart_shadow(snes);
         let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);

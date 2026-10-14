@@ -742,6 +742,12 @@ impl App {
         }
     }
 
+    pub fn set_snes_cart_shadow(&mut self, face: TexId) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_snes_shadow(face);
+        }
+    }
+
     pub fn set_gb_cart_shadows(&mut self, notched: TexId, rounded: TexId) {
         for (_, shelf) in &mut self.shelves {
             shelf.set_gb_shadow(GbShell::Notched, notched);
@@ -935,8 +941,11 @@ impl App {
         video_mode::source_rect(self.platform, self.video_mode)
     }
 
+    /// L1/R1 switch the picture on consoles without shoulder buttons; on a GBA or SNES
+    /// they are the game's own L and R.
     fn slot_owns_the_shoulders(&self) -> bool {
-        matches!(self.phase, Phase::Playing { .. }) && self.platform != Platform::Gba
+        matches!(self.phase, Phase::Playing { .. })
+            && matches!(self.platform, Platform::Gb | Platform::Gbc | Platform::Nes)
     }
 
     pub fn taken_buttons(&self) -> &'static [Btn] {
@@ -975,7 +984,8 @@ impl App {
         if !matches!(self.phase, Phase::Playing { .. }) || self.game_menu_open() || self.power_menu.is_some() {
             return;
         }
-        if self.platform != Platform::Gba {
+        // Consoles whose L and R are the game's take this shortcut instead.
+        if !matches!(self.platform, Platform::Gba | Platform::Snes) {
             self.refuse();
             return;
         }
@@ -1154,6 +1164,7 @@ impl App {
             Platform::Gba => self.state.shader_gba,
             Platform::Gb | Platform::Gbc => self.state.shader_gb,
             Platform::Nes => self.state.shader_nes,
+            Platform::Snes => self.state.shader_snes,
         }
     }
 
@@ -1575,6 +1586,7 @@ impl App {
             Platform::Gba => (&mut self.state.shader_gba, &Shader::GBA[..]),
             Platform::Gb | Platform::Gbc => (&mut self.state.shader_gb, &Shader::GB[..]),
             Platform::Nes => (&mut self.state.shader_nes, &Shader::NES[..]),
+            Platform::Snes => (&mut self.state.shader_snes, &Shader::NES[..]),
         };
         *shader = shader.step(choices, right);
         let said = match *shader {
@@ -1624,8 +1636,8 @@ impl App {
             return true;
         }
         if action == Action::ColourCorrectionToggle {
-            // A NES draws through its palette: there is no LCD colour to correct.
-            if self.platform == Platform::Nes && matches!(self.phase, Phase::Playing { .. }) {
+            // A NES or SNES drew on a TV: there is no LCD colour to correct.
+            if matches!(self.platform, Platform::Nes | Platform::Snes) && matches!(self.phase, Phase::Playing { .. }) {
                 self.refuse();
                 return true;
             }

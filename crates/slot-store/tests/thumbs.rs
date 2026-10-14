@@ -1,4 +1,4 @@
-use slot_store::{best_match, libretro_name, title_key};
+use slot_store::{best_match, libretro_name, same_title_match, title_key};
 
 /// Real No-Intro names, as libretro writes them.
 const GBA: &[&str] = &[
@@ -141,4 +141,13 @@ fn goodtools_language_regions_pick_that_release() {
     ];
     assert_eq!(find("Pokemon - Red Version (G)", &list).as_deref(), Some(list[2]));
     assert_eq!(find("Pokemon - Red Version (U)", &list).as_deref(), Some(list[0]));
+}
+
+#[test]
+fn a_same_title_match_never_takes_a_longer_title() {
+    let list = names(&["Super Metroid Legacy (World)", "Super Mario Kart (USA)", "Super Mario Kart - Horizons (World)"]);
+    assert_eq!(best_match("Super Metroid (Japan, USA) (En,Ja)", &list), Some("Super Metroid Legacy (World)"));
+    assert_eq!(same_title_match("Super Metroid (Japan, USA) (En,Ja)", &list), None);
+    assert_eq!(same_title_match("Super Mario Kart (USA)", &list), Some("Super Mario Kart (USA)"));
+    assert_eq!(same_title_match("super_mario_kart", &list), Some("Super Mario Kart (USA)"));
 }

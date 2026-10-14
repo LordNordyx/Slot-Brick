@@ -5,7 +5,8 @@ use crate::art;
 use crate::shell::{shell_for, Finish, Shell};
 use crate::silhouette::{
     cart_depth, cart_mask, detail_mask, gb_cart_depth, gb_cart_mask, gb_detail_mask,
-    nes_cart_depth, nes_cart_mask, nes_detail_mask, Detail, GbShell,
+    nes_cart_depth, nes_cart_mask, nes_detail_mask, snes_cart_depth, snes_cart_mask,
+    snes_detail_mask, Detail, GbShell,
 };
 use crate::text;
 
@@ -21,6 +22,11 @@ pub const GB_CART_H: u32 = (GB_CART_W * GB_SEATED_H + SEATED_W / 2) / SEATED_W;
 pub const NES_CART_W: u32 = 276;
 
 pub const NES_CART_H: u32 = (NES_CART_W * NES_SEATED_H + SEATED_W / 2) / SEATED_W;
+
+/// A GBA cart's width: both are wide, low carts.
+pub const SNES_CART_W: u32 = 360;
+
+pub const SNES_CART_H: u32 = (SNES_CART_W * SNES_SEATED_H + SEATED_W / 2) / SEATED_W;
 
 pub const fn label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
     (
@@ -66,16 +72,34 @@ pub const NES_LABEL_Y: u32 = nes_label_panel(NES_CART_W, NES_CART_H).1;
 pub const NES_LABEL_W: u32 = nes_label_panel(NES_CART_W, NES_CART_H).2 - NES_LABEL_X;
 pub const NES_LABEL_H: u32 = nes_label_panel(NES_CART_W, NES_CART_H).3 - NES_LABEL_Y;
 
+/// The landscape recess across the top of the raised middle, open to the top edge
+/// (snes_cart_detail.svg: 47..191.3 of 240, 0.5..66.7 of 157).
+pub const fn snes_label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
+    (
+        (w * 196 + 500) / 1000,
+        (h * 3 + 500) / 1000,
+        (w * 797 + 500) / 1000,
+        (h * 425 + 500) / 1000,
+    )
+}
+
+pub const SNES_LABEL_X: u32 = snes_label_panel(SNES_CART_W, SNES_CART_H).0;
+pub const SNES_LABEL_Y: u32 = snes_label_panel(SNES_CART_W, SNES_CART_H).1;
+pub const SNES_LABEL_W: u32 = snes_label_panel(SNES_CART_W, SNES_CART_H).2 - SNES_LABEL_X;
+pub const SNES_LABEL_H: u32 = snes_label_panel(SNES_CART_W, SNES_CART_H).3 - SNES_LABEL_Y;
+
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
 const MAX_PX: f32 = LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
 const GB_MAX_PX: f32 = (GB_LABEL_H - 2 * PAD) as f32 / MAX_LINES as f32;
 const NES_MAX_PX: f32 = (NES_LABEL_H - 2 * PAD) as f32 / MAX_LINES as f32;
+const SNES_MAX_PX: f32 = SNES_LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
 const MIN_PX: f32 = 10.0;
 
 const RIM: u32 = (4 * CART_W + SEATED_W / 2) / SEATED_W;
 const GB_RIM: u32 = (7 * GB_CART_W + SEATED_W / 2) / SEATED_W;
 const NES_RIM: u32 = (7 * NES_CART_W + SEATED_W / 2) / SEATED_W;
+const SNES_RIM: u32 = (4 * SNES_CART_W + SEATED_W / 2) / SEATED_W;
 
 pub struct CartFace {
     pub rgba: Vec<u8>,
@@ -108,11 +132,12 @@ enum Shape {
     Gba,
     Gb(GbShell),
     Nes,
+    Snes,
 }
 
 pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     match cart.platform {
-        Platform::Gba | Platform::Nes => None,
+        Platform::Gba | Platform::Nes | Platform::Snes => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
             Some(Outline::Notched) => GbShell::Notched,
             Some(Outline::Rounded) => GbShell::Rounded,
@@ -127,6 +152,7 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
 fn shape_of(cart: &Cart) -> Shape {
     match (cart.platform, gb_shell_of(cart)) {
         (Platform::Nes, _) => Shape::Nes,
+        (Platform::Snes, _) => Shape::Snes,
         (_, None) => Shape::Gba,
         (_, Some(shell)) => Shape::Gb(shell),
     }
@@ -188,6 +214,24 @@ fn spec(shape: Shape) -> Spec {
                 traces_from: 0.86,
             },
         },
+        Shape::Snes => Spec {
+            w: SNES_CART_W,
+            h: SNES_CART_H,
+            label: (SNES_LABEL_X, SNES_LABEL_Y, SNES_LABEL_W, SNES_LABEL_H),
+            mask: snes_cart_mask(),
+            depth: snes_cart_depth(),
+            detail: snes_detail_mask(),
+            max_px: SNES_MAX_PX,
+            max_h: f32::INFINITY,
+            rim: SNES_RIM,
+            board: Board {
+                x: (0.17, 0.83),
+                top: 0.03,
+                pins: (0.2, 0.8),
+                contacts_from: 0.9,
+                traces_from: 0.8,
+            },
+        },
     }
 }
 
@@ -196,12 +240,15 @@ const SEATED_H: u32 = 141;
 const GB_SEATED_H: u32 = 259;
 /// A NES cart's face, connector foot included, is about 5:6.
 const NES_SEATED_H: u32 = 288;
+/// A US SNES cart's face is about 3:2, wide and low like a GBA's.
+const SNES_SEATED_H: u32 = 157;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
         Platform::Gba => (SEATED_W, SEATED_H),
         Platform::Gb | Platform::Gbc => (SEATED_W, GB_SEATED_H),
         Platform::Nes => (SEATED_W, NES_SEATED_H),
+        Platform::Snes => (SEATED_W, SNES_SEATED_H),
     }
 }
 
@@ -210,6 +257,7 @@ pub fn cart_box(platform: Platform) -> (u32, u32) {
         Platform::Gba => Shape::Gba,
         Platform::Gb | Platform::Gbc => Shape::Gb(GbShell::Notched),
         Platform::Nes => Shape::Nes,
+        Platform::Snes => Shape::Snes,
     });
     (s.w, s.h)
 }
@@ -224,6 +272,10 @@ pub fn gb_cart_shadow(shell: GbShell) -> CartFace {
 
 pub fn nes_cart_shadow() -> CartFace {
     shadow(NES_CART_W, NES_CART_H, nes_cart_mask())
+}
+
+pub fn snes_cart_shadow() -> CartFace {
+    shadow(SNES_CART_W, SNES_CART_H, snes_cart_mask())
 }
 
 fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {

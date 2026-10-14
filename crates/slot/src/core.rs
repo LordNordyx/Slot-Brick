@@ -99,8 +99,12 @@ fn open_named(
         }
         match LibretroCore::open_with(path, &bios, &saves) {
             Ok(mut opened) => {
-                if core == Core::Fceumm {
-                    let (w, h) = Platform::Nes.canvas();
+                let platform = match core {
+                    Core::Fceumm => Some(Platform::Nes),
+                    Core::Snes9x => Some(Platform::Snes),
+                    Core::Mgba | Core::Gpsp => None,
+                };
+                if let Some((w, h)) = platform.map(Platform::canvas) {
                     opened.set_canvas(w, h);
                 }
                 apply_core_options(
@@ -160,8 +164,8 @@ pub fn colour_option(which: Core, on: bool) -> Option<(&'static str, &'static st
             "gpsp_color_correction",
             if on { "enabled" } else { "disabled" },
         )),
-        // A NES draws through its palette, with no LCD to correct for.
-        Core::Fceumm => None,
+        // A NES or SNES drew on a TV, with no LCD to correct for.
+        Core::Fceumm | Core::Snes9x => None,
     }
 }
 
@@ -182,8 +186,16 @@ pub fn apply_core_options(
     colour: bool,
     palette: Option<GbPalette>,
 ) {
-    if which != Core::Fceumm {
+    // FCEUmm and snes9x have no frameskip option; slot's own skipping covers them.
+    if matches!(which, Core::Mgba | Core::Gpsp) {
         core.set_option(&format!("{}_frameskip", which.as_str()), "auto");
+    }
+    if which == Core::Snes9x {
+        // A 256x224 picture like the NES's, and no HD Mode 7: it would cost the A53 dearly
+        // and send frames twice as wide for nothing on this screen.
+        for (key, value) in [("snes9x_overscan", "enabled"), ("snes9x_mode7_hires", "disabled")] {
+            core.set_option(key, value);
+        }
     }
     if which == Core::Fceumm {
         // 8 lines off the top and bottom, as a TV hid them: the 256x224 Platform::Nes draws.

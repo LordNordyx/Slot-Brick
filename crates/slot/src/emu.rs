@@ -90,6 +90,8 @@ struct Shared {
     rewind: AtomicBool,
     rewind_fill: AtomicU8,
     turbo: AtomicBool,
+    /// X and Y are the game's own buttons (SNES), never slot's turbo A and B.
+    native_xy: AtomicBool,
     recording: AtomicBool,
     stop: AtomicBool,
     volume: AtomicU8,
@@ -164,6 +166,7 @@ impl EmuHandle {
             rewind: AtomicBool::new(false),
             rewind_fill: AtomicU8::new(0),
             turbo: AtomicBool::new(true),
+            native_xy: AtomicBool::new(false),
             recording: AtomicBool::new(true),
             stop: AtomicBool::new(false),
             volume: AtomicU8::new(100),
@@ -378,6 +381,11 @@ impl EmuHandle {
 
     pub fn set_turbo(&self, on: bool) {
         self.shared.turbo.store(on, Ordering::Relaxed);
+    }
+
+    /// For a console with X and Y of its own (SNES): pass them through untouched.
+    pub fn set_native_xy(&self, on: bool) {
+        self.shared.native_xy.store(on, Ordering::Relaxed);
     }
 
     pub fn set_rewind_recording(&self, on: bool) {
@@ -709,9 +717,12 @@ impl Worker {
                 loop {
                     ran += 1;
                     let last = ran >= ceiling || cost.last(began.elapsed(), budget);
-                    let input = match self.shared.turbo.load(Ordering::Relaxed) {
-                        true => input.turbo(turbo_frame),
-                        false => input.without_turbo(),
+                    let input = if self.shared.native_xy.load(Ordering::Relaxed) {
+                        input
+                    } else if self.shared.turbo.load(Ordering::Relaxed) {
+                        input.turbo(turbo_frame)
+                    } else {
+                        input.without_turbo()
                     };
                     turbo_frame = turbo_frame.wrapping_add(1);
                     core.set_frame_skip(!last);
