@@ -54,7 +54,7 @@ impl Control{
         c.socket.set_write_timeout(Some(Duration::from_secs(2))).map_err(|_|"Cannot set Wi-Fi timeout")?;
         c.socket.connect(remote).map_err(|_|"Wi-Fi service unavailable")?;Ok(c)
     }
-    fn open()->Result<Self>{["/etc/wifi/sockets/wlan0","/var/run/wpa_supplicant/wlan0","/run/wpa_supplicant/wlan0"].iter().find_map(|s|Self::at(Path::new(s)).ok()).ok_or("Wi-Fi service unavailable".into())}
+    fn open()->Result<Self>{SOCKETS.iter().find_map(|s|Self::at(Path::new(s)).ok()).ok_or("Wi-Fi service unavailable".into())}
 }
 impl Supplicant for Control{
     fn command(&self,s:&str)->Result<String>{
@@ -74,11 +74,29 @@ fn helper(firmware:&Path,root:&Path)->Option<PathBuf>{
 }
 fn card_root()->PathBuf{PathBuf::from(std::env::var_os("SLOT_ROOT").unwrap_or_else(||"/mnt/SDCARD/Slot".into()))}
 fn service(on:bool,cancel:&AtomicBool)->Result<()>{helper_run(if on{"start"}else{"stop"},cancel)}
+/// Control sockets slot can reach a supplicant on, in its search order.
+const SOCKETS:[&str;3]=["/etc/wifi/sockets/wlan0","/var/run/wpa_supplicant/wlan0","/run/wpa_supplicant/wlan0"];
+/// A supplicant is running: what the menu reports as Wi-Fi on, known without asking it.
+fn supplicant_up()->bool{SOCKETS.iter().any(|s|Path::new(s).exists())}
+/// One helper at a time: the boot repair and the menu may both ask, and two helpers
+/// stopping and starting the same supplicant would undo each other.
+static HELPER:std::sync::Mutex<()>=std::sync::Mutex::new(());
+/// At startup: the firmware starts a supplicant with the radio still blocked, so saved
+/// networks are never joined until something repairs it. Do that in the background now,
+/// as opening the Wi-Fi menu would, so Wi-Fi comes up on its own.
+pub fn repair_at_boot(){
+    if !supplicant_up(){return}
+    let spawned=thread::Builder::new().name("slot-wifi-boot".into()).spawn(||{
+        if let Err(e)=helper_run("ensure",&AtomicBool::new(false)){eprintln!("wifi: boot repair: {e}");}
+    });
+    if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
+}
 fn helper_run(verb:&str,cancel:&AtomicBool)->Result<()>{
+    let _one=HELPER.lock().unwrap_or_else(|e|e.into_inner());
     let root=card_root();
     let Some(script)=helper(Path::new("/etc/wifi/wifi_init.sh"),&root) else {return Err("Wi-Fi helper missing: System/brick_wifi.sh".into())};
-    // Only slot's own helper knows "ensure"; a firmware one would just print its usage.
-    if verb=="ensure" && !script.ends_with("System/brick_wifi.sh"){return Ok(())}
+    // Only slot's own helper knows "ensure" and "dhcp"; a firmware one would just print its usage.
+    if matches!(verb,"ensure"|"dhcp") && !script.ends_with("System/brick_wifi.sh"){return Ok(())}
     // Inherit slot's stdout/stderr (Logs/slot.log): brick_wifi.sh moves itself to Logs/wifi.log,
     // and anything else, such as a firmware helper run directly, still leaves a trace.
     eprintln!("wifi: {} {verb}",script.display());
@@ -150,7 +168,20 @@ fn run(job:Job,cancel:&AtomicBool)->Result<Reply>{
                 eprintln!("wifi: scan refused; restarting Wi-Fi");drop(c);service(false,cancel)?;return run(Job::Power(true),cancel)
             }
             pause(cancel,3500)?;r.networks=Some(scan_rows(&c.command("SCAN_RESULTS")?,&c.command("LIST_NETWORKS")?));if r.networks.as_ref().unwrap().is_empty(){r.status="No networks found. Try scanning again".into();}},
-        Job::Connect(n,p)=>{r.status=connect(&c,&n,p,cancel)?;r.networks=Some(scan_rows(&c.command("SCAN_RESULTS")?,&c.command("LIST_NETWORKS")?));},
+        Job::Connect(n,p)=>{
+            r.status=connect(&c,&n,p,cancel)?;
+            // Joined but no address yet: make sure a DHCP client is asking, then give the
+            // router a moment, so "waiting for IP" is not the last word on a working network.
+            if r.status.contains("waiting for IP"){
+                if let Err(e)=helper_run("dhcp",cancel){eprintln!("wifi: dhcp: {e}");}
+                let deadline=Instant::now()+Duration::from_secs(10);
+                while Instant::now()<deadline{
+                    pause(cancel,500)?;
+                    if let Some(ip)=field(&c.command("STATUS")?,"ip_address"){r.status=format!("Connected as {ip}; network saved");break}
+                }
+            }
+            r.networks=Some(scan_rows(&c.command("SCAN_RESULTS")?,&c.command("LIST_NETWORKS")?));
+        },
         Job::Disconnect=>{c.ok("DISCONNECT")?;r.status="Disconnected".into();},
     }Ok(r)
 }
@@ -205,7 +236,7 @@ fn profile_line(p:&ra::Profile)->String{format!("Connected in {} ms: {}, {} poin
 /// Cart Art, `ra` for RetroAchievements.
 pub struct WifiMenu{worker:Option<Worker>,pub face:Option<TexId>,pub dirty:bool,on:bool,status:String,networks:Vec<Network>,row:usize,keyboard:Option<Keyboard>,refreshed:Instant,art:Option<ArtJob>,fetched:Vec<Fetched>,list:Option<ArtList>,ra:Option<RaScreen>}
 impl WifiMenu{
-    pub fn new()->Self{let mut s=Self{worker:None,face:None,dirty:true,on:false,status:"Checking Wi-Fi...".into(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None};s.start(Job::Open);s}
+    pub fn new()->Self{let mut s=Self{worker:None,face:None,dirty:true,on:supplicant_up(),status:"Checking Wi-Fi...".into(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None};s.start(Job::Open);s}
     pub fn cart_art()->Self{
         let list=ArtList::load();
         let status=format!("{} games have a label. A on one twice deletes it",list.games.len());
@@ -260,8 +291,10 @@ impl WifiMenu{
         }}
         // Hide the character just typed once its moment is up.
         if let Some(k)=&mut self.keyboard{if k.typed.is_some_and(|t|t.elapsed()>=SHOW_TYPED){k.typed=None;self.dirty=true;}}
-        // Poll only while this menu is open; scanning is always explicit.
-        if self.list.is_none() && self.ra.is_none() && !self.busy() && self.keyboard.is_none() && self.refreshed.elapsed()>Duration::from_secs(15){self.start(Job::Status);}
+        // Poll only while this menu is open; scanning is always explicit. An address still on
+        // its way is checked on every couple of seconds, so it shows as soon as it comes.
+        let every=if self.status.contains("for IP"){Duration::from_secs(2)}else{Duration::from_secs(15)};
+        if self.list.is_none() && self.ra.is_none() && !self.busy() && self.keyboard.is_none() && self.refreshed.elapsed()>every{self.start(Job::Status);}
     }
     pub fn input(&mut self,a:Action)->bool{
         if self.busy(){if matches!(a,Action::GbaDown(Btn::B)){self.cancel();}return false}
