@@ -1424,7 +1424,7 @@ impl App {
                         self.open_core_picker();
                         if self.core_picker.is_some() {
                             let index = self.shelf().index;
-                            self.picker_look = self.shelf().carts.get(index).map(|c| CartMenu::open(c, index));
+                            self.picker_look = self.shelf().carts.get(index).map(CartMenu::open);
                         }
                     } else {
                         self.open_cart_menu();
@@ -2917,10 +2917,10 @@ impl App {
         self.core_picker = None;
         // A cart left mid-change goes back to the plastic it had.
         if let Some(look) = self.picker_look.take() {
-            self.preview_shell(look.index, look.before);
+            self.preview_shell(&look.stem, look.before);
         }
         if let Some(menu) = self.cart_menu.take() {
-            self.preview_shell(menu.index, menu.before);
+            self.preview_shell(&menu.stem, menu.before);
         }
         if matches!(self.phase, Phase::Doze { .. }) {
             return;
@@ -3035,7 +3035,7 @@ impl App {
         let Some(cart) = self.shelf().carts.get(index).cloned() else {
             return;
         };
-        self.cart_menu = Some(CartMenu::open(&cart, index));
+        self.cart_menu = Some(CartMenu::open(&cart));
         self.shelf_mut().release_hold();
         self.play_held = None;
     }
@@ -3051,27 +3051,35 @@ impl App {
             Action::GbaDown(Btn::Left) | Action::ShelfLeft => menu.step_value(-1),
             Action::GbaDown(Btn::Right) | Action::ShelfRight => menu.step_value(1),
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => {
-                return self.preview_shell(menu.index, menu.before);
+                return self.preview_shell(&menu.stem, menu.before);
             }
             Action::GbaDown(Btn::A) => {
                 if menu.row == slot_ui::CartRow::Reset {
                     menu.reset();
-                    self.preview_shell(menu.index, None);
+                    self.preview_shell(&menu.stem, None);
                 }
                 return self.save_shell(&menu);
             }
             _ => {}
         }
         if menu.chosen() != before {
-            self.preview_shell(menu.index, menu.chosen());
+            self.preview_shell(&menu.stem, menu.chosen());
         }
         self.cart_menu = Some(menu);
     }
 
+    /// Where the cart called `stem` is on the shelf now: found by name, not by a position
+    /// remembered when a menu opened, which a rescan could have moved.
+    fn shelf_index_of(&self, stem: &str) -> Option<usize> {
+        self.shelf().carts.iter().position(|c| c.stem == stem)
+    }
+
     /// The cart on the shelf wears `shell`; its face is rebuilt for the next frame.
-    fn preview_shell(&mut self, index: usize, shell: Option<ShellChoice>) {
-        let stale = self.shelf_mut().set_shell(index, shell);
-        self.stale_faces.extend(stale);
+    fn preview_shell(&mut self, stem: &str, shell: Option<ShellChoice>) {
+        if let Some(index) = self.shelf_index_of(stem) {
+            let stale = self.shelf_mut().set_shell(index, shell);
+            self.stale_faces.extend(stale);
+        }
     }
 
     /// Keeps the menu's choice: in Labels/cart_shell.ini, the layer that wins, with "auto"
@@ -3084,11 +3092,8 @@ impl App {
         let Some(root) = self.root.clone() else {
             return;
         };
-        let Some(stem) = self.shelf().carts.get(menu.index).map(|c| c.stem.clone()) else {
-            return;
-        };
         let value = chosen.map_or("auto".to_string(), |c| c.to_value());
-        let written = slot_store::ini::write(&root, slot_store::LABELS_SHELL_FILE, &stem, &value);
+        let written = slot_store::ini::write(&root, slot_store::LABELS_SHELL_FILE, &menu.stem, &value);
         if let Err(e) = &written {
             eprintln!("slot: cart shell: {e}");
         }
@@ -3096,8 +3101,9 @@ impl App {
     }
 
     fn draw_cart_menu(&self, menu: &CartMenu, out: &mut Vec<Draw>) {
-        let cart = self.shelf().carts.get(menu.index);
-        let face = self.shelf().face(menu.index).zip(cart).map(|(tex, cart)| {
+        let index = self.shelf_index_of(&menu.stem);
+        let cart = index.and_then(|i| self.shelf().carts.get(i));
+        let face = index.and_then(|i| self.shelf().face(i)).zip(cart).map(|(tex, cart)| {
             let (w, h) = slot_ui::cart_box(cart.platform);
             (tex, w, h)
         });
@@ -3149,9 +3155,10 @@ impl App {
                 look.step_value(1);
                 // The lid shows it (rebuilt off the UI thread); the shelf's own picture of the
                 // cart, hidden under the lid, is redrawn once when the picker closes.
-                let index = look.index;
-                if let Some(cart) = self.shelf_mut().carts.get_mut(index) {
-                    cart.shell = look.chosen();
+                if let Some(index) = self.shelf_index_of(&look.stem) {
+                    if let Some(cart) = self.shelf_mut().carts.get_mut(index) {
+                        cart.shell = look.chosen();
+                    }
                 }
                 self.picker_look = Some(look);
             }
@@ -3173,7 +3180,7 @@ impl App {
         if !closing && picker.closing() {
             if let Some(look) = self.picker_look.take() {
                 let kept = if press == Press::Keep { look.chosen() } else { look.before };
-                self.preview_shell(look.index, kept);
+                self.preview_shell(&look.stem, kept);
                 if press == Press::Keep {
                     self.save_shell(&look);
                 }
@@ -3985,7 +3992,8 @@ fn draw_menu_rows(
 /// START on a cart: the rows it has and each one's value, as indices into the menu's faces.
 #[derive(Clone)]
 struct CartMenu {
-    index: usize,
+    /// The cart it is for, by name.
+    stem: String,
     rows: Vec<slot_ui::CartRow>,
     row: slot_ui::CartRow,
     colours: Vec<(&'static str, Option<slot_ui::Shell>)>,
@@ -4017,7 +4025,7 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
 }
 
 impl CartMenu {
-    fn open(cart: &Cart, index: usize) -> Self {
+    fn open(cart: &Cart) -> Self {
         use slot_ui::CartRow;
         let mut plain = cart.clone();
         plain.shell = None;
@@ -4046,7 +4054,7 @@ impl CartMenu {
         }
         rows.push(CartRow::Reset);
         CartMenu {
-            index,
+            stem: cart.stem.clone(),
             rows,
             row: CartRow::Colour,
             colours,
