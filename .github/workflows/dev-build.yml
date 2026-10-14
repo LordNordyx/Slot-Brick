@@ -1,0 +1,66 @@
+# Every change to main builds the SD card and puts it in the "Dev build" release, replacing
+# the one before, so its download link always gives the latest card. Numbered releases are
+# still made by hand.
+name: Dev build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Only the release is written; nothing else in the repository.
+permissions:
+  contents: write
+
+# A newer push makes an older build pointless.
+concurrency:
+  group: dev-build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # Forks' main branches build nothing and release nothing.
+    if: github.repository == 'LordNordyx/Slot-Brick'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      # Pinned to commits, so a moved tag cannot change what runs with write access.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            .docker-cache/cargo
+            target
+            brick/bootlogo-tool/target
+          key: brick-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/bootlogo-tool/Cargo.lock', 'brick/Dockerfile') }}
+          restore-keys: brick-
+
+      - name: Build the card
+        run: sh brick/docker-build.sh
+
+      - name: Zip the card
+        run: python3 brick/zip-card.py dist-brick slot-brick-dev-sd-card.zip
+
+      - name: Replace the Dev build release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SUBJECT: ${{ github.event.head_commit.message }}
+        run: |
+          short=$(git rev-parse --short HEAD)
+          # A merge's first line only names the branch; the PR's title is the next one.
+          title=$(printf '%s\n' "$SUBJECT" | sed '/^$/d' | head -1)
+          case "$title" in "Merge pull request"*) title=$(printf '%s\n' "$SUBJECT" | sed '/^$/d' | sed -n 2p);; esac
+          {
+            echo "The latest build of \`main\`, made automatically: ${short}, $(date -u '+%Y-%m-%d %H:%M UTC')."
+            echo
+            echo "$title"
+            echo
+            echo "Not a numbered release: it may have bugs. To install, copy everything inside the \`SD-CARD\` folder to the card's root (see the README). To update, replace \`Slot/System/slot\` and any other changed files."
+          } > notes.md
+          gh release delete dev --yes --cleanup-tag 2>/dev/null || true
+          gh release create dev slot-brick-dev-sd-card.zip \
+            --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease
