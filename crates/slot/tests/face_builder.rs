@@ -71,3 +71,30 @@ fn the_newest_request_of_a_burst_is_the_last_built() {
         "a build older than the newest came back after it"
     );
 }
+
+#[test]
+fn the_open_carts_lid_wears_its_games_plastic_and_any_chosen_one() {
+    let d = tempfile::tempdir().unwrap();
+    let rom = d.path().join("Drill Dozer.gba");
+    let mut bytes = vec![0u8; 0x200];
+    bytes[0xa0..0xab].copy_from_slice(b"DRILL DOZER");
+    bytes[0xac..0xb0].copy_from_slice(b"V49E");
+    std::fs::write(&rom, bytes).unwrap();
+    let mut dozer = Cart { rom, code: String::new(), ..cart("Drill Dozer") };
+    let builder = FaceBuilder::spawn();
+    let lid_of = |c: &Cart| {
+        builder.request(c.clone());
+        collect(&builder, 1).remove(0).lid
+    };
+    let own = lid_of(&dozer);
+    let mut header_read = dozer.clone();
+    header_read.read_header();
+    let want = slot_ui::padded(&slot_ui::cart_face(&header_read), TURN_PAD);
+    assert!(own.rgba == want.rgba, "the lid ignored the game code: Drill Dozer is red, not the default");
+    dozer.shell = Some(slot_store::ShellChoice {
+        outline: slot_store::Outline::Auto,
+        colour: [0x20, 0x40, 0xc0],
+        finish: slot_store::ShellFinish::Glitter,
+    });
+    assert!(lid_of(&dozer).rgba != own.rgba, "the lid ignored the chosen plastic");
+}

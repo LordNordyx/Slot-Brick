@@ -787,17 +787,9 @@ fn let_it_hop(app: &mut App) {
     app.update(0.25);
 }
 
-/// The core picker, as START reaches it: the cart menu, down to EMULATOR, A. On a cart with
-/// no emulator choice A on its last row resets the cart instead, which changes nothing here.
+/// The core picker: START on a GBA cart.
 fn open_picker(app: &mut App) {
     app.apply(Action::GbaDown(Btn::Start));
-    if app.cart_menu().is_none() {
-        return;
-    }
-    while !matches!(app.cart_menu(), Some((slot_ui::CartRow::Emulator | slot_ui::CartRow::Reset, _))) {
-        app.apply(Action::GbaDown(Btn::Down));
-    }
-    app.apply(Action::GbaDown(Btn::A));
 }
 
 fn start_on(mut pressed: App, mut untouched: App) -> (Option<Core>, f32, bool) {
@@ -811,7 +803,7 @@ fn start_on(mut pressed: App, mut untouched: App) -> (Option<Core>, f32, bool) {
 }
 
 #[test]
-fn start_opens_no_picker_on_a_game_boy_cart() {
+fn start_opens_the_cart_menu_not_the_picker_on_a_game_boy_cart() {
     let (_d, gb) = on_shelf_gb(&["Tetris", "Zzz"]);
     let (_twin, gb_twin) = on_shelf_gb(&["Tetris", "Zzz"]);
     let (picker, shake, moved) = start_on(gb, gb_twin);
@@ -820,7 +812,7 @@ fn start_opens_no_picker_on_a_game_boy_cart() {
         shake, 0.0,
         "START on a Game Boy cart was answered with a refusal shake"
     );
-    assert!(!moved, "START changed what the shelf draws");
+    assert!(moved, "START on a Game Boy cart opened no cart menu");
 
     let (_d, gba) = on_shelf(&["Emerald", "Zzz"]);
     let (_twin, gba_twin) = on_shelf(&["Emerald", "Zzz"]);
@@ -2347,80 +2339,118 @@ fn saved_shell(d: &tempfile::TempDir, stem: &str) -> Option<String> {
 }
 
 #[test]
-fn start_opens_a_cart_menu_with_the_rows_the_cart_has() {
+fn start_opens_the_cart_menu_on_a_game_boy_cart_and_the_picker_on_a_gba_one() {
     use slot_ui::CartRow::*;
-    let (_d, mut gba) = on_shelf(&["Emerald", "Zzz"]);
-    press(&mut gba, Btn::Start);
-    assert_eq!(rows_of(&mut gba), vec![Colour, Finish, Emulator, Reset]);
     let (_d, mut gb) = on_shelf_gb(&["Tetris", "Zzz"]);
     press(&mut gb, Btn::Start);
+    assert_eq!(gb.core_picker(), None);
     assert_eq!(rows_of(&mut gb), vec![Colour, Finish, Shape, Reset]);
     assert_eq!(gb.cart_menu().unwrap().1, None, "a cart nobody changed wears its own plastic");
+    let (_d, mut gba) = on_shelf(&["Emerald", "Zzz"]);
+    press(&mut gba, Btn::Start);
+    assert!(gba.cart_menu().is_none(), "a GBA cart opened the menu instead of the picker");
+    assert_eq!(gba.core_picker(), Some(Core::Mgba));
+    assert_eq!(gba.picker_shell(), Some(None));
 }
 
 #[test]
-fn a_colour_and_a_finish_are_previewed_then_saved_with_a() {
-    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+fn a_colour_keeps_the_finish_and_both_are_saved_with_a() {
+    let (d, mut app) = on_shelf_gb(&["Tetris", "Zzz"]);
     press(&mut app, Btn::Start);
-    press(&mut app, Btn::Right);
-    let red = app.cart_menu().unwrap().1.expect("the first colour after Original is no change");
-    assert_eq!(red.finish, ShellFinish::Solid);
     press(&mut app, Btn::Down);
     press(&mut app, Btn::Right);
-    let clear = app.cart_menu().unwrap().1.unwrap();
-    assert_eq!((clear.colour, clear.finish), (red.colour, ShellFinish::Clear));
-    assert_eq!(saved_shell(&d, "Emerald"), None, "saved before A");
+    let clear = app.cart_menu().unwrap().1.expect("a finish is a change");
+    assert_eq!(clear.finish, ShellFinish::Clear);
+    press(&mut app, Btn::Up);
+    press(&mut app, Btn::Right);
+    let red = app.cart_menu().unwrap().1.unwrap();
+    assert_eq!(red.finish, ShellFinish::Clear, "a new colour reset the finish");
+    assert_ne!(red.colour, clear.colour);
+    assert_eq!(saved_shell(&d, "Tetris"), None, "saved before A");
     press(&mut app, Btn::A);
     assert!(app.cart_menu().is_none(), "A did not close the menu");
-    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some(clear.to_value().as_str()));
-    // A restart reads it back.
+    assert_eq!(saved_shell(&d, "Tetris").as_deref(), Some(red.to_value().as_str()));
     let carts = slot_store::scan(d.path()).unwrap();
-    let emerald = carts.iter().find(|c| c.stem == "Emerald").unwrap();
-    assert_eq!(emerald.shell, Some(clear));
+    assert_eq!(carts.iter().find(|c| c.stem == "Tetris").unwrap().shell, Some(red), "not read back");
 }
 
 #[test]
 fn b_puts_the_cart_back_as_it_was_and_saves_nothing() {
-    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    let (d, mut app) = on_shelf_gb(&["Tetris", "Zzz"]);
     press(&mut app, Btn::Start);
     press(&mut app, Btn::Right);
     press(&mut app, Btn::Right);
     assert!(app.cart_menu().unwrap().1.is_some());
     press(&mut app, Btn::B);
     assert!(app.cart_menu().is_none());
-    assert_eq!(saved_shell(&d, "Emerald"), None);
+    assert_eq!(saved_shell(&d, "Tetris"), None);
     press(&mut app, Btn::Start);
     assert_eq!(app.cart_menu().unwrap().1, None, "the cart still wears the cancelled plastic");
 }
 
 #[test]
 fn reset_brings_back_the_games_own_plastic_over_any_other_layer() {
-    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    let (d, mut app) = on_shelf_gb(&["Tetris", "Zzz"]);
     press(&mut app, Btn::Start);
     press(&mut app, Btn::Right);
     press(&mut app, Btn::A);
-    assert!(saved_shell(&d, "Emerald").is_some());
+    assert!(saved_shell(&d, "Tetris").is_some());
     press(&mut app, Btn::Start);
     press(&mut app, Btn::Up);
     assert_eq!(app.cart_menu().unwrap().0, slot_ui::CartRow::Reset);
     press(&mut app, Btn::A);
-    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some("auto"));
+    assert_eq!(saved_shell(&d, "Tetris").as_deref(), Some("auto"));
     press(&mut app, Btn::Start);
     assert_eq!(app.cart_menu().unwrap().1, None);
 }
 
 #[test]
 fn a_colour_from_cart_studio_shows_as_custom_and_is_kept() {
-    let d = common::tmp_root_with_carts(&["Emerald", "Zzz"]);
-    std::fs::write(d.path().join(slot_store::LABELS_SHELL_FILE), "Emerald = auto 123456 glitter\n").unwrap();
+    let d = common::tmp_root_with_gb_carts(&["Tetris", "Zzz"]);
+    std::fs::write(d.path().join(slot_store::LABELS_SHELL_FILE), "Tetris = auto 123456 glitter\n").unwrap();
     let (d, mut app) = booted_on_shelf(d);
     press(&mut app, Btn::Start);
     let custom = app.cart_menu().unwrap().1.expect("the Cart Studio choice was lost");
     assert_eq!((custom.colour, custom.finish), ([0x12, 0x34, 0x56], ShellFinish::Glitter));
-    // Round the colours and back: Custom is still there.
     press(&mut app, Btn::Right);
     press(&mut app, Btn::Left);
     assert_eq!(app.cart_menu().unwrap().1, Some(custom));
     press(&mut app, Btn::A);
-    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some("auto 123456 glitter"), "an unchanged choice was rewritten");
+    assert_eq!(saved_shell(&d, "Tetris").as_deref(), Some("auto 123456 glitter"), "an unchanged choice was rewritten");
+}
+
+#[test]
+fn in_the_core_picker_up_and_down_change_the_colour_and_finish_and_a_keeps_them() {
+    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    fake_picker_faces(&mut app);
+    press(&mut app, Btn::Start);
+    let_it_open(&mut app);
+    press(&mut app, Btn::Down);
+    let clear = app.picker_shell().unwrap().expect("Down changed no finish");
+    assert_eq!(clear.finish, ShellFinish::Clear);
+    press(&mut app, Btn::Up);
+    let coloured = app.picker_shell().unwrap().unwrap();
+    assert_eq!(coloured.finish, ShellFinish::Clear, "a new colour reset the finish");
+    assert_ne!(coloured.colour, clear.colour, "Up changed no colour");
+    assert_eq!(app.core_picker(), Some(Core::Mgba), "the chip moved");
+    press(&mut app, Btn::Right);
+    press(&mut app, Btn::A);
+    assert_eq!(slot_store::core_for(d.path(), "Emerald"), Core::Gpsp);
+    assert_eq!(saved_shell(&d, "Emerald").as_deref(), Some(coloured.to_value().as_str()));
+    assert_eq!(app.picker_shell(), None);
+}
+
+#[test]
+fn backing_out_of_the_core_picker_puts_the_plastic_back() {
+    let (d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    fake_picker_faces(&mut app);
+    press(&mut app, Btn::Start);
+    let_it_open(&mut app);
+    press(&mut app, Btn::Up);
+    assert!(app.picker_shell().unwrap().is_some());
+    press(&mut app, Btn::B);
+    assert_eq!(saved_shell(&d, "Emerald"), None);
+    let_it_close(&mut app);
+    press(&mut app, Btn::Start);
+    assert_eq!(app.picker_shell(), Some(None), "the cart still wears the cancelled plastic");
 }

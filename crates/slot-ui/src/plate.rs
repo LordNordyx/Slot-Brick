@@ -178,6 +178,24 @@ pub const ARROW_GAP: u32 = 3;
 
 const LEFT_CARET: char = '\u{f0d9}';
 const RIGHT_CARET: char = '\u{f0da}';
+const UP_CARET: char = '\u{f0d8}';
+const DOWN_CARET: char = '\u{f0d7}';
+
+/// One arrow key's hint: "▲ Colour".
+pub fn caret_hint_face(up: bool, label: &str) -> UndoFace {
+    let w = CAP + CAP_GAP + band_width(label) + EDGE;
+    let mut rgba = vec![0u8; (w * HINT_H * 4) as usize];
+    let glyph = if up { UP_CARET } else { DOWN_CARET };
+    blit(&mut rgba, w, &glyph_cap(glyph), CAP, CAP, 0, (HINT_H - CAP) / 2);
+    let text_w = band_width(label);
+    let mut band = vec![0u8; (text_w * HINT_H * 4) as usize];
+    if let Some(font) = text::label_font() {
+        let layout = text::fit(font, label, text_w as f32, 1, LABEL_PX, LABEL_MIN_PX);
+        text::draw_centred(&mut band, text_w, HINT_H, &layout, INK);
+    }
+    blit(&mut rgba, w, &band, text_w, HINT_H, CAP + CAP_GAP, 0);
+    UndoFace { rgba, w, h: HINT_H }
+}
 
 pub fn arrows_hint_width(label: &str) -> u32 {
     2 * CAP + ARROW_GAP + CAP_GAP + band_width(label) + EDGE

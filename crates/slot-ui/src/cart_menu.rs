@@ -1,6 +1,7 @@
-//! The cart menu: START on a cart on the shelf. The cart stands large on the left, wearing
-//! the choice live; on the right its plastic (colour, finish), its shape (Game Boy paks) and
-//! its emulator (GBA) can be changed. A saves, B puts everything back.
+//! The cart menu: START on a cart on the shelf (a GBA cart opens the core picker instead, where
+//! Up/Down change its plastic). The cart stands large on the left, wearing the choice live; on
+//! the right its plastic (colour, finish) and shape (Game Boy paks) can be changed. A saves, B
+//! puts everything back.
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
 use crate::power_menu::{MENU_H, MENU_INK};
@@ -13,18 +14,11 @@ pub enum CartRow {
     Colour,
     Finish,
     Shape,
-    Emulator,
     Reset,
 }
 
 impl CartRow {
-    pub const ALL: [CartRow; 5] = [
-        CartRow::Colour,
-        CartRow::Finish,
-        CartRow::Shape,
-        CartRow::Emulator,
-        CartRow::Reset,
-    ];
+    pub const ALL: [CartRow; 4] = [CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset];
 
     pub fn index(self) -> usize {
         self as usize
@@ -35,14 +29,13 @@ impl CartRow {
             CartRow::Colour => "COLOUR",
             CartRow::Finish => "FINISH",
             CartRow::Shape => "SHAPE",
-            CartRow::Emulator => "EMULATOR",
             CartRow::Reset => "RESET TO ORIGINAL",
         }
     }
 
-    /// A opens something (or acts) on these instead of saving.
+    /// A acts on this row instead of saving.
     pub fn acts(self) -> bool {
-        matches!(self, CartRow::Emulator | CartRow::Reset)
+        self == CartRow::Reset
     }
 }
 
@@ -94,14 +87,13 @@ pub fn colour_choices() -> Vec<(&'static str, Option<Shell>)> {
 
 pub struct CartMenuFaces {
     pub labels: Vec<(TexId, u32, u32)>,
-    /// [dim, lit] for each colour_choices() name, FINISHES, SHAPES, and each core name.
+    /// [dim, lit] for each colour_choices() name (then "Custom"), FINISHES and SHAPES.
     pub colours: Vec<[(TexId, u32, u32); 2]>,
     pub finishes: Vec<[(TexId, u32, u32); 2]>,
     pub shapes: Vec<[(TexId, u32, u32); 2]>,
-    pub cores: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    /// Cancel, change, save, open, reset.
-    pub legend: [(TexId, u32); 5],
+    /// Cancel, change, save, reset.
+    pub legend: [(TexId, u32); 4],
 }
 
 /// What the menu shows: the rows this cart has, the one selected, each row's value (an
@@ -112,7 +104,6 @@ pub struct CartMenuView<'a> {
     pub colour: usize,
     pub finish: usize,
     pub shape: usize,
-    pub core: usize,
     pub cart: Option<(TexId, u32, u32)>,
     pub faces: Option<&'a CartMenuFaces>,
 }
@@ -168,7 +159,6 @@ impl CartMenuView<'_> {
                 CartRow::Colour => faces.colours.get(self.colour),
                 CartRow::Finish => faces.finishes.get(self.finish),
                 CartRow::Shape => faces.shapes.get(self.shape),
-                CartRow::Emulator => faces.cores.get(self.core),
                 CartRow::Reset => None,
             };
             let Some(&value) = value else {
@@ -186,9 +176,8 @@ impl CartMenuView<'_> {
             push(out, tex, vx, y, w, h);
             push(out, left, vx - CARET_GAP - lw as f32, y, lw, lh);
         }
-        let [cancel, change, save, open, reset] = faces.legend;
+        let [cancel, change, save, reset] = faces.legend;
         let hints: &[(TexId, u32)] = match self.row {
-            CartRow::Emulator => &[cancel, open],
             CartRow::Reset => &[cancel, reset],
             _ => &[cancel, change, save],
         };
@@ -216,12 +205,11 @@ pub fn cart_menu_value_face(value: &str, lit: bool) -> UndoFace {
     text_face(value, if lit { MENU_INK } else { DIM_INK }, VALUE_W)
 }
 
-pub fn cart_menu_legend_faces() -> [UndoFace; 5] {
+pub fn cart_menu_legend_faces() -> [UndoFace; 4] {
     [
         hint_face("B", "Cancel"),
         arrows_hint_face("Change"),
         hint_face("A", "Save"),
-        hint_face("A", "Open"),
         hint_face("A", "Reset"),
     ]
 }

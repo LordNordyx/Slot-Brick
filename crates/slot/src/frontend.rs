@@ -291,7 +291,9 @@ impl Frontend {
             .set_core_part_faces(sockets, chips, blank, shadow);
         let legend = [
             hint_face("B", "Cancel"),
-            arrows_hint_face("Swap"),
+            arrows_hint_face("Core"),
+            slot_ui::caret_hint_face(true, "Colour"),
+            slot_ui::caret_hint_face(false, "Finish"),
             hint_face("A", "Choose"),
         ]
         .into_iter()
@@ -369,7 +371,6 @@ impl Frontend {
         let colours = values(colour_names);
         let finishes = values(slot_ui::FINISHES.iter().map(|f| slot_ui::finish_name(*f)).collect());
         let shapes = values(slot_ui::SHAPES.to_vec());
-        let cores = values(slot_store::Core::PICKER.iter().map(|c| c.text()).collect());
         let carets = [false, true].map(|right| up(quick_caret_face(right)));
         let legend = slot_ui::cart_menu_legend_faces().map(|f| {
             let (tex, w, _) = up(f);
@@ -380,7 +381,6 @@ impl Frontend {
             colours,
             finishes,
             shapes,
-            cores,
             carets,
             legend,
         });
@@ -860,20 +860,20 @@ fn sync_core_picker(
     lid: &mut Option<TexId>,
     built: &mut Option<String>,
 ) {
-    let highlighted = app.selected_stem().map(str::to_string);
-    if highlighted.is_some() && *asked != highlighted {
-        if let Some(cart) = app
-            .carts()
-            .find(|c| highlighted.as_deref() == Some(c.stem.as_str()))
-        {
-            builder.request(cart.clone());
+    // Keyed by the cart and the plastic it wears, so a colour or finish changed in the picker
+    // (or the cart menu) rebuilds the lid it shows.
+    let cart = app.selected_stem().and_then(|stem| app.carts().find(|c| c.stem == stem)).cloned();
+    let highlighted = cart.as_ref().map(|c| format!("{}\n{:?}", c.stem, c.shell));
+    if let Some(cart) = cart {
+        if *asked != highlighted {
+            builder.request(cart);
+            *asked = highlighted.clone();
         }
-        *asked = highlighted.clone();
     }
     let Some(faces) = builder.take() else {
         return;
     };
-    if highlighted.as_deref() != Some(faces.stem.as_str()) || *built == highlighted {
+    if highlighted.as_deref() != Some(faces.key.as_str()) || *built == highlighted {
         return;
     }
     let board_id = upload_rgba(
@@ -885,7 +885,7 @@ fn sync_core_picker(
     );
     let lid_id = upload_rgba(compositor, lid, faces.lid.w, faces.lid.h, &faces.lid.rgba);
     app.set_core_board_faces(board_id, lid_id);
-    *built = Some(faces.stem);
+    *built = Some(faces.key);
 }
 
 fn upload(compositor: &mut Compositor, slot: &mut Option<TexId>, face: slot_ui::UndoFace) -> TexId {

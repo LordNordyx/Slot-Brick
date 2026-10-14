@@ -1,8 +1,11 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- Cart menu: START on a game changes its cartridge's colour, finish (solid, see-through, glitter)
-  and, for Game Boy carts, its shape, previewed live on the cart. The GBA core picker is in it.
+- Cart colours: START on a game changes its cartridge's colour, finish (solid, see-through,
+  glitter) and, for Game Boy carts, its shape, previewed live. On GBA carts START opens the core
+  picker, where Up/Down change the colour and finish.
+- The core picker shows the cart in its real plastic instead of the default black, and its
+  legend fits the Brick's screen.
 - SNES: `.sfc`/`.smc` ROMs in `Slot/Games/SNES` get a shelf of SNES cartridges and run on Snes9x,
   with save states, rewind, fast-forward and RetroAchievements. X, Y, L and R are the game's own;
   SELECT + X switches the picture. Cart Art fetches SNES labels from LaunchBox cart pictures.

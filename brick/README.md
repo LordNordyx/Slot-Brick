@@ -41,7 +41,7 @@ doesn't flash anything to the device.
 | `L1` / `R1`      | Switch shelves (GBA, GB, GBC, NES, SNES) |
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
-| `START`          | Cart menu: colour, finish, shape, core   |
+| `START`          | Cart colour and finish (GBA: and core)   |
 | `HOME`           | Menu (settings, Wi-Fi, About)           |
 
 ### In game
@@ -73,10 +73,11 @@ doesn't flash anything to the device.
 | Press `Power`      | Sleep / wake                           |
 | Hold `Power`       | Shut down, or exit to the stock OS     |
 
-**Cart menu:** press `START` on a game on the shelf to change its cartridge: any colour, a solid,
-see-through or glitter finish, and for Game Boy carts the original or Color shape. The cart
-changes as you go; `A` saves, `B` puts it back. On GBA carts, **EMULATOR** opens the core
-picker. Choices are kept in `Slot/Labels/cart_shell.ini`.
+**Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour, a
+solid, see-through or glitter finish, and for Game Boy carts the original or Color shape. On a
+GBA cart `START` opens the core picker: `Left` / `Right` swap the core, `Up` changes the colour
+and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
+in `Slot/Labels/cart_shell.ini`.
 
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run
 on FCEUmm. No BIOS is needed. NES carts are grey; a ROM named as a Japanese release, such as

@@ -18,7 +18,7 @@ use slot_ui::{
     draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at, ClockPicker,
     Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids, PowerChoice,
     QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast,
-    BOARD_W, BOARD_X, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT,
+    CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT,
     SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
@@ -76,6 +76,8 @@ const SLOT_NAME_OUT_MS: Millis = 800;
 const SLOT_NAME_ALPHA: f32 = 0.4;
 const CORE_PICKER_DIM: f32 = 0.614;
 const CORE_LEGEND_Y: f32 = 386.0;
+/// The core picker's legend keeps this far from the screen's edges.
+const CORE_LEGEND_MARGIN: f32 = 16.0;
 const LINK_TEXT_Y: f32 = 44.0;
 const LINK_LEGEND_Y: f32 = 422.0;
 const LINK_LEGEND_GAP: f32 = 40.0;
@@ -289,8 +291,10 @@ pub struct App {
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
     core_picker: Option<CorePicker>,
-    /// START on a cart: its plastic, shape and emulator.
+    /// START on a cart: its plastic and shape.
     cart_menu: Option<CartMenu>,
+    /// The cart's plastic while the core picker is open: Up/Down change it there.
+    picker_look: Option<CartMenu>,
     cart_menu_faces: Option<slot_ui::CartMenuFaces>,
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
@@ -445,6 +449,7 @@ impl App {
             power_menu_faces: Vec::new(),
             core_picker: None,
             cart_menu: None,
+            picker_look: None,
             cart_menu_faces: None,
             core_board_face: None,
             core_lid_face: None,
@@ -1415,7 +1420,15 @@ impl App {
             Phase::Shelf => match action {
                 _ if self.cart_menu.is_some() => self.cart_menu_input(action),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
-                    self.open_cart_menu()
+                    if self.shelf().carts.get(self.shelf().index).is_some_and(|c| c.platform == Platform::Gba) {
+                        self.open_core_picker();
+                        if self.core_picker.is_some() {
+                            let index = self.shelf().index;
+                            self.picker_look = self.shelf().carts.get(index).map(|c| CartMenu::open(c, index));
+                        }
+                    } else {
+                        self.open_cart_menu();
+                    }
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
                 Action::GbaDown(Btn::Up) => self.jump_letter(-1),
@@ -2494,6 +2507,11 @@ impl App {
         self.cart_menu.as_ref().map(|m| (m.row, m.chosen()))
     }
 
+    /// The cart's shell choice so far while the core picker is open.
+    pub fn picker_shell(&self) -> Option<Option<ShellChoice>> {
+        self.picker_look.as_ref().map(CartMenu::chosen)
+    }
+
     pub fn set_power_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
         self.power_menu_faces = faces;
     }
@@ -2687,14 +2705,16 @@ impl App {
             });
         }
 
-        if let [cancel, swap, choose] = self.core_legend_faces.as_slice() {
-            let right = BOARD_X + BOARD_W as f32;
-            let seen = |w: u32| w.saturating_sub(HINT_EDGE) as f32;
-            for (tex, w, x) in [
-                (cancel.0, cancel.1, BOARD_X),
-                (swap.0, swap.1, (OUT_W as f32 - seen(swap.1)) / 2.0),
-                (choose.0, choose.1, right - seen(choose.1)),
-            ] {
+        // Centred on the screen, the gaps narrowed until every hint fits: B, Core, Colour,
+        // Finish, A. A face is drawn HINT_EDGE wider than its ink.
+        let hints = &self.core_legend_faces;
+        if !hints.is_empty() {
+            let inked: f32 = hints.iter().map(|(_, w)| w.saturating_sub(HINT_EDGE) as f32).sum();
+            let room = OUT_W as f32 - 2.0 * CORE_LEGEND_MARGIN;
+            let gaps = (hints.len() - 1) as f32;
+            let gap = ((room - inked) / gaps).clamp(8.0, slot_ui::LEGEND_GAP);
+            let mut x = (OUT_W as f32 - inked - gap * gaps) / 2.0;
+            for &(tex, w) in hints {
                 out.push(Draw::Tex {
                     x: x.round(),
                     y: CORE_LEGEND_Y,
@@ -2703,6 +2723,7 @@ impl App {
                     tex,
                     alpha: lift,
                 });
+                x += w.saturating_sub(HINT_EDGE) as f32 + gap;
             }
         }
     }
@@ -2894,6 +2915,13 @@ impl App {
         }
         self.close_game_menu();
         self.core_picker = None;
+        // A cart left mid-change goes back to the plastic it had.
+        if let Some(look) = self.picker_look.take() {
+            self.preview_shell(look.index, look.before);
+        }
+        if let Some(menu) = self.cart_menu.take() {
+            self.preview_shell(menu.index, menu.before);
+        }
         if matches!(self.phase, Phase::Doze { .. }) {
             return;
         }
@@ -3007,8 +3035,7 @@ impl App {
         let Some(cart) = self.shelf().carts.get(index).cloned() else {
             return;
         };
-        let core = slot_store::core_for(self.root.as_deref().unwrap(), &cart.stem);
-        self.cart_menu = Some(CartMenu::open(&cart, index, core));
+        self.cart_menu = Some(CartMenu::open(&cart, index));
         self.shelf_mut().release_hold();
         self.play_held = None;
     }
@@ -3031,11 +3058,7 @@ impl App {
                     menu.reset();
                     self.preview_shell(menu.index, None);
                 }
-                self.save_shell(&menu);
-                if menu.row == slot_ui::CartRow::Emulator {
-                    self.open_core_picker();
-                }
-                return;
+                return self.save_shell(&menu);
             }
             _ => {}
         }
@@ -3084,7 +3107,6 @@ impl App {
             colour: menu.colour,
             finish: menu.finish,
             shape: menu.shape,
-            core: menu.core,
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
         }
@@ -3119,6 +3141,17 @@ impl App {
     }
 
     fn core_picker_input(&mut self, action: Action) {
+        // Up/Down: the cart's colour and finish, previewed on the lid.
+        if let Action::GbaDown(dir @ (Btn::Up | Btn::Down)) = action {
+            let open = self.core_picker.is_some_and(|p| !p.closing());
+            if let (true, Some(mut look)) = (open, self.picker_look.take()) {
+                look.row = if dir == Btn::Up { slot_ui::CartRow::Colour } else { slot_ui::CartRow::Finish };
+                look.step_value(1);
+                self.preview_shell(look.index, look.chosen());
+                self.picker_look = Some(look);
+            }
+            return;
+        }
         let press = match action {
             Action::GbaDown(Btn::Left) | Action::ShelfLeft => Press::Left,
             Action::GbaDown(Btn::Right) | Action::ShelfRight => Press::Right,
@@ -3130,7 +3163,16 @@ impl App {
         let Some(picker) = &mut self.core_picker else {
             return;
         };
+        let closing = picker.closing();
         let outcome = picker.press(press, now);
+        if !closing && picker.closing() {
+            if let Some(look) = self.picker_look.take() {
+                match press {
+                    Press::Keep => self.save_shell(&look),
+                    _ => self.preview_shell(look.index, look.before),
+                }
+            }
+        }
         if let Outcome::Write(core) = outcome {
             self.write_core(core);
         }
@@ -3944,7 +3986,6 @@ struct CartMenu {
     colour: usize,
     finish: usize,
     shape: usize,
-    core: usize,
     /// The game's own plastic: what Original and a cleared choice show.
     own: slot_ui::Shell,
     /// The cart's choice when the menu opened, put back by B.
@@ -3970,7 +4011,7 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
 }
 
 impl CartMenu {
-    fn open(cart: &Cart, index: usize, core: Core) -> Self {
+    fn open(cart: &Cart, index: usize) -> Self {
         use slot_ui::CartRow;
         let mut plain = cart.clone();
         plain.shell = None;
@@ -3997,9 +4038,6 @@ impl CartMenu {
         if matches!(cart.platform, Platform::Gb | Platform::Gbc) {
             rows.push(CartRow::Shape);
         }
-        if cart.platform == Platform::Gba {
-            rows.push(CartRow::Emulator);
-        }
         rows.push(CartRow::Reset);
         CartMenu {
             index,
@@ -4009,7 +4047,6 @@ impl CartMenu {
             colour,
             finish,
             shape,
-            core: Core::PICKER.iter().position(|c| *c == core).unwrap_or(0),
             own,
             before: cart.shell,
         }
@@ -4039,15 +4076,11 @@ impl CartMenu {
     fn step_value(&mut self, by: isize) {
         let step = |v: usize, n: usize| (v as isize + by).rem_euclid(n as isize) as usize;
         match self.row {
-            slot_ui::CartRow::Colour => {
-                self.colour = step(self.colour, self.colours.len());
-                // A colour comes in the plastic it was sold in; Finish can change it after.
-                let finish = self.colours[self.colour].1.map_or(self.own.finish, |s| s.finish);
-                self.finish = slot_ui::FINISHES.iter().position(|f| *f == finish).unwrap_or(0);
-            }
+            // The finish stays as it is: a colour only changes the colour.
+            slot_ui::CartRow::Colour => self.colour = step(self.colour, self.colours.len()),
             slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
             slot_ui::CartRow::Shape => self.shape = step(self.shape, OUTLINES.len()),
-            slot_ui::CartRow::Emulator | slot_ui::CartRow::Reset => {}
+            slot_ui::CartRow::Reset => {}
         }
     }
 
