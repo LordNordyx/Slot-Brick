@@ -14,6 +14,7 @@ fn render_board() {
         code: "BPEE".into(),
         shell: None,
         title: "POKEMON EMER".into(),
+        famicom_label: None,
     });
     let f = std::fs::File::create(&out).unwrap();
     let mut e = png::Encoder::new(std::io::BufWriter::new(f), face.w, face.h);

@@ -5,12 +5,28 @@ use std::path::{Path, PathBuf};
 use crate::gba::header_title_code;
 use crate::platform::Platform;
 
+/// Where a NES game's Famicom cart label is kept, inside Labels/NES.
+pub const FAMICOM_LABELS: &str = "Famicom";
+
+/// A game's labels as they are on the card now: (its own, its Famicom one).
+pub fn labels_of(root: &Path, platform: Platform, stem: &str) -> (Option<PathBuf>, Option<PathBuf>) {
+    let dir = root.join("Labels").join(platform.dir_name());
+    let find = |dir: PathBuf| {
+        listing(&dir).get(&format!("{stem}.png").to_lowercase()).map(|name| dir.join(name))
+    };
+    let famicom = (platform == Platform::Nes).then(|| find(dir.join(FAMICOM_LABELS))).flatten();
+    (find(dir), famicom)
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Cart {
     pub platform: Platform,
     pub stem: String,
     pub rom: PathBuf,
     pub label: Option<PathBuf>,
+    /// A NES game's label for the Famicom cart, kept apart from its NES one
+    /// (Labels/NES/Famicom), as the two carts' labels are different shapes.
+    pub famicom_label: Option<PathBuf>,
     pub title: String,
     pub code: String,
     pub shell: Option<crate::ShellChoice>,
@@ -77,6 +93,8 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
         };
         let labels_dir = root.join("Labels").join(platform.dir_name());
         let labels = listing(&labels_dir);
+        let famicom_dir = labels_dir.join(FAMICOM_LABELS);
+        let famicom = if platform == Platform::Nes { listing(&famicom_dir) } else { HashMap::new() };
         for entry in entries {
             let Ok(entry) = entry else {
                 continue;
@@ -91,6 +109,9 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
             let label = labels
                 .get(&format!("{stem}.png").to_lowercase())
                 .map(|name| labels_dir.join(name));
+            let famicom_label = famicom
+                .get(&format!("{stem}.png").to_lowercase())
+                .map(|name| famicom_dir.join(name));
             carts.push(Cart {
                 platform,
                 stem: stem.to_string(),
@@ -98,6 +119,7 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
                 code: String::new(),
                 shell: shells.get(&crate::cart_shell::key(stem)).copied(),
                 label,
+                famicom_label,
                 rom,
             });
         }

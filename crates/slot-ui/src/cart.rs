@@ -197,6 +197,28 @@ pub fn snes_shell_of(cart: &Cart) -> Option<SnesShell> {
     })
 }
 
+/// The cart's label picture at w x h: filling the label, but on the Famicom cart a tall (NES)
+/// label is shown whole, as filling would cut most of it away.
+pub fn fitted_label(cart: &Cart, w: u32, h: u32) -> Option<Vec<u8>> {
+    let path = shown_label(cart)?;
+    if nes_famicom_of(cart) {
+        art::label_fit(path, w, h)
+    } else {
+        art::cover(path, w, h)
+    }
+}
+
+/// The label a cart wears: a NES game keeps one for each of its carts, so swapping the
+/// shape swaps the picture; while it has only one, both carts show it.
+pub fn shown_label(cart: &Cart) -> Option<&std::path::Path> {
+    let (own, famicom) = (cart.label.as_deref(), cart.famicom_label.as_deref());
+    if nes_famicom_of(cart) {
+        famicom.or(own)
+    } else {
+        own.or(famicom)
+    }
+}
+
 /// A NES game on the Famicom cart: as chosen in the cart menu (notched is the NES cart,
 /// rounded the Famicom), else a ROM named as a Japanese release or on a Famicom-only board.
 pub fn nes_famicom_of(cart: &Cart) -> bool {
@@ -363,7 +385,7 @@ fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
 
 pub fn cart_face(cart: &Cart) -> CartFace {
     let (lw, lh) = label_size(cart);
-    let art = cart.label.as_deref().and_then(|p| art::label_fit(p, lw, lh));
+    let art = fitted_label(cart, lw, lh);
     cart_face_with(cart, art)
 }
 

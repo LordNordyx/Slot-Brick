@@ -107,8 +107,9 @@ checksum kept in `Slot/System/Cache/crc32.txt`.
 NES and SNES labels come from the [LaunchBox Games Database](https://gamesdb.launchbox-app.com)'s
 pictures of the cartridges: Slot finds the game by its ROM's file name (No-Intro names work best,
 for example `Mega Man 2 (USA).nes`) and cuts the label out of a picture of the standard US cart.
-Games on the Famicom cart get a Famicom cart's label (from the Japanese release), or the NES
-one when LaunchBox has none. Carts of another shape (Tengen, gold Zelda, PAL SNES, unlicensed)
+Games on the Famicom cart get a Famicom cart's label (from the Japanese release), kept apart in
+`Slot/Labels/NES/Famicom` so a NES game can have both: swapping its shape swaps the label. While
+a game has only one, both carts show it. Carts of another shape (Tengen, gold Zelda, PAL SNES, unlicensed)
 keep their file-name label, as do games LaunchBox has no cart picture of (many SNES games).
 
 `Slot/Logs/cart-art.txt` lists each game and what it got. Below GET CART ART, every game with a

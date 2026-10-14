@@ -48,3 +48,24 @@ fn a_nes_rom_on_a_famicom_only_board_is_spotted() {
     std::fs::write(&junk, b"not a rom").unwrap();
     assert_eq!(nes_mapper(&junk), None);
 }
+
+#[test]
+fn a_nes_games_famicom_label_is_found_beside_its_nes_one() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path();
+    for dir in ["Games/NES", "Labels/NES/Famicom", "Games/GBA", "Labels/GBA/Famicom"] {
+        std::fs::create_dir_all(root.join(dir)).unwrap();
+    }
+    std::fs::write(root.join("Games/NES/Rockman (Japan).nes"), b"NES\x1a").unwrap();
+    std::fs::write(root.join("Labels/NES/Rockman (Japan).png"), b"nes").unwrap();
+    std::fs::write(root.join("Labels/NES/Famicom/rockman (japan).png"), b"fc").unwrap();
+    std::fs::write(root.join("Games/GBA/Emerald.gba"), [0u8; 0x200]).unwrap();
+    std::fs::write(root.join("Labels/GBA/Famicom/Emerald.png"), b"x").unwrap();
+    let carts = slot_store::scan(root).unwrap();
+    let nes = carts.iter().find(|c| c.stem == "Rockman (Japan)").unwrap();
+    assert!(nes.label.is_some());
+    assert_eq!(nes.famicom_label.as_deref(), Some(root.join("Labels/NES/Famicom/rockman (japan).png").as_path()));
+    let gba = carts.iter().find(|c| c.stem == "Emerald").unwrap();
+    assert_eq!(gba.famicom_label, None, "a GBA game took a Famicom label");
+    assert_eq!(slot_store::labels_of(root, slot_store::Platform::Nes, "Rockman (Japan)"), (nes.label.clone(), nes.famicom_label.clone()));
+}

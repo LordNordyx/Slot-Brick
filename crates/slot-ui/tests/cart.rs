@@ -834,6 +834,7 @@ fn a_pal_snes_cart_is_narrower_and_the_menu_can_swap_the_shape() {
         code: String::new(),
         shell: outline.map(|outline| ShellChoice { outline, colour: [0x80; 3], finish: ShellFinish::Solid }),
         title: String::new(),
+        famicom_label: None,
     };
     let side = |c: &slot_store::Cart| {
         let f = cart_face(c);
@@ -866,6 +867,7 @@ fn a_ripped_rom_with_no_region_in_its_name_goes_by_its_header() {
     std::fs::write(&sfc, rom).unwrap();
     let cart = |platform, stem: &str, rom: std::path::PathBuf| slot_store::Cart {
         platform, stem: stem.into(), rom, label: None, code: String::new(), shell: None, title: String::new(),
+        famicom_label: None,
     };
     let terranigma = cart(Platform::Snes, "Terranigma", sfc);
     assert_eq!(snes_shell_of(&terranigma), Some(SnesShell::Pal));
@@ -890,6 +892,7 @@ fn a_colour_saved_for_a_nes_or_snes_cart_is_ignored() {
         let cart = slot_store::Cart {
             platform, stem: "Mario (USA)".into(), rom: "missing".into(), label: None,
             code: String::new(), shell: pink, title: String::new(),
+            famicom_label: None,
         };
         assert_eq!(shell_for(&cart), grey, "{platform:?} took the chosen colour");
     }
@@ -902,6 +905,7 @@ fn a_famicom_cart_is_small_and_landscape_and_wears_its_chosen_colour() {
     let nes = |stem: &str, shell: Option<ShellChoice>| slot_store::Cart {
         platform: Platform::Nes, stem: stem.into(), rom: "missing.nes".into(), label: None,
         code: String::new(), shell, title: String::new(),
+        famicom_label: None,
     };
     let opaque = |c: &slot_store::Cart, fx: f32, fy: f32| {
         let f = cart_face(c);
@@ -936,4 +940,23 @@ fn a_tall_label_on_a_wide_cart_is_shown_whole_and_a_wide_one_still_fills() {
     write_label(&d, "wide.png", 200, 100, |x, _| [x as u8, 0, 0]);
     let wide = d.path().join("Labels/GBA/wide.png");
     assert_eq!(slot_ui::label_fit(&wide, 300, 140), slot_ui::cover(&wide, 300, 140), "a wide label was not filled");
+}
+
+#[test]
+fn a_nes_game_wears_the_label_of_the_cart_it_is_on() {
+    use slot_store::{Outline, ShellChoice, ShellFinish};
+    use slot_ui::shown_label;
+    let on = |outline: Option<Outline>, label: Option<&str>, famicom: Option<&str>| slot_store::Cart {
+        platform: Platform::Nes, stem: "Mega Man (USA)".into(), rom: "missing.nes".into(),
+        label: label.map(Into::into), famicom_label: famicom.map(Into::into), code: String::new(),
+        shell: outline.map(|outline| ShellChoice { outline, colour: [0x80; 3], finish: ShellFinish::Solid }),
+        title: String::new(),
+    };
+    let both = (Some("nes.png"), Some("fc.png"));
+    assert_eq!(shown_label(&on(None, both.0, both.1)), Some(std::path::Path::new("nes.png")));
+    assert_eq!(shown_label(&on(Some(Outline::Rounded), both.0, both.1)), Some(std::path::Path::new("fc.png")));
+    assert_eq!(shown_label(&on(Some(Outline::Notched), both.0, both.1)), Some(std::path::Path::new("nes.png")));
+    // With one label, both carts wear it.
+    assert_eq!(shown_label(&on(Some(Outline::Rounded), Some("nes.png"), None)), Some(std::path::Path::new("nes.png")));
+    assert_eq!(shown_label(&on(None, None, Some("fc.png"))), Some(std::path::Path::new("fc.png")));
 }

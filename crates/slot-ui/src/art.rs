@@ -24,8 +24,8 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// A cart label: filled like `cover`, unless the picture is the other way round (a tall NES
-/// label on the wide Famicom one), which would lose most of it. That one is shown whole, the
+/// A Famicom cart label: filled like `cover`, unless the picture is the other way round (a
+/// tall NES label on the wide Famicom one), which would lose most of it. That one is shown whole, the
 /// sides filled with the colour round its edge.
 pub fn label_fit(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode(path)?;

@@ -885,14 +885,20 @@ impl App {
         false
     }
 
-    /// A label fetched or deleted while running: the cart's face is dropped so it is rebuilt.
+    /// A label fetched or deleted while running: the game's labels are read again (a NES
+    /// game has one for each cart) and its face dropped so it is rebuilt.
     pub fn adopt_label(&mut self, platform: Platform, stem: &str, label: Option<std::path::PathBuf>) {
+        let (own, famicom) = match &self.root {
+            Some(root) => slot_store::labels_of(root, platform, stem),
+            None => (label, None),
+        };
         for (p, shelf) in &mut self.shelves {
             if *p != platform {
                 continue;
             }
             if let Some(i) = shelf.carts.iter().position(|c| c.stem == stem) {
-                shelf.carts[i].label = label.clone();
+                shelf.carts[i].label = own.clone();
+                shelf.carts[i].famicom_label = famicom.clone();
                 self.stale_faces.extend(shelf.take_face(i));
             }
         }

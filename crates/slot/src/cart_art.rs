@@ -31,9 +31,10 @@ const LABEL_MAX: u32 = 512;
 /// shows (side: beside the label, to learn the plastic's colour; plain: must be that
 /// colour), all as fractions of the cart's outline.
 struct CartPhoto {
-    platform: Platform,
     /// Built by brick/make-cart-labels.py, shipped on the card.
     index: &'static str,
+    /// The folder inside Labels/<console> its labels go to: a Famicom cart's are kept apart.
+    sub: &'static str,
     aspect: (f32, f32),
     label: [f32; 4],
     /// Where the label's art is surely printed: mostly not plastic coloured, or there is none.
@@ -45,8 +46,8 @@ struct CartPhoto {
 
 /// The NES cart: label top right of a full-height grip.
 const NES_PHOTO: CartPhoto = CartPhoto {
-    platform: Platform::Nes,
     index: "System/nes-cart-labels.txt",
+    sub: "",
     aspect: (1.08, 1.16),
     label: [0.405, 0.006, 0.865, 0.680],
     art: [0.405, 0.006, 0.865, 0.680],
@@ -56,8 +57,8 @@ const NES_PHOTO: CartPhoto = CartPhoto {
 
 /// The US SNES cart: label across the top of the middle, ridged wings either side.
 const SNES_PHOTO: CartPhoto = CartPhoto {
-    platform: Platform::Snes,
     index: "System/snes-cart-labels.txt",
+    sub: "",
     aspect: (0.62, 0.67),
     label: [0.200, 0.008, 0.807, 0.432],
     art: [0.200, 0.008, 0.807, 0.432],
@@ -69,8 +70,8 @@ const SNES_PHOTO: CartPhoto = CartPhoto {
 /// below; the connector tab underneath. Makers placed the label a little differently, so
 /// this takes its middle; the plastic is read below it, as the edges are shaded.
 const FAMICOM_PHOTO: CartPhoto = CartPhoto {
-    platform: Platform::Nes,
     index: "System/famicom-cart-labels.txt",
+    sub: slot_store::FAMICOM_LABELS,
     aspect: (0.6, 0.7),
     label: [0.09, 0.125, 0.91, 0.74],
     art: [0.25, 0.25, 0.75, 0.65],
@@ -79,10 +80,12 @@ const FAMICOM_PHOTO: CartPhoto = CartPhoto {
 };
 
 /// The pictures a cart's label is cut from: a NES game on the Famicom cart takes a Famicom
-/// cart's label, falling back to the NES one's (shown whole, as it is tall).
+/// cart's label (kept apart from its NES one), else the NES one's if it has none yet (shown
+/// whole, as it is tall).
 fn photo_specs(cart: &Cart) -> &'static [&'static CartPhoto] {
     match cart.platform {
-        Platform::Nes if slot_ui::nes_famicom_of(cart) => &[&FAMICOM_PHOTO, &NES_PHOTO],
+        Platform::Nes if slot_ui::nes_famicom_of(cart) && cart.label.is_none() => &[&FAMICOM_PHOTO, &NES_PHOTO],
+        Platform::Nes if slot_ui::nes_famicom_of(cart) => &[&FAMICOM_PHOTO],
         Platform::Nes => &[&NES_PHOTO],
         Platform::Snes => &[&SNES_PHOTO],
         _ => &[],
@@ -188,7 +191,7 @@ fn run(
     let carts: Vec<Cart> = scan(root)
         .map_err(|e| format!("Cannot read games: {e}"))?
         .into_iter()
-        .filter(|c| c.label.is_none())
+        .filter(needs_label)
         .collect();
     let mut summary = Summary::default();
     let mut report = String::new();
@@ -314,7 +317,16 @@ fn fetch_label(cart: &Cart, src: &mut Sources) -> Result<Outcome, String> {
         Ok(None) => return Ok(Outcome::NoMatch),
         Err(e) => return Ok(Outcome::Failed(e)),
     };
-    Ok(save_label(src.root, &cart, &png, format!("label scan {path} ({how})")))
+    Ok(save_label(src.root, &cart, "", &png, format!("label scan {path} ({how})")))
+}
+
+/// No label for the cart it is on now: a NES game on the Famicom cart wants a Famicom label
+/// even when it has a NES one.
+fn needs_label(cart: &Cart) -> bool {
+    match cart.platform {
+        Platform::Nes if slot_ui::nes_famicom_of(cart) => cart.famicom_label.is_none(),
+        _ => cart.label.is_none(),
+    }
 }
 
 /// Cart pictures by name, "Title (Region)" as the name matching scores them.
@@ -372,7 +384,7 @@ fn fetch_photo_label(cart: &Cart, spec: &CartPhoto, src: &mut Sources) -> Result
             }
         };
         match label_from_photo(&png, spec) {
-            Ok(label) => return Ok(save_label(root, cart, &label, format!("{name} cart {file}"))),
+            Ok(label) => return Ok(save_label(root, cart, spec.sub, &label, format!("{name} cart {file}"))),
             Err(e) => why.push(format!("{file}: {e}")),
         }
     }
@@ -586,10 +598,11 @@ impl Games {
     }
 }
 
-fn save_label(root: &Path, cart: &Cart, png: &[u8], from: String) -> Outcome {
+fn save_label(root: &Path, cart: &Cart, sub: &str, png: &[u8], from: String) -> Outcome {
     let label = root
         .join("Labels")
         .join(cart.platform.dir_name())
+        .join(sub)
         .join(format!("{}.png", cart.stem));
     if label.exists() {
         return Outcome::Failed("a label appeared meanwhile; kept it".into());
@@ -1266,6 +1279,31 @@ mod tests {
         let report = std::fs::read_to_string(root.join(REPORT)).unwrap();
         assert!(report.contains("no match  NES/Mega Man (Hack)"), "a hack wore the game's label: {report}");
         assert!(!root.join(CRC_CACHE).exists(), "a NES ROM was checksummed for nothing");
+    }
+
+    #[test]
+    fn a_famicom_cart_gets_its_own_label_beside_the_nes_one() {
+        const YELLOW: [u8; 3] = [0xe8, 0xb0, 0x10];
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let rom = root.join("Games/NES/Rockman (Japan).nes");
+        std::fs::create_dir_all(rom.parent().unwrap()).unwrap();
+        std::fs::write(&rom, b"NES\x1a").unwrap();
+        std::fs::create_dir_all(root.join("Labels/NES")).unwrap();
+        std::fs::write(root.join("Labels/NES/Rockman (Japan).png"), b"its NES label").unwrap();
+        std::fs::create_dir_all(root.join("System")).unwrap();
+        std::fs::create_dir_all(root.join("Logs")).unwrap();
+        std::fs::write(root.join(FAMICOM_PHOTO.index), "# test\nRockman (Japan)\tfc.png\n").unwrap();
+        std::fs::write(root.join(NES_PHOTO.index), "# test\nRockman (Japan)\tnes.png\n").unwrap();
+        let photos = serve(vec![("/fc.png".into(), 200, cart_png(400, 262, YELLOW, RED, [0.06, 0.1, 0.94, 0.76]))]);
+        let servers = Servers { labels: "http://127.0.0.1:1".into(), photos };
+        let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), servers));
+        assert_eq!(done, Ok(Summary { found: 1, missing: 0, failed: 0 }));
+        assert!(root.join("Labels/NES/Famicom/Rockman (Japan).png").exists(), "no Famicom label");
+        assert_eq!(std::fs::read(root.join("Labels/NES/Rockman (Japan).png")).unwrap(), b"its NES label", "the NES label was touched");
+        let cart = scan(root).unwrap().into_iter().next().unwrap();
+        assert!(cart.label.is_some() && cart.famicom_label.is_some(), "{cart:?}");
+        assert!(!needs_label(&cart), "a second run would fetch it again");
     }
 
     /// As live_nes_labels, for SNES carts: `SLOT_LIVE_ART=1 ... live_snes_labels -- --ignored`.

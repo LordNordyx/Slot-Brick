@@ -16,6 +16,7 @@ fn shelf_with(n: usize) -> Shelf {
                 code: String::new(),
                 shell: None,
                 title: format!("GAME {i}"),
+                famicom_label: None,
             })
             .collect(),
     )
@@ -752,6 +753,7 @@ fn gb_shelf_with(n: usize) -> Shelf {
                 code: String::new(),
                 shell: None,
                 title: format!("PAK {i}"),
+                famicom_label: None,
             })
             .collect(),
     )
@@ -827,6 +829,7 @@ fn a_colour_pak_and_a_grey_one_are_backed_by_their_own_shells() {
                 code: String::new(),
                 shell: None,
                 title: (*stem).to_uppercase(),
+                famicom_label: None,
             }
         })
         .collect();
@@ -883,6 +886,7 @@ fn a_cart_pushed_onto_the_row_draws_rather_than_stopping_the_device() {
         code: String::new(),
         shell: None,
         title: "PUSHED".into(),
+        famicom_label: None,
     });
     settle(&mut s);
     assert_eq!(

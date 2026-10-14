@@ -36,6 +36,7 @@ fn app_with_carts(stems: &[&str]) -> App {
                 code: String::new(),
                 shell: None,
                 title: stem.to_uppercase(),
+                famicom_label: None,
             })
             .collect(),
     )
@@ -318,6 +319,7 @@ fn app_with_platforms(carts: &[(Platform, &str)]) -> App {
                 code: String::new(),
                 shell: None,
                 title: stem.to_uppercase(),
+                famicom_label: None,
             })
             .collect(),
     )

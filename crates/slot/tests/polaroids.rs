@@ -14,6 +14,7 @@ fn app_playing(stem: &str) -> App {
         code: String::new(),
         shell: None,
         title: stem.to_uppercase(),
+        famicom_label: None,
     }]);
     a.apply(Action::Insert);
     a.on_core_ready();

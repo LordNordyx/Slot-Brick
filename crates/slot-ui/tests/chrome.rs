@@ -20,6 +20,7 @@ fn cart() -> Cart {
         code: String::new(),
         shell: None,
         title: "POKEMON EMER".into(),
+        famicom_label: None,
     }
 }
 
@@ -32,6 +33,7 @@ fn pak() -> Cart {
         code: String::new(),
         shell: None,
         title: "TETRIS".into(),
+        famicom_label: None,
     }
 }
 
@@ -44,6 +46,7 @@ fn nes() -> Cart {
         code: String::new(),
         shell: None,
         title: String::new(),
+        famicom_label: None,
     }
 }
 
@@ -56,6 +59,7 @@ fn snes() -> Cart {
         code: String::new(),
         shell: None,
         title: String::new(),
+        famicom_label: None,
     }
 }
 
