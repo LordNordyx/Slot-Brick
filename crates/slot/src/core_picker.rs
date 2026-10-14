@@ -51,6 +51,7 @@ pub struct CorePicker {
     hop: Option<Hop>,
     close: Option<Close>,
     refusal: Option<Refusal>,
+    lid_off: bool,
 }
 
 impl CorePicker {
@@ -62,7 +63,21 @@ impl CorePicker {
             hop: None,
             close: None,
             refusal: None,
+            lid_off: false,
         }
+    }
+
+    /// True once, `lead` ms before the cart finishes sliding up and its lid comes off the
+    /// board: when a sound that takes `lead` ms to hit should start.
+    pub fn lid_off_due(&mut self, now: Millis, lead: Millis) -> bool {
+        let Some(started) = self.started else {
+            return false;
+        };
+        if self.lid_off || self.close.is_some() || now.saturating_sub(started) + lead < SLIDE_MS {
+            return false;
+        }
+        self.lid_off = true;
+        true
     }
 
     pub fn start(&mut self, now: Millis) {

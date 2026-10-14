@@ -2491,3 +2491,49 @@ fn a_nes_cart_offers_only_its_shape_and_can_be_made_a_famicom_cart() {
     let saved = saved_shell(&d, "Mario (USA)").expect("A saved nothing");
     assert!(saved.starts_with("rounded "), "{saved}");
 }
+
+fn sfx_over(app: &mut App, secs: f32) -> Vec<(f32, slot::audio::Sfx)> {
+    let mut heard = Vec::new();
+    let mut t = 0.0;
+    while t < secs {
+        app.update(0.004);
+        t += 0.004;
+        if let Some(s) = app.take_sfx() {
+            heard.push((t, s));
+        }
+    }
+    heard
+}
+
+#[test]
+fn the_edit_snap_lands_on_the_gba_lid_coming_off() {
+    use slot::audio::Sfx;
+    let (_d, mut app) = on_shelf(&["Emerald", "Zzz"]);
+    fake_picker_faces(&mut app);
+    sfx_over(&mut app, 0.1);
+    press(&mut app, Btn::Start);
+    let heard = sfx_over(&mut app, 0.6);
+    assert_eq!(heard.iter().filter(|(_, s)| *s == Sfx::Edit).count(), 1, "{heard:?}");
+    let (at, _) = heard[0];
+    let hit = at + Sfx::Edit.lead();
+    let lid = slot::core_picker::SLIDE_MS as f32 / 1000.0;
+    assert!((hit - lid).abs() < 0.01, "the snap hits at {hit:.3}s, the lid comes off at {lid:.3}s");
+}
+
+#[test]
+fn a_cart_menu_opens_with_the_edit_snap() {
+    let (_d, mut app) = on_shelf_gb(&["Tetris", "Zzz"]);
+    sfx_over(&mut app, 0.1);
+    press(&mut app, Btn::Start);
+    assert_eq!(app.take_sfx(), Some(slot::audio::Sfx::Edit));
+}
+
+#[test]
+fn moving_along_the_shelf_clicks_and_standing_still_does_not() {
+    use slot::audio::Sfx;
+    let (_d, mut app) = on_shelf(&["Emerald", "Fusion", "Zzz"]);
+    assert!(sfx_over(&mut app, 0.5).is_empty(), "the shelf clicked on its own");
+    app.apply(Action::ShelfRight);
+    let heard = sfx_over(&mut app, 0.3);
+    assert_eq!(heard.iter().map(|(_, s)| *s).collect::<Vec<_>>(), vec![Sfx::Click]);
+}
