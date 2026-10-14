@@ -198,6 +198,7 @@ Brick-specific code is gated behind the `brick` Cargo feature.
 
 - **Device scripts and apps:** [`brick/`](brick/)
 - **Change history:** [`brick/CHANGELOG.md`](brick/CHANGELOG.md)
+- **Dev builds:** every change to `main` is built automatically and published as the [Dev build](../../releases/tag/dev) release, replacing the previous one.
 
 ## Credits
 
