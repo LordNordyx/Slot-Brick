@@ -66,6 +66,18 @@ const SNES_PHOTO: CartPhoto = CartPhoto {
     plain: [[0.25, 0.47, 0.75, 0.55], [0.88, 0.2, 0.97, 0.8]],
 };
 
+/// The Super Famicom and PAL SNES cart: rounder, the label wide across the top of the front,
+/// plain plastic below it down to the window, and plain plastic either side of that.
+const SNES_PAL_PHOTO: CartPhoto = CartPhoto {
+    index: "System/snes-pal-cart-labels.txt",
+    sub: "",
+    aspect: (0.64, 0.78),
+    label: [0.085, 0.085, 0.915, 0.42],
+    art: [0.3, 0.15, 0.7, 0.38],
+    side: [0.25, 0.52, 0.75, 0.58],
+    plain: [[0.2, 0.75, 0.8, 0.85], [0.04, 0.55, 0.12, 0.85]],
+};
+
 /// The Famicom cart: a wide label over most of the front, plain plastic right of it and
 /// below; the connector tab underneath. Makers placed the label a little differently, so
 /// this takes its middle; the plastic is read below it, as the edges are shaded.
@@ -87,7 +99,9 @@ fn photo_specs(cart: &Cart) -> &'static [&'static CartPhoto] {
         Platform::Nes if slot_ui::nes_famicom_of(cart) && cart.label.is_none() => &[&FAMICOM_PHOTO, &NES_PHOTO],
         Platform::Nes if slot_ui::nes_famicom_of(cart) => &[&FAMICOM_PHOTO],
         Platform::Nes => &[&NES_PHOTO],
-        Platform::Snes => &[&SNES_PHOTO],
+        // The cart's own shape first, the other's label (trimmed to fit) when it has none.
+        Platform::Snes if slot_ui::snes_shell_of(cart) == Some(slot_ui::SnesShell::Pal) => &[&SNES_PAL_PHOTO, &SNES_PHOTO],
+        Platform::Snes => &[&SNES_PHOTO, &SNES_PAL_PHOTO],
         _ => &[],
     }
 }
@@ -1026,10 +1040,9 @@ fn search(root: &Path, cart: &Cart, query: Option<&str>, servers: &Servers, canc
                 };
                 // Only a picture a clean label can be cut from is offered.
                 if let Ok(label) = label_from_photo(&png, spec) {
-                    let source = match (&typed, spec.sub.is_empty()) {
-                        (Some(_), _) => name.split(" (").next().unwrap_or(name),
-                        (None, true) => "LaunchBox",
-                        (None, false) => "LaunchBox Famicom",
+                    let source = match &typed {
+                        Some(_) => name.split(" (").next().unwrap_or(name),
+                        None => "LaunchBox",
                     };
                     if !offer(&label, caption(source, name)) {
                         return Ok(());
@@ -1378,6 +1391,30 @@ mod tests {
         assert_eq!(done, Ok(()));
         let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
         assert_eq!(captions, ["Super Mario World 2: Yoshi's Island · USA"]);
+    }
+
+    #[test]
+    fn a_super_famicom_picture_gives_a_wide_label_for_the_rounder_cart() {
+        const PAL_GREY: [u8; 3] = [0xbf, 0xc1, 0xc1];
+        let label = label_from_photo(&cart_png(600, 420, PAL_GREY, RED, [0.07, 0.06, 0.93, 0.45]), &SNES_PAL_PHOTO)
+            .expect("the Super Famicom cart");
+        let (rgba, w, h) = decode_rgba(&label).unwrap();
+        assert!(w as f32 / h as f32 > 2.3, "{w}x{h} is not the wide PAL label");
+        assert!(rgba.chunks_exact(4).all(|p| p == [0xc0, 0x20, 0x20, 255]), "plastic inside the label");
+        assert_eq!(label_from_photo(&cart_png(280, 312, GREY, RED, NES_PHOTO.label), &SNES_PAL_PHOTO), Err("not the cart's shape"));
+        let blank = cart_png(600, 420, PAL_GREY, PAL_GREY, [0.07, 0.06, 0.93, 0.45]);
+        assert_eq!(label_from_photo(&blank, &SNES_PAL_PHOTO), Err("no label on the cart"));
+    }
+
+    #[test]
+    fn a_snes_cart_looks_for_its_own_shape_first() {
+        let cart = |stem: &str| Cart {
+            platform: Platform::Snes, stem: stem.into(), rom: "missing.sfc".into(), label: None,
+            famicom_label: None, title: String::new(), code: String::new(), shell: None,
+        };
+        assert_eq!(photo_specs(&cart("Mario (Japan)"))[0].index, SNES_PAL_PHOTO.index);
+        assert_eq!(photo_specs(&cart("Mario (USA)"))[0].index, SNES_PHOTO.index);
+        assert_eq!(photo_specs(&cart("Mario (USA)")).len(), 2, "no fallback to the other shape");
     }
 
     #[test]

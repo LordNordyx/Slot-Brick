@@ -117,8 +117,10 @@ pictures of the cartridges: Slot finds the game by its ROM's file name (No-Intro
 for example `Mega Man 2 (USA).nes`) and cuts the label out of a picture of the standard US cart.
 Games on the Famicom cart get a Famicom cart's label (from the Japanese release), kept apart in
 `Slot/Labels/NES/Famicom` so a NES game can have both: swapping its shape swaps the label. While
-a game has only one, both carts show it. Carts of another shape (Tengen, gold Zelda, PAL SNES, unlicensed)
-keep their file-name label, as do games LaunchBox has no cart picture of (many SNES games).
+a game has only one, both carts show it. SNES games on the rounder Super Famicom / PAL cart get
+that cart's label (from the Japanese or European release), and either kind of SNES cart falls
+back to the other's label when its own has none. Carts of another shape (Tengen, gold Zelda,
+unlicensed) keep their file-name label, as do games LaunchBox has no cart picture of.
 
 `Slot/Logs/cart-art.txt` lists each game and what it got. Below GET CART ART, every game with a
 label is listed: press A twice on one to delete its label, then GET CART ART fetches a new one.

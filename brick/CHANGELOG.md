@@ -4,6 +4,8 @@
 - Choose a game's label yourself: the cart menu's Label row (L1/R1 in the GBA core picker)
   finds every label for the game, other regions included, and shows each on the cart to pick from.
   Y types your own search, for games whose file name doesn't match.
+- SNES labels from Super Famicom and PAL carts too: over three times as many SNES games find a
+  label, and the rounder cart gets one that fits it.
 - Wi-Fi comes back on at startup as it was left: Slot remembers whether Wi-Fi was on, and
   starts it itself when the firmware does not (it may not, with Slot in place of its menu).
 - Wi-Fi only counts as online once it has an address, and at startup Slot waits for the
