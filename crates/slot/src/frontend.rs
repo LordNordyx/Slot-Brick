@@ -345,9 +345,11 @@ impl Frontend {
         let nes = slot_ui::nes_cart_shadow();
         let nes = compositor.create_texture(nes.w, nes.h, &nes.rgba);
         self.session.app_mut().set_nes_cart_shadow(nes);
-        let snes = slot_ui::snes_cart_shadow();
-        let snes = compositor.create_texture(snes.w, snes.h, &snes.rgba);
-        self.session.app_mut().set_snes_cart_shadow(snes);
+        let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
+            let face = slot_ui::snes_cart_shadow(shell);
+            compositor.create_texture(face.w, face.h, &face.rgba)
+        });
+        self.session.app_mut().set_snes_cart_shadows(us, pal);
         let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);
@@ -370,7 +372,7 @@ impl Frontend {
         colour_names.push("Custom");
         let colours = values(colour_names);
         let finishes = values(slot_ui::FINISHES.iter().map(|f| slot_ui::finish_name(*f)).collect());
-        let shapes = values(slot_ui::SHAPES.to_vec());
+        let shapes = values(slot_ui::SHAPES.iter().chain(&slot_ui::SNES_SHAPES).copied().collect());
         let carets = [false, true].map(|right| up(quick_caret_face(right)));
         let legend = slot_ui::cart_menu_legend_faces().map(|f| {
             let (tex, w, _) = up(f);

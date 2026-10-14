@@ -753,9 +753,10 @@ impl App {
         }
     }
 
-    pub fn set_snes_cart_shadow(&mut self, face: TexId) {
+    pub fn set_snes_cart_shadows(&mut self, us: TexId, pal: TexId) {
         for (_, shelf) in &mut self.shelves {
-            shelf.set_snes_shadow(face);
+            shelf.set_snes_shadow(slot_ui::SnesShell::Us, us);
+            shelf.set_snes_shadow(slot_ui::SnesShell::Pal, pal);
         }
     }
 
@@ -3112,7 +3113,8 @@ impl App {
             row: menu.row,
             colour: menu.colour,
             finish: menu.finish,
-            shape: menu.shape,
+            // SNES shape names follow the Game Boy ones.
+            shape: menu.shape + if cart.is_some_and(|c| c.platform == Platform::Snes) { slot_ui::SHAPES.len() } else { 0 },
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
         }
@@ -4049,7 +4051,7 @@ impl CartMenu {
             }
         };
         let mut rows = vec![CartRow::Colour, CartRow::Finish];
-        if matches!(cart.platform, Platform::Gb | Platform::Gbc) {
+        if matches!(cart.platform, Platform::Gb | Platform::Gbc | Platform::Snes) {
             rows.push(CartRow::Shape);
         }
         rows.push(CartRow::Reset);

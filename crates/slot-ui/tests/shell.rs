@@ -327,7 +327,7 @@ fn the_presets_are_the_tables_plastics_each_once() {
     let presets = shell_presets();
     assert_eq!(
         presets.len(),
-        27,
+        28,
         "a table row the presets name has gone missing"
     );
     let mut names: Vec<_> = presets.iter().map(|(n, _)| *n).collect();
@@ -338,6 +338,7 @@ fn the_presets_are_the_tables_plastics_each_once() {
     assert_eq!(find("Game Boy grey"), DMG_SHELL);
     assert_eq!(find("NES grey"), slot_ui::NES_SHELL);
     assert_eq!(find("SNES grey"), slot_ui::SNES_SHELL);
+    assert_eq!(find("Super Famicom grey"), slot_ui::SNES_PAL_SHELL);
     assert_eq!(find("Pokémon Emerald"), gba_shell_for("BPEE"));
 }
 
@@ -439,4 +440,48 @@ fn a_nes_cart_is_grey_and_a_famicom_release_coloured_and_steady() {
     let colours: std::collections::HashSet<_> =
         (0..40).map(|i| nes_shell_for(&format!("Game {i} (Japan)")).colour).collect();
     assert!(colours.len() > 3, "Famicom carts all wear the same plastic");
+}
+
+#[test]
+fn a_european_or_japanese_snes_rom_gets_the_pal_cart_and_a_us_one_keeps_its_own() {
+    use slot_ui::snes_pal;
+    for pal in [
+        "Earthbound (Europe)",
+        "Rockman X (Japan)",
+        "Super Mario World (Germany)",
+        "Zelda (UK)",
+        "Zelda (E) [!]",
+        "Zelda (J)",
+        "Mario (Japan, Europe) (Rev 1)",
+    ] {
+        assert!(snes_pal(pal), "{pal} kept the US cart");
+    }
+    for us in [
+        "Super Mario Kart",
+        "Super Mario Kart (USA)",
+        "Mario (USA, Europe)",
+        "Mario (Japan, USA)",
+        "Mario (World)",
+        "Mario (U) [!]",
+        "Mario (UE)",
+        "Japanese Homebrew",
+        "Mario (Europe) Hack (USA)",
+    ] {
+        assert!(!snes_pal(us), "{us} took the PAL cart");
+    }
+}
+
+#[test]
+fn a_pal_snes_cart_is_the_lighter_grey() {
+    let cart = |stem: &str| slot_store::Cart {
+        platform: slot_store::Platform::Snes,
+        stem: stem.into(),
+        rom: format!("Games/SNES/{stem}.sfc").into(),
+        label: None,
+        code: String::new(),
+        shell: None,
+        title: String::new(),
+    };
+    assert_eq!(slot_ui::shell_for(&cart("Mario (USA)")), slot_ui::SNES_SHELL);
+    assert_eq!(slot_ui::shell_for(&cart("Mario (Europe)")), slot_ui::SNES_PAL_SHELL);
 }

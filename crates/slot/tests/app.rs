@@ -2454,3 +2454,24 @@ fn backing_out_of_the_core_picker_puts_the_plastic_back() {
     press(&mut app, Btn::Start);
     assert_eq!(app.picker_shell(), Some(None), "the cart still wears the cancelled plastic");
 }
+
+#[test]
+fn a_snes_cart_can_swap_to_the_pal_shape_and_it_is_saved() {
+    use slot_ui::CartRow::*;
+    let d = common::tmp_root_with_carts(&[]);
+    for stem in ["Mario Kart (USA)", "Zzz (USA)"] {
+        std::fs::write(d.path().join(format!("Games/SNES/{stem}.sfc")), [0u8; 0x200]).unwrap();
+    }
+    let (d, mut app) = booted_on_shelf(d);
+    assert_eq!(app.selected_stem(), Some("Mario Kart (USA)"));
+    press(&mut app, Btn::Start);
+    assert_eq!(rows_of(&mut app), vec![Colour, Finish, Shape, Reset]);
+    press(&mut app, Btn::Down);
+    press(&mut app, Btn::Down);
+    press(&mut app, Btn::Left);
+    let pal = app.cart_menu().unwrap().1.expect("a shape is a change");
+    assert_eq!(pal.outline, slot_store::Outline::Rounded);
+    press(&mut app, Btn::A);
+    let saved = saved_shell(&d, "Mario Kart (USA)").expect("A saved nothing");
+    assert!(saved.starts_with("rounded "), "{saved}");
+}

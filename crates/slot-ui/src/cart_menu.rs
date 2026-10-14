@@ -53,6 +53,10 @@ pub fn finish_name(finish: Finish) -> &'static str {
 /// Shapes a Game Boy pak can take: the game's own, the original pak, the Color pak.
 pub const SHAPES: [&str; 3] = ["Original", "Game Boy", "Game Boy Color"];
 
+/// Shapes a SNES cart can take: the game's own, the US cart, the PAL / Super Famicom cart.
+/// Their faces follow SHAPES' in CartMenuFaces::shapes.
+pub const SNES_SHAPES: [&str; 3] = ["Original", "US", "Europe / Japan"];
+
 const fn solid(name: &'static str, colour: [u8; 3]) -> (&'static str, Shell) {
     (name, Shell { colour, finish: Finish::Solid })
 }
@@ -87,7 +91,8 @@ pub fn colour_choices() -> Vec<(&'static str, Option<Shell>)> {
 
 pub struct CartMenuFaces {
     pub labels: Vec<(TexId, u32, u32)>,
-    /// [dim, lit] for each colour_choices() name (then "Custom"), FINISHES and SHAPES.
+    /// [dim, lit] for each colour_choices() name (then "Custom"), FINISHES, and SHAPES then
+    /// SNES_SHAPES.
     pub colours: Vec<[(TexId, u32, u32); 2]>,
     pub finishes: Vec<[(TexId, u32, u32); 2]>,
     pub shapes: Vec<[(TexId, u32, u32); 2]>,

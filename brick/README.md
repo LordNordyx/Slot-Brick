@@ -74,7 +74,8 @@ doesn't flash anything to the device.
 | Hold `Power`       | Shut down, or exit to the stock OS     |
 
 **Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour, a
-solid, see-through or glitter finish, and for Game Boy carts the original or Color shape. On a
+solid, see-through or glitter finish, and the shape: original or Color for Game Boy carts, US or
+Europe / Japan for SNES carts. On a
 GBA cart `START` opens the core picker: `Left` / `Right` swap the core, `Up` changes the colour
 and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
 in `Slot/Labels/cart_shell.ini`.
@@ -87,7 +88,8 @@ real cart's colour). Cart Art fetches NES labels too (see below), or put your ow
 stretched to fill the screen with `L1` / `R1`. RetroAchievements work for NES too.
 
 **SNES:** put `.sfc` or `.smc` ROMs in `Slot/Games/SNES`; they get a shelf of SNES cartridges and
-run on Snes9x. No BIOS is needed. `L1` / `R1` and `X` / `Y` are the SNES's own buttons (no turbo
+run on Snes9x. No BIOS is needed. European and Japanese games, such as `Earthbound (Europe).sfc`,
+get the rounder PAL / Super Famicom cart. `L1` / `R1` and `X` / `Y` are the SNES's own buttons (no turbo
 on SNES), so `SELECT + X` switches the picture between original and full screen. Cart Art fetches
 SNES labels too, and RetroAchievements work.
 

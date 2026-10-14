@@ -142,7 +142,7 @@ Press `START` on a game on the shelf to change its cartridge:
 
 - **Colour:** the original, plain colours, or special-edition plastics.
 - **Finish:** solid, see-through, or glitter.
-- **Shape:** Game Boy carts can use the original or the Color shape.
+- **Shape:** Game Boy carts can use the original or the Color shape, and SNES carts the US or the Europe / Japan shape.
 
 The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, and `Down` the finish.
 
@@ -151,6 +151,7 @@ The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original
 - Put `.nes` ROMs in `Slot/Games/NES` and `.sfc` / `.smc` ROMs in `Slot/Games/SNES`.
 - No BIOS is needed for either.
 - Japanese NES releases get a coloured Famicom cart.
+- European and Japanese SNES games get the rounder PAL / Super Famicom cart.
 - On SNES, `X`, `Y`, `L1`, and `R1` go to the game.
 
 ## Stock firmware apps
