@@ -3113,8 +3113,13 @@ impl App {
             row: menu.row,
             colour: menu.colour,
             finish: menu.finish,
-            // SNES shape names follow the Game Boy ones.
-            shape: menu.shape + if cart.is_some_and(|c| c.platform == Platform::Snes) { slot_ui::SHAPES.len() } else { 0 },
+            // The SNES shape names follow the Game Boy ones, the NES ones follow those.
+            shape: menu.shape
+                + match cart.map(|c| c.platform) {
+                    Some(Platform::Snes) => slot_ui::SHAPES.len(),
+                    Some(Platform::Nes) => slot_ui::SHAPES.len() + slot_ui::SNES_SHAPES.len(),
+                    _ => 0,
+                },
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
         }
@@ -4050,15 +4055,21 @@ impl CartMenu {
                 (colour, finish_at(finish), OUTLINES.iter().position(|o| *o == choice.outline).unwrap_or(0))
             }
         };
-        let mut rows = vec![CartRow::Colour, CartRow::Finish];
-        if matches!(cart.platform, Platform::Gb | Platform::Gbc | Platform::Snes) {
-            rows.push(CartRow::Shape);
-        }
-        rows.push(CartRow::Reset);
+        // NES and SNES carts came in their system's grey: only their shape changes, and a
+        // colour an older Slot saved for one is dropped.
+        let (colour, finish) = match cart.platform {
+            Platform::Nes | Platform::Snes => (0, finish_at(own.finish)),
+            _ => (colour, finish),
+        };
+        let rows = match cart.platform {
+            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
+            Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
+            Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
+        };
         CartMenu {
             stem: cart.stem.clone(),
+            row: rows[0],
             rows,
-            row: CartRow::Colour,
             colours,
             colour,
             finish,

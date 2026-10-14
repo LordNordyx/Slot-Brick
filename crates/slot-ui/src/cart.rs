@@ -2,7 +2,7 @@ use slot_store::gb::Class;
 use slot_store::{Cart, Outline, Platform};
 
 use crate::art;
-use crate::shell::{shell_for, snes_pal, Finish, Shell};
+use crate::shell::{japanese, shell_for, snes_pal, Finish, Shell};
 use crate::silhouette::{
     cart_depth, cart_mask, detail_mask, gb_cart_depth, gb_cart_mask, gb_detail_mask,
     nes_cart_depth, nes_cart_mask, nes_detail_mask, snes_cart_depth, snes_cart_mask,
@@ -167,14 +167,28 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
 }
 
 /// A SNES cart's shape: as chosen in the cart menu (notched is the US cart, rounded the
-/// PAL / Super Famicom one), else by the region in the ROM's name.
+/// PAL / Super Famicom one), else where the ROM's header says it was sold, else the region in
+/// its name. Reads the ROM.
 pub fn snes_shell_of(cart: &Cart) -> Option<SnesShell> {
     (cart.platform == Platform::Snes).then(|| match cart.shell.map(|c| c.outline) {
         Some(Outline::Notched) => SnesShell::Us,
         Some(Outline::Rounded) => SnesShell::Pal,
-        _ if snes_pal(&cart.stem) => SnesShell::Pal,
-        _ => SnesShell::Us,
+        _ => match slot_store::region::snes_pal_or_japan(&cart.rom).unwrap_or_else(|| snes_pal(&cart.stem)) {
+            true => SnesShell::Pal,
+            false => SnesShell::Us,
+        },
     })
+}
+
+/// A NES cart in a Famicom plastic: as chosen in the cart menu (notched is the NES grey,
+/// rounded the Famicom), else a ROM named as a Japanese release or on a Famicom-only board.
+pub fn nes_famicom_of(cart: &Cart) -> bool {
+    cart.platform == Platform::Nes
+        && match cart.shell.map(|c| c.outline) {
+            Some(Outline::Notched) => false,
+            Some(Outline::Rounded) => true,
+            _ => japanese(&cart.stem) || slot_store::region::nes_famicom_board(&cart.rom),
+        }
 }
 
 fn shape_of(cart: &Cart) -> Shape {

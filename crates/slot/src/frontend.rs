@@ -372,7 +372,9 @@ impl Frontend {
         colour_names.push("Custom");
         let colours = values(colour_names);
         let finishes = values(slot_ui::FINISHES.iter().map(|f| slot_ui::finish_name(*f)).collect());
-        let shapes = values(slot_ui::SHAPES.iter().chain(&slot_ui::SNES_SHAPES).copied().collect());
+        let shapes = values(
+            slot_ui::SHAPES.iter().chain(&slot_ui::SNES_SHAPES).chain(&slot_ui::NES_SHAPES).copied().collect(),
+        );
         let carets = [false, true].map(|right| up(quick_caret_face(right)));
         let legend = slot_ui::cart_menu_legend_faces().map(|f| {
             let (tex, w, _) = up(f);

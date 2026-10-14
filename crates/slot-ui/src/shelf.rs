@@ -44,6 +44,22 @@ const SLOTS: i32 = 3;
 const REPEAT_DELAY_MS: Millis = 400;
 const REPEAT_MS: [Millis; 4] = [110, 85, 65, 50];
 
+#[derive(Copy, Clone)]
+enum Backing {
+    Gba,
+    Gb(GbShell),
+    Nes,
+    Snes(SnesShell),
+}
+
+fn backing(cart: &Cart) -> Backing {
+    match cart.platform {
+        slot_store::Platform::Nes => Backing::Nes,
+        slot_store::Platform::Snes => Backing::Snes(snes_shell_of(cart).unwrap_or(SnesShell::Us)),
+        _ => gb_shell_of(cart).map_or(Backing::Gba, Backing::Gb),
+    }
+}
+
 pub struct Shelf {
     pub carts: Vec<Cart>,
     pub index: usize,
@@ -55,7 +71,8 @@ pub struct Shelf {
     nes_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
     snes_pal_shadow: Option<TexId>,
-    shells: Vec<Option<GbShell>>,
+    /// Each cart's shadow shape: reading it needs the ROM, so it is read once, not per frame.
+    shells: Vec<Backing>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -64,7 +81,7 @@ pub struct Shelf {
 impl Shelf {
     pub fn new(carts: Vec<Cart>) -> Self {
         Shelf {
-            shells: carts.iter().map(gb_shell_of).collect(),
+            shells: carts.iter().map(backing).collect(),
             faces: vec![None; carts.len()],
             carts,
             index: 0,
@@ -130,7 +147,7 @@ impl Shelf {
         let cart = self.carts.get_mut(i)?;
         cart.shell = shell;
         if let Some(s) = self.shells.get_mut(i) {
-            *s = gb_shell_of(cart);
+            *s = backing(cart);
         }
         self.take_face(i)
     }
@@ -361,15 +378,13 @@ impl Shelf {
             let x = x + shake;
             let y = foot_y(ch as f32) - h;
             if alpha < 1.0 {
-                let backing = match self.shells.get(i).copied().flatten() {
-                    None if cart.platform == slot_store::Platform::Nes => self.nes_shadow,
-                    None if cart.platform == slot_store::Platform::Snes => match snes_shell_of(cart) {
-                        Some(SnesShell::Pal) => self.snes_pal_shadow,
-                        _ => self.snes_shadow,
-                    },
-                    None => self.shadow,
-                    Some(GbShell::Notched) => self.gb_shadow,
-                    Some(GbShell::Rounded) => self.gbc_shadow,
+                let backing = match self.shells.get(i).copied() {
+                    Some(Backing::Gb(GbShell::Notched)) => self.gb_shadow,
+                    Some(Backing::Gb(GbShell::Rounded)) => self.gbc_shadow,
+                    Some(Backing::Nes) => self.nes_shadow,
+                    Some(Backing::Snes(SnesShell::Us)) => self.snes_shadow,
+                    Some(Backing::Snes(SnesShell::Pal)) => self.snes_pal_shadow,
+                    Some(Backing::Gba) | None => self.shadow,
                 };
                 if let Some(tex) = backing {
                     out.push(Draw::Tex {

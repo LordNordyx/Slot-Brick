@@ -852,3 +852,45 @@ fn a_pal_snes_cart_is_narrower_and_the_menu_can_swap_the_shape() {
     assert_eq!(snes_shell_of(&forced), Some(SnesShell::Us));
     assert_eq!(snes_shell_of(&snes("Mario (Europe)", Some(Outline::Auto))), Some(SnesShell::Pal));
 }
+
+#[test]
+fn a_ripped_rom_with_no_region_in_its_name_goes_by_its_header() {
+    use slot_ui::{nes_famicom_of, shell_for, snes_shell_of, SnesShell, NES_SHELL, SNES_PAL_SHELL};
+    let d = tmp_root();
+    // Terranigma's header: HiROM, sold in Europe, the checksum checking out.
+    let mut rom = vec![0u8; 0x10000];
+    rom[0xffc0 + 0x15] = 0x21;
+    rom[0xffc0 + 0x19] = 0x02;
+    rom[0xffc0 + 0x1c..0xffc0 + 0x20].copy_from_slice(&[0x34, 0x12, 0xcb, 0xed]);
+    let sfc = d.path().join("Terranigma.sfc");
+    std::fs::write(&sfc, rom).unwrap();
+    let cart = |platform, stem: &str, rom: std::path::PathBuf| slot_store::Cart {
+        platform, stem: stem.into(), rom, label: None, code: String::new(), shell: None, title: String::new(),
+    };
+    let terranigma = cart(Platform::Snes, "Terranigma", sfc);
+    assert_eq!(snes_shell_of(&terranigma), Some(SnesShell::Pal));
+    assert_eq!(shell_for(&terranigma), SNES_PAL_SHELL);
+
+    // Akumajou Densetsu: VRC6, a board only Famicom carts had.
+    let mut nes = vec![b'N', b'E', b'S', 0x1a, 16, 16, 0x80, 0x10, 0, 0, 0, 0, 0, 0, 0, 0];
+    nes.resize(16 + 0x4000, 0);
+    let path = d.path().join("Akumajou Densetsu.nes");
+    std::fs::write(&path, nes).unwrap();
+    let akumajou = cart(Platform::Nes, "Akumajou Densetsu", path);
+    assert!(nes_famicom_of(&akumajou));
+    assert_ne!(shell_for(&akumajou), NES_SHELL);
+}
+
+#[test]
+fn a_colour_saved_for_a_nes_or_snes_cart_is_ignored() {
+    use slot_store::{Outline, ShellChoice, ShellFinish};
+    use slot_ui::{shell_for, NES_SHELL, SNES_SHELL};
+    let pink = Some(ShellChoice { outline: Outline::Auto, colour: [0xe2, 0x8c, 0xa9], finish: ShellFinish::Glitter });
+    for (platform, grey) in [(Platform::Nes, NES_SHELL), (Platform::Snes, SNES_SHELL)] {
+        let cart = slot_store::Cart {
+            platform, stem: "Mario (USA)".into(), rom: "missing".into(), label: None,
+            code: String::new(), shell: pink, title: String::new(),
+        };
+        assert_eq!(shell_for(&cart), grey, "{platform:?} took the chosen colour");
+    }
+}

@@ -2465,13 +2465,29 @@ fn a_snes_cart_can_swap_to_the_pal_shape_and_it_is_saved() {
     let (d, mut app) = booted_on_shelf(d);
     assert_eq!(app.selected_stem(), Some("Mario Kart (USA)"));
     press(&mut app, Btn::Start);
-    assert_eq!(rows_of(&mut app), vec![Colour, Finish, Shape, Reset]);
-    press(&mut app, Btn::Down);
-    press(&mut app, Btn::Down);
+    assert_eq!(rows_of(&mut app), vec![Shape, Reset], "a SNES cart offered a colour");
     press(&mut app, Btn::Left);
     let pal = app.cart_menu().unwrap().1.expect("a shape is a change");
     assert_eq!(pal.outline, slot_store::Outline::Rounded);
     press(&mut app, Btn::A);
     let saved = saved_shell(&d, "Mario Kart (USA)").expect("A saved nothing");
+    assert!(saved.starts_with("rounded "), "{saved}");
+}
+
+#[test]
+fn a_nes_cart_offers_only_its_shape_and_can_be_made_a_famicom_cart() {
+    use slot_ui::CartRow::*;
+    let d = common::tmp_root_with_carts(&[]);
+    for stem in ["Mario (USA)", "Zzz (USA)"] {
+        std::fs::write(d.path().join(format!("Games/NES/{stem}.nes")), [0u8; 0x200]).unwrap();
+    }
+    let (d, mut app) = booted_on_shelf(d);
+    assert_eq!(app.selected_stem(), Some("Mario (USA)"));
+    press(&mut app, Btn::Start);
+    assert_eq!(rows_of(&mut app), vec![Shape, Reset], "a NES cart offered a colour");
+    press(&mut app, Btn::Left);
+    assert_eq!(app.cart_menu().unwrap().1.map(|c| c.outline), Some(slot_store::Outline::Rounded));
+    press(&mut app, Btn::A);
+    let saved = saved_shell(&d, "Mario (USA)").expect("A saved nothing");
     assert!(saved.starts_with("rounded "), "{saved}");
 }
