@@ -69,13 +69,7 @@ pub fn rom_marking_face(stem: &str) -> CartFace {
 }
 
 pub fn board_face(cart: &Cart) -> CartFace {
-    let shell = shell_for(cart);
-    let svg = BOARD_SVG
-        .replace(DEEP, &hex(shade(shell.colour, 0.35)))
-        .replace(FLOOR, &hex(shade(shell.colour, 0.62)))
-        .replace(PLASTIC, &hex(shell.colour));
-    let rgba = art::render_svg(&svg, BOARD_W, BOARD_H)
-        .unwrap_or_else(|| vec![0; (BOARD_W * BOARD_H * 4) as usize]);
+    let rgba = tinted_board(shell_for(cart).colour);
     let mut face = CartFace {
         rgba,
         w: BOARD_W,
@@ -130,6 +124,46 @@ fn over(dst: &mut CartFace, src: &CartFace, x: u32, y: u32) {
     }
 }
 
+/// The board's plastic in `colour`, without drawing the SVG again: drawing is linear in each
+/// fill colour, so the board is drawn once with every plastic black and once with each of the
+/// three plastics white, and any colour is mixed from those. Some 40 times faster, which keeps
+/// the core picker's lid in step as Up/Down change the colour.
+fn tinted_board(colour: [u8; 3]) -> Vec<u8> {
+    struct Layers {
+        black: Vec<u8>,
+        /// PLASTIC, FLOOR, DEEP each white, the others black.
+        white: [Vec<u8>; 3],
+    }
+    static LAYERS: std::sync::OnceLock<Option<Layers>> = std::sync::OnceLock::new();
+    let layers = LAYERS.get_or_init(|| {
+        let draw = |white: Option<&str>| {
+            let mut svg = BOARD_SVG.to_string();
+            for key in [PLASTIC, FLOOR, DEEP] {
+                svg = svg.replace(key, if Some(key) == white { "#ffffff" } else { "#000000" });
+            }
+            art::render_premultiplied(&svg, BOARD_W, BOARD_H)
+        };
+        Some(Layers { black: draw(None)?, white: [draw(Some(PLASTIC))?, draw(Some(FLOOR))?, draw(Some(DEEP))?] })
+    });
+    let Some(layers) = layers else {
+        return vec![0; (BOARD_W * BOARD_H * 4) as usize];
+    };
+    // Each plastic's colour, 0..1 a channel, as the SVG's shades of it.
+    let fills = [colour, shade(colour, 0.62), shade(colour, 0.35)].map(|c| c.map(|v| v as f32 / 255.0));
+    let mut rgba = layers.black.clone();
+    for (i, px) in rgba.chunks_exact_mut(4).enumerate() {
+        for c in 0..3 {
+            let at = i * 4 + c;
+            let base = layers.black[at] as f32;
+            let lit: f32 = (0..3).map(|k| (layers.white[k][at] as f32 - base) * fills[k][c]).sum();
+            px[c] = (base + lit).round().clamp(0.0, px[3] as f32) as u8;
+        }
+    }
+    art::unpremultiply(&mut rgba);
+    rgba
+}
+
+#[cfg(test)]
 fn hex(c: [u8; 3]) -> String {
     format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2])
 }
@@ -333,4 +367,37 @@ fn name_layout(core: Core, max_w: f32) -> Option<text::Layout> {
         px,
         tracking: tracking(px),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The board as the SVG draws it in `colour`: what tinted_board stands in for.
+    fn drawn(colour: [u8; 3]) -> Vec<u8> {
+        let svg = BOARD_SVG
+            .replace(DEEP, &hex(shade(colour, 0.35)))
+            .replace(FLOOR, &hex(shade(colour, 0.62)))
+            .replace(PLASTIC, &hex(colour));
+        art::render_svg(&svg, BOARD_W, BOARD_H).unwrap()
+    }
+
+    #[test]
+    fn a_mixed_board_matches_the_drawn_one() {
+        for colour in [[0x35, 0x35, 0x3a], [0xc4, 0x2b, 0x2b], [0x2f, 0x5a, 0xb0], [0xff, 0xff, 0xff], [0, 0, 0]] {
+            let (mixed, drawn) = (tinted_board(colour), drawn(colour));
+            assert_eq!(mixed.len(), drawn.len());
+            let diffs: Vec<u8> = mixed
+                .chunks_exact(4)
+                .zip(drawn.chunks_exact(4))
+                // Faint edge pixels round coarsely either way once unpremultiplied.
+                .filter(|(_, d)| d[3] >= 64)
+                .map(|(m, d)| (0..4).map(|c| m[c].abs_diff(d[c])).max().unwrap())
+                .collect();
+            let worst = *diffs.iter().max().unwrap();
+            let mean = diffs.iter().map(|d| *d as f32).sum::<f32>() / diffs.len() as f32;
+            // Each cached layer is rounded to 8 bits: a step or few here and there, unseen.
+            assert!(worst <= 6 && mean < 0.5, "{colour:?}: off by up to {worst}, {mean:.2} on average");
+        }
+    }
 }

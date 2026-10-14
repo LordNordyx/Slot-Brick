@@ -154,18 +154,23 @@ fn orient(src: Vec<u8>, w: u32, h: u32, orientation: u16) -> (Vec<u8>, u32, u32)
 }
 
 pub(crate) fn render_svg(svg: &str, w: u32, h: u32) -> Option<Vec<u8>> {
+    let mut rgba = render_premultiplied(svg, w, h)?;
+    unpremultiply(&mut rgba);
+    Some(rgba)
+}
+
+/// As render_svg, but left premultiplied, where colours mix linearly.
+pub(crate) fn render_premultiplied(svg: &str, w: u32, h: u32) -> Option<Vec<u8>> {
     let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).ok()?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)?;
     let size = tree.size();
     let scale =
         resvg::tiny_skia::Transform::from_scale(w as f32 / size.width(), h as f32 / size.height());
     resvg::render(&tree, scale, &mut pixmap.as_mut());
-    let mut rgba = pixmap.data().to_vec();
-    unpremultiply(&mut rgba);
-    Some(rgba)
+    Some(pixmap.data().to_vec())
 }
 
-fn unpremultiply(rgba: &mut [u8]) {
+pub(crate) fn unpremultiply(rgba: &mut [u8]) {
     for px in rgba.chunks_exact_mut(4) {
         let a = px[3];
         if a == 0 || a == 255 {

@@ -3147,7 +3147,12 @@ impl App {
             if let (true, Some(mut look)) = (open, self.picker_look.take()) {
                 look.row = if dir == Btn::Up { slot_ui::CartRow::Colour } else { slot_ui::CartRow::Finish };
                 look.step_value(1);
-                self.preview_shell(look.index, look.chosen());
+                // The lid shows it (rebuilt off the UI thread); the shelf's own picture of the
+                // cart, hidden under the lid, is redrawn once when the picker closes.
+                let index = look.index;
+                if let Some(cart) = self.shelf_mut().carts.get_mut(index) {
+                    cart.shell = look.chosen();
+                }
                 self.picker_look = Some(look);
             }
             return;
@@ -3167,9 +3172,10 @@ impl App {
         let outcome = picker.press(press, now);
         if !closing && picker.closing() {
             if let Some(look) = self.picker_look.take() {
-                match press {
-                    Press::Keep => self.save_shell(&look),
-                    _ => self.preview_shell(look.index, look.before),
+                let kept = if press == Press::Keep { look.chosen() } else { look.before };
+                self.preview_shell(look.index, kept);
+                if press == Press::Keep {
+                    self.save_shell(&look);
                 }
             }
         }
