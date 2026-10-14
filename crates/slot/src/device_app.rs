@@ -131,6 +131,8 @@ pub fn run() {
     }
     #[cfg(feature = "brick")]
     let platform = BrickPlatform::new(root.clone());
+    #[cfg(feature = "brick")]
+    slot::brick_wifi::repair_at_boot();
     let mut frontend = Frontend::boot(Box::new(platform));
     frontend.upload_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());

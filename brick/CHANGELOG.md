@@ -1,6 +1,11 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Wi-Fi comes up on its own at startup: the radio the firmware leaves blocked is repaired in the
+  background, so saved networks are joined without opening the Wi-Fi menu.
+- After connecting, the Wi-Fi menu makes sure an address is asked for and waits for it, then
+  checks every couple of seconds while one is still on its way.
+- The Wi-Fi menu opens showing whether Wi-Fi is on, instead of OFF until it has checked.
 - NES: `.nes` ROMs in `Slot/Games/NES` get a shelf of NES cartridges (grey; Famicom colours for
   Japanese releases) and run on FCEUmm (GPL-2.0), with save states, rewind, fast-forward and
   RetroAchievements. The emulator picture canvas is now sized per system (256x240 for NES); the

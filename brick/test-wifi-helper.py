@@ -186,6 +186,14 @@ class WifiHelperTests(unittest.TestCase):
     def test_ensure_without_a_supplicant_does_nothing(self):
         self.assertEqual(self.helper('ensure')[0], 1)
         self.assertEqual(self.soft(), '1')
+    def test_dhcp_only_starts_a_dhcp_client(self):
+        # After joining a network: an address is asked for, and Wi-Fi is otherwise left alone.
+        code, took = self.helper('dhcp')
+        self.assertEqual(code, 0, self.log()); self.assertLess(took, 5)
+        calls = self.lines()
+        self.assertTrue(any(c.startswith('udhcpc -i wlan0') for c in calls), calls)
+        self.assertFalse(any(c.startswith(('wpa_supplicant', 'rfkill', 'ifconfig')) for c in calls), calls)
+        self.assertEqual(self.soft(), '1', 'the radio was touched')
     def test_bad_verb(self):
         self.assertEqual(self.helper('restart')[0], 2)
 
