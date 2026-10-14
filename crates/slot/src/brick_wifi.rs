@@ -78,6 +78,8 @@ fn service(on:bool,cancel:&AtomicBool)->Result<()>{helper_run(if on{"start"}else
 const SOCKETS:[&str;3]=["/etc/wifi/sockets/wlan0","/var/run/wpa_supplicant/wlan0","/run/wpa_supplicant/wlan0"];
 /// A supplicant is running: what the menu reports as Wi-Fi on, known without asking it.
 fn supplicant_up()->bool{SOCKETS.iter().any(|s|Path::new(s).exists())}
+/// A supplicant that answers: the firmware's socket appears a while before it does.
+fn supplicant_answers()->bool{Control::open().and_then(|c|c.command("PING")).is_ok_and(|r|r=="PONG")}
 /// One helper at a time: the boot repair and the menu may both ask, and two helpers
 /// stopping and starting the same supplicant would undo each other.
 static HELPER:std::sync::Mutex<()>=std::sync::Mutex::new(());
@@ -90,7 +92,7 @@ pub fn repair_at_boot(){
     if !wanted(&root){eprintln!("wifi: boot: Wi-Fi was turned off; leaving it off");return}
     let spawned=thread::Builder::new().name("slot-wifi-boot".into()).spawn(||{
         let quiet=AtomicBool::new(false);
-        boot_repair(supplicant_up,online,|up|helper_run(if up{"ensure"}else{"start"},&quiet),|ms|thread::sleep(Duration::from_millis(ms)));
+        boot_repair(supplicant_answers,online,|up|helper_run(if up{"ensure"}else{"start"},&quiet),|ms|thread::sleep(Duration::from_millis(ms)));
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
 }
@@ -114,15 +116,15 @@ const FIRMWARE_WAIT_MS:u64=10_000;
 const JOIN_WAIT_MS:u64=20_000;
 const BOOT_POLL_MS:u64=1_000;
 /// Give the firmware a moment to start its supplicant; then repair it, or start one
-/// (`bring_up(up)`). If no network has joined a while later, do it once more: the firmware
-/// can still be bringing the radio up, or undo what was done.
+/// (`bring_up(up)`). A repair that fails (the supplicant not ready after all) is tried again
+/// shortly; one that works but leaves Wi-Fi offline once more after a while.
 fn boot_repair(up:impl Fn()->bool,online:impl Fn()->bool,mut bring_up:impl FnMut(bool)->Result<()>,sleep:impl Fn(u64)){
     let mut waited=0;
     while !up() && waited<FIRMWARE_WAIT_MS{sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;}
-    for attempt in 1..=2{
+    for attempt in 1..=BOOT_TRIES{
         let was_up=up();
-        if !was_up{eprintln!("wifi: boot: no supplicant; starting Wi-Fi");}
-        if let Err(e)=bring_up(was_up){eprintln!("wifi: boot repair {attempt}: {e}");}
+        if !was_up{eprintln!("wifi: boot: no supplicant answering; starting Wi-Fi");}
+        if let Err(e)=bring_up(was_up){eprintln!("wifi: boot repair {attempt}: {e}");sleep(RETRY_MS);continue}
         let mut waited=0;
         while waited<JOIN_WAIT_MS{
             if online(){eprintln!("wifi: boot repair: online");return}
@@ -131,6 +133,8 @@ fn boot_repair(up:impl Fn()->bool,online:impl Fn()->bool,mut bring_up:impl FnMut
     }
     eprintln!("wifi: boot repair: not online (no saved network in range?)");
 }
+const BOOT_TRIES:u32=3;
+const RETRY_MS:u64=3_000;
 fn helper_run(verb:&str,cancel:&AtomicBool)->Result<()>{
     let _one=HELPER.lock().unwrap_or_else(|e|e.into_inner());
     let root=card_root();
@@ -251,7 +255,12 @@ const PAGES:[&str;3]=["abc","ABC","#!?"];
 /// Rows above the network list: Wi-Fi on/off, scan, disconnect.
 const FIXED:usize=3;
 /// Wi-Fi is usable for downloads: wlan0 is associated. Cheap enough to check every tick.
-pub fn online()->bool{fs::read_to_string("/sys/class/net/wlan0/operstate").is_ok_and(|s|s.trim()=="up")}
+/// Online: wlan0 has a way out (a default route, set when DHCP hands out an address). Joined
+/// to a network alone is not enough: with no address nothing can be reached.
+pub fn online()->bool{fs::read_to_string("/proc/net/route").is_ok_and(|s|routed(&s))}
+fn routed(table:&str)->bool{
+    table.lines().skip(1).any(|l|{let f:Vec<&str>=l.split_whitespace().collect();f.len()>1&&f[0]=="wlan0"&&f[1]=="00000000"})
+}
 /// The Cart Art screen: row 0 fetches art, the rest are games with a label, to delete.
 /// `games`: platform, stem, label, and whether it is the Famicom label.
 struct ArtList{games:Vec<(Platform,String,PathBuf,bool)>,armed:Option<usize>}
@@ -523,10 +532,24 @@ impl Painter{
         assert!(started.get(),"Wi-Fi was never started");
         assert!(t.get()<=FIRMWARE_WAIT_MS+JOIN_WAIT_MS,"waited past joining");
     }
-    #[test]fn boot_repair_tries_twice_then_gives_up(){
+    #[test]fn boot_repair_gives_up_after_its_tries(){
         let t=Cell::new(0u64);let runs=Cell::new(0);
         boot_repair(||true,||false,|_|{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
-        assert_eq!(runs.get(),2);
+        assert_eq!(runs.get(),BOOT_TRIES);
+    }
+    #[test]fn a_failed_repair_is_tried_again_soon(){
+        // As on the Brick: the first repair finds the supplicant not answering yet.
+        let t=Cell::new(0u64);let runs=RefCell::new(Vec::new());let fixed=Cell::new(false);
+        boot_repair(||true,||fixed.get(),|_|{runs.borrow_mut().push(t.get());if runs.borrow().len()==1{Err("no supplicant answering".into())}else{fixed.set(true);Ok(())}},|ms|t.set(t.get()+ms));
+        let runs=runs.borrow();
+        assert_eq!(runs.len(),2);
+        assert!(runs[1]-runs[0]<=RETRY_MS,"waited {} ms to try again",runs[1]-runs[0]);
+    }
+    #[test]fn joined_without_an_address_is_not_online(){
+        let head="Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n";
+        assert!(!routed(head));
+        assert!(!routed(&format!("{head}wlan0\t0001A8C0\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n")),"a local route only");
+        assert!(routed(&format!("{head}wlan0\t00000000\t0101A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0\n")));
     }
     #[test]fn wifi_comes_back_as_it_was_left(){
         let d=tempfile::tempdir().unwrap();
