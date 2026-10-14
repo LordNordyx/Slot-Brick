@@ -2,10 +2,21 @@
 
 ## Unreleased
 - Cart colours: START on a game changes its cartridge's colour, finish (solid, see-through,
-  glitter) and, for Game Boy carts, its shape, previewed live. On GBA carts START opens the core
+  glitter) and, for Game Boy carts, its shape, previewed live. NES and SNES carts only change
+  shape (NES or Famicom; US or PAL), as the real ones came in their system's grey; a Famicom
+  cart can have any colour. On GBA carts START opens the core
   picker, where Up/Down change the colour and finish.
-- SNES: European and Japanese games get the rounder PAL / Super Famicom cart, and the cart menu
-  can swap any SNES cart between the US and PAL shapes.
+- SNES: European and Japanese games get the rounder PAL / Super Famicom cart, read from the ROM's
+  header so ripped ROMs with no region in their name work too.
+- NES: Famicom games get the real Famicom cart, small, landscape and in colour, instead of a
+  coloured NES cart. Cart Art fetches Famicom labels for them from LaunchBox's pictures of
+  Japanese carts, kept in `Labels/NES/Famicom` beside the NES label, so swapping a game between
+  the NES and Famicom cart swaps its label too. A tall NES label on a Famicom cart is shown whole
+  instead of cut down.
+- Wi-Fi comes up at startup even when the firmware starts its Wi-Fi service after Slot: Slot
+  waits for it, then checks a network joined and repairs once more if not.
+- NES: a ROM on a chip only Famicom carts used (Konami VRC, Namco 163 and others) gets a Famicom
+  plastic even without "(Japan)" in its name.
 - The core picker shows the cart in its real plastic instead of the default black, and its
   legend fits the Brick's screen.
 - SNES: `.sfc`/`.smc` ROMs in `Slot/Games/SNES` get a shelf of SNES cartridges and run on Snes9x,

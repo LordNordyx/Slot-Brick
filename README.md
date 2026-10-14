@@ -140,9 +140,11 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 
 Press `START` on a game on the shelf to change its cartridge:
 
-- **Colour:** the original, plain colours, or special-edition plastics.
-- **Finish:** solid, see-through, or glitter.
-- **Shape:** Game Boy carts can use the original or the Color shape, and SNES carts the US or the Europe / Japan shape.
+- **Colour** (Game Boy, GBA and Famicom): the original, plain colours, or special-edition plastics.
+- **Finish** (Game Boy and GBA): solid, see-through, or glitter.
+- **Shape:** Game Boy carts can use the original or the Color shape, NES carts the NES or a Famicom cart, and SNES carts the US or the Europe / Japan cart.
+
+NES and SNES carts are always their system's grey, like the real ones. Famicom carts came in many colours, so a NES game on the Famicom cart can have any colour.
 
 The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, and `Down` the finish.
 
@@ -150,8 +152,8 @@ The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original
 
 - Put `.nes` ROMs in `Slot/Games/NES` and `.sfc` / `.smc` ROMs in `Slot/Games/SNES`.
 - No BIOS is needed for either.
-- Japanese NES releases get a coloured Famicom cart.
-- European and Japanese SNES games get the rounder PAL / Super Famicom cart.
+- European and Japanese SNES games get the rounder PAL / Super Famicom cart. Slot reads this from the ROM, so ripped ROMs without a region in their name work too.
+- Japanese NES games get the small, coloured Famicom cart. NES ROMs don't say where they were sold, so Slot goes by the name, such as `(Japan)`, and by chips only Famicom carts used. For any other game, choose **Famicom** under `START` → **Shape**.
 - On SNES, `X`, `Y`, `L1`, and `R1` go to the game.
 
 ## Stock firmware apps

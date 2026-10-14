@@ -7,20 +7,41 @@ use std::thread;
 use std::time::UNIX_EPOCH;
 
 use slot_store::Cart;
-use slot_ui::{cover, label_size};
+use slot_ui::{fitted_label, label_size, nes_famicom_of, shown_label};
 
-const DIR: &str = "System/Cache/Labels";
+/// Versioned: a label is fitted differently now (a tall one on a wide label is shown whole),
+/// so the older folder's are of no use.
+const DIR: &str = "System/Cache/Labels2";
+const OLD_DIRS: [&str; 1] = ["System/Cache/Labels"];
+
+/// Removes older label caches in the background: they can be large, the card slow.
+pub fn forget_old(root: &Path) {
+    let old: Vec<PathBuf> = OLD_DIRS.iter().map(|d| root.join(d)).filter(|d| d.is_dir()).collect();
+    if old.is_empty() {
+        return;
+    }
+    let spawned = thread::Builder::new().name("slot-label-cache".into()).spawn(move || {
+        for dir in old {
+            if let Err(e) = std::fs::remove_dir_all(&dir) {
+                eprintln!("slot: label cache: {}: {e}", dir.display());
+            }
+        }
+    });
+    if let Err(e) = spawned {
+        eprintln!("slot: label cache: {e}");
+    }
+}
 const HEAD: usize = 24;
 
 pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
-    let src = cart.label.as_deref()?;
+    let src = shown_label(cart)?;
     let (w, h) = label_size(cart);
     let stamp = stamp(src)?;
     let cached = cache_path(root, cart);
     if let Some(art) = read(&cached, stamp, w, h) {
         return art;
     }
-    let art = cover(src, w, h);
+    let art = fitted_label(cart, w, h);
     if let Some(dir) = cached.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -38,7 +59,7 @@ pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
 }
 
 pub fn fresh(root: &Path, cart: &Cart) -> bool {
-    let Some(src) = cart.label.as_deref() else {
+    let Some(src) = shown_label(cart) else {
         return true;
     };
     let Some(stamp) = stamp(src) else {
@@ -59,21 +80,28 @@ pub fn fresh(root: &Path, cart: &Cart) -> bool {
 pub fn stale<'a>(root: &Path, carts: impl Iterator<Item = &'a Cart>) -> Vec<Cart> {
     let mut cached = HashMap::new();
     carts
-        .filter(|c| c.label.is_some())
+        .filter(|c| shown_label(c).is_some())
         .filter(|c| {
             !cached
                 .entry(c.platform)
                 .or_insert_with(|| slot_store::listing(&root.join(DIR).join(c.platform.dir_name())))
-                .contains_key(&format!("{}.rgba", c.stem).to_lowercase())
+                .contains_key(&cache_name(c).to_lowercase())
         })
         .cloned()
         .collect()
 }
 
 pub fn cache_path(root: &Path, cart: &Cart) -> PathBuf {
-    root.join(DIR)
-        .join(cart.platform.dir_name())
-        .join(format!("{}.rgba", cart.stem))
+    root.join(DIR).join(cart.platform.dir_name()).join(cache_name(cart))
+}
+
+/// A NES game on the Famicom cart has its label cached apart: another picture, another size.
+fn cache_name(cart: &Cart) -> String {
+    if nes_famicom_of(cart) {
+        format!("{}.famicom.rgba", cart.stem)
+    } else {
+        format!("{}.rgba", cart.stem)
+    }
 }
 
 pub struct Rebuild {

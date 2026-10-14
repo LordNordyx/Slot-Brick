@@ -82,14 +82,37 @@ fn supplicant_up()->bool{SOCKETS.iter().any(|s|Path::new(s).exists())}
 /// stopping and starting the same supplicant would undo each other.
 static HELPER:std::sync::Mutex<()>=std::sync::Mutex::new(());
 /// At startup: the firmware starts a supplicant with the radio still blocked, so saved
-/// networks are never joined until something repairs it. Do that in the background now,
-/// as opening the Wi-Fi menu would, so Wi-Fi comes up on its own.
+/// networks are never joined until something repairs it. Do that in the background, as
+/// opening the Wi-Fi menu would, so Wi-Fi comes up on its own. The firmware may start its
+/// supplicant after slot, so wait for it rather than look once.
 pub fn repair_at_boot(){
-    if !supplicant_up(){return}
     let spawned=thread::Builder::new().name("slot-wifi-boot".into()).spawn(||{
-        if let Err(e)=helper_run("ensure",&AtomicBool::new(false)){eprintln!("wifi: boot repair: {e}");}
+        boot_repair(supplicant_up,online,||helper_run("ensure",&AtomicBool::new(false)),|ms|thread::sleep(Duration::from_millis(ms)));
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
+}
+/// How long startup waits for the firmware's supplicant, and for a saved network to join.
+const BOOT_WAIT_MS:u64=60_000;
+const JOIN_WAIT_MS:u64=20_000;
+const BOOT_POLL_MS:u64=1_000;
+/// Wait for a supplicant, repair it, and if no network has joined a while later, repair once
+/// more: the firmware can still be bringing the radio up the first time.
+fn boot_repair(up:impl Fn()->bool,online:impl Fn()->bool,mut ensure:impl FnMut()->Result<()>,sleep:impl Fn(u64)){
+    let mut waited=0;
+    while !up(){
+        if waited>=BOOT_WAIT_MS{eprintln!("wifi: boot repair: no supplicant after {} s; Wi-Fi left off",BOOT_WAIT_MS/1000);return}
+        sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;
+    }
+    for attempt in 1..=2{
+        if let Err(e)=ensure(){eprintln!("wifi: boot repair {attempt}: {e}");}
+        let mut waited=0;
+        while waited<JOIN_WAIT_MS{
+            if online(){eprintln!("wifi: boot repair: online");return}
+            sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;
+        }
+        if !up(){return}
+    }
+    eprintln!("wifi: boot repair: not online (no saved network in range?)");
 }
 fn helper_run(verb:&str,cancel:&AtomicBool)->Result<()>{
     let _one=HELPER.lock().unwrap_or_else(|e|e.into_inner());
@@ -212,10 +235,12 @@ const FIXED:usize=3;
 /// Wi-Fi is usable for downloads: wlan0 is associated. Cheap enough to check every tick.
 pub fn online()->bool{fs::read_to_string("/sys/class/net/wlan0/operstate").is_ok_and(|s|s.trim()=="up")}
 /// The Cart Art screen: row 0 fetches art, the rest are games with a label, to delete.
-struct ArtList{games:Vec<(Platform,String,PathBuf)>,armed:Option<usize>}
+/// `games`: platform, stem, label, and whether it is the Famicom label.
+struct ArtList{games:Vec<(Platform,String,PathBuf,bool)>,armed:Option<usize>}
 impl ArtList{
     fn load()->Self{
-        let mut games:Vec<_>=slot_store::scan(&card_root()).unwrap_or_default().into_iter().filter_map(|c|Some((c.platform,c.stem,c.label?))).collect();
+        // A NES game's Famicom label is a row of its own, to delete apart from its NES one.
+        let mut games:Vec<_>=slot_store::scan(&card_root()).unwrap_or_default().into_iter().flat_map(|c|[c.label.map(|l|(c.platform,c.stem.clone(),l,false)),c.famicom_label.map(|l|(c.platform,c.stem,l,true))]).flatten().collect();
         games.sort_by(|a,b|slot_store::sort_key(&a.1).cmp(&slot_store::sort_key(&b.1)).then((a.0 as u8).cmp(&(b.0 as u8))));
         Self{games,armed:None}
     }
@@ -341,7 +366,7 @@ impl WifiMenu{
                 self.art=Some(ArtJob::start(card_root()));
             }
             Action::GbaDown(Btn::A)|Action::Insert=>{
-                let at=self.row-1;let Some((platform,stem,path))=list.games.get(at).cloned()else{return false};
+                let at=self.row-1;let Some((platform,stem,path,_))=list.games.get(at).cloned()else{return false};
                 if list.armed!=Some(at){list.armed=Some(at);self.status=format!("Press A again to delete the label of {stem}");return false}
                 list.armed=None;
                 match fs::remove_file(&path){
@@ -428,7 +453,7 @@ impl WifiMenu{
         let mut p=Painter::new();p.text("CART ART",32,24,576,30.0);p.text(&self.status,32,66,576,18.0);
         let rows=list.games.len()+1;let first=if self.row<7{0}else{self.row-6};
         for (line,row) in (first..rows.min(first+7)).enumerate(){let y=110+line*41;if row==self.row{p.rect(0,y,640,38,slot_ui::edge());}
-            let label=match row{0=>"GET CART ART".into(),_=>{let (platform,stem,_)=&list.games[row-1];format!("{}{}  {}",if list.armed==Some(row-1){"DELETE?  "}else{""},platform.dir_name(),stem)}};
+            let label=match row{0=>"GET CART ART".into(),_=>{let (platform,stem,_,famicom)=&list.games[row-1];format!("{}{}  {}",if list.armed==Some(row-1){"DELETE?  "}else{""},if *famicom{"FC"}else{platform.dir_name()},stem)}};
             p.text(&label,32,y+1,576,23.0);
         }
         p.text(if self.busy(){"B CANCEL"}else if self.row==0{"B BACK    A GET ART    LEFT/RIGHT STYLE"}else if list.armed.is_some(){"B KEEP    A DELETE LABEL"}else{"B BACK    A DELETE LABEL"},24,430,592,20.0);
@@ -463,11 +488,26 @@ impl Painter{
     }
 }
 #[cfg(test)]mod tests{
-    use super::*;use std::cell::RefCell;
+    use super::*;use std::cell::{Cell,RefCell};
     struct Mock{steps:RefCell<std::collections::VecDeque<(String,Result<String>)>>}
     impl Mock{fn new(steps:Vec<(&str,Result<&str>)>)->Self{Self{steps:RefCell::new(steps.into_iter().map(|(a,b)|(a.into(),b.map(String::from))).collect())}}fn done(&self){assert!(self.steps.borrow().is_empty());}}
     impl Supplicant for Mock{fn command(&self,s:&str)->Result<String>{let(a,b)=self.steps.borrow_mut().pop_front().expect("unexpected command");assert_eq!(a,s);b}}
     fn network()->Network{Network{ssid:b"Test".to_vec(),signal:-40,security:Security::Personal,saved:None}}
+    #[test]fn boot_repair_waits_for_a_late_supplicant_then_repairs_once_it_joins(){
+        let t=Cell::new(0u64);let runs=Cell::new(0);
+        // The supplicant appears 5 s in; a network joins 3 s after the repair.
+        boot_repair(||t.get()>=5_000,||runs.get()>0&&t.get()>=8_000,||{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
+        assert_eq!(runs.get(),1,"repaired {} times",runs.get());
+    }
+    #[test]fn boot_repair_tries_twice_then_gives_up_and_never_without_a_supplicant(){
+        let t=Cell::new(0u64);let runs=Cell::new(0);
+        boot_repair(||true,||false,||{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
+        assert_eq!(runs.get(),2);
+        let runs=Cell::new(0);let t=Cell::new(0u64);
+        boot_repair(||false,||false,||{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
+        assert_eq!(runs.get(),0,"repaired with no supplicant");
+        assert!(t.get()<=BOOT_WAIT_MS+BOOT_POLL_MS,"waited forever");
+    }
     #[test]fn parse_scans(){let n=scan_rows("header\na\t2412\t-80\t[WPA2-PSK-CCMP]\tMy\\x20WiFi\nb\t2412\t-40\t[WPA2-PSK-CCMP]\tMy WiFi\nc\t2412\t-30\t[ESS]\tCafe\nd\t2412\t-20\t[WPA2-EAP-CCMP]\tWork\n","header\n7\tMy WiFi\tany\t[CURRENT]\n");assert_eq!(n.len(),3);assert_eq!(n[0].security,Security::Unsupported);assert_eq!(n[2].signal,-40);assert_eq!(n[2].saved,Some(7));}
     #[test]fn password_bytes(){assert!(psk("short").is_err());assert!(psk("1234567\n").is_err());assert_eq!(psk("Abc\"\\123").unwrap(),"\"Abc\"\\123\"");assert_eq!(psk(&"a".repeat(64)).unwrap(),"a".repeat(64));assert!(psk(&"z".repeat(64)).is_err());}
     #[test]fn helper_prefers_card_then_firmware(){
@@ -529,7 +569,7 @@ impl Painter{
     #[test]#[ignore="Requires a Linux runtime allowing AF_UNIX datagram sockets"]fn socket_roundtrip(){let dir=tempfile::tempdir().unwrap();let remote=dir.path().join("server");let server=UnixDatagram::bind(&remote).unwrap();let t=thread::spawn(move||{let mut b=[0;64];let(n,peer)=server.recv_from(&mut b).unwrap();assert_eq!(&b[..n],b"PING");server.send_to(b"PONG\n",peer.as_pathname().unwrap()).unwrap();});let c=Control::at(&remote).unwrap();let local=c.local.clone();assert_eq!(fs::metadata(&local).unwrap().permissions().mode()&0o777,0o600);assert_eq!(c.command("PING").unwrap(),"PONG");drop(c);assert!(!local.exists());t.join().unwrap();}
     #[test]fn art_screen_deletes_only_after_a_second_a(){
         let d=tempfile::tempdir().unwrap();let label=d.path().join("Emerald.png");fs::write(&label,b"png").unwrap();
-        let games=vec![(Platform::Gba,"Emerald".to_string(),label.clone()),(Platform::Gb,"Tetris".to_string(),d.path().join("Tetris.png"))];
+        let games=vec![(Platform::Gba,"Emerald".to_string(),label.clone(),false),(Platform::Gb,"Tetris".to_string(),d.path().join("Tetris.png"),false)];
         let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:Some(ArtList{games,armed:None}),ra:None};
         m.input(Action::GbaDown(Btn::Down));m.input(Action::GbaDown(Btn::A));
         assert!(label.exists(),"first A only asks");

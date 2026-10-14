@@ -122,6 +122,7 @@ impl Frontend {
         #[cfg(feature = "brick")]
         let session_root = platform.root().to_path_buf();
         let mut session = Session::boot(platform.root().to_path_buf());
+        label_cache::forget_old(platform.root());
         let stale = label_cache::stale(platform.root(), session.app().carts());
         let rebuild = (!stale.is_empty()).then(|| {
             eprintln!("slot: label cache: {} new labels", stale.len());
@@ -342,9 +343,11 @@ impl Frontend {
         let rounded = gb_cart_shadow(GbShell::Rounded);
         let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
         self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        let nes = slot_ui::nes_cart_shadow();
-        let nes = compositor.create_texture(nes.w, nes.h, &nes.rgba);
-        self.session.app_mut().set_nes_cart_shadow(nes);
+        let [nes, famicom] = [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom].map(|shell| {
+            let face = slot_ui::nes_cart_shadow(shell);
+            compositor.create_texture(face.w, face.h, &face.rgba)
+        });
+        self.session.app_mut().set_nes_cart_shadows(nes, famicom);
         let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
             let face = slot_ui::snes_cart_shadow(shell);
             compositor.create_texture(face.w, face.h, &face.rgba)
@@ -372,7 +375,9 @@ impl Frontend {
         colour_names.push("Custom");
         let colours = values(colour_names);
         let finishes = values(slot_ui::FINISHES.iter().map(|f| slot_ui::finish_name(*f)).collect());
-        let shapes = values(slot_ui::SHAPES.iter().chain(&slot_ui::SNES_SHAPES).copied().collect());
+        let shapes = values(
+            slot_ui::SHAPES.iter().chain(&slot_ui::SNES_SHAPES).chain(&slot_ui::NES_SHAPES).copied().collect(),
+        );
         let carets = [false, true].map(|right| up(quick_caret_face(right)));
         let legend = slot_ui::cart_menu_legend_faces().map(|f| {
             let (tex, w, _) = up(f);

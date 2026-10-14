@@ -15,6 +15,7 @@ fn cart(stem: &str, code: &str) -> Cart {
         code: code.into(),
         shell: None,
         title: stem.to_uppercase(),
+        famicom_label: None,
     }
 }
 

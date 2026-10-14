@@ -99,20 +99,30 @@ const CRYSTAL: Shell = shell([0x86, 0xb9, 0xbf], Finish::Glitter);
 const KIRBY: Shell = shell([0xec, 0x94, 0xb4], Finish::Translucent);
 
 pub fn shell_for(cart: &Cart) -> Shell {
-    if let Some(choice) = cart.shell {
-        let finish = match choice.finish {
-            ShellFinish::Solid => Finish::Solid,
-            ShellFinish::Clear => Finish::Translucent,
-            ShellFinish::Glitter => Finish::Glitter,
-        };
-        return shell(choice.colour, finish);
-    }
     match cart.platform {
-        Platform::Gba => gba_shell_for(&cart.code),
-        Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
-        Platform::Nes => nes_shell_for(&cart.stem),
-        Platform::Snes if snes_pal(&cart.stem) => SNES_PAL_SHELL,
-        Platform::Snes => SNES_SHELL,
+        // NES and SNES carts came in their system's grey: the plastic follows the shape. Famicom
+        // carts came in many colours, so theirs can be chosen.
+        Platform::Nes if crate::cart::nes_famicom_of(cart) => match cart.shell {
+            Some(choice) => shell(choice.colour, Finish::Solid),
+            None => famicom_shell(&cart.stem),
+        },
+        Platform::Nes => NES_SHELL,
+        Platform::Snes => match crate::cart::snes_shell_of(cart) {
+            Some(crate::SnesShell::Pal) => SNES_PAL_SHELL,
+            _ => SNES_SHELL,
+        },
+        Platform::Gba | Platform::Gb | Platform::Gbc => match cart.shell {
+            Some(choice) => {
+                let finish = match choice.finish {
+                    ShellFinish::Solid => Finish::Solid,
+                    ShellFinish::Clear => Finish::Translucent,
+                    ShellFinish::Glitter => Finish::Glitter,
+                };
+                shell(choice.colour, finish)
+            }
+            None if cart.platform == Platform::Gba => gba_shell_for(&cart.code),
+            None => gb_shell_for(&cart.rom),
+        },
     }
 }
 
@@ -121,6 +131,11 @@ pub fn nes_shell_for(stem: &str) -> Shell {
     if !japanese(stem) {
         return NES_SHELL;
     }
+    famicom_shell(stem)
+}
+
+/// One of the Famicom plastics, picked steadily from the ROM's name.
+pub fn famicom_shell(stem: &str) -> Shell {
     // FNV-1a: the same name always gets the same plastic.
     let hash = stem
         .bytes()
@@ -156,8 +171,8 @@ fn region_tags(stem: &str) -> impl Iterator<Item = &str> {
         .flat_map(|tag| tag.split(',').map(str::trim))
 }
 
-/// No-Intro "(Japan)" or "(Japan, USA)", GoodTools "(J)".
-fn japanese(stem: &str) -> bool {
+/// A ROM named as a Japanese release: No-Intro "(Japan)" or "(Japan, USA)", GoodTools "(J)".
+pub fn japanese(stem: &str) -> bool {
     stem.split(['(', '['])
         .skip(1)
         .filter_map(|t| t.split([')', ']']).next())

@@ -13,6 +13,7 @@ fn cart(stem: &str) -> Cart {
         title: stem.to_uppercase(),
         code: String::new(),
         shell: None,
+        famicom_label: None,
     }
 }
 

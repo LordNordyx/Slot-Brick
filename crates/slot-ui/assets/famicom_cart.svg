@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 288">
+  <!-- The Famicom cart: 108 mm wide to the NES cart's 120, landscape (about 0.65 as tall as
+       wide, as LaunchBox's pictures of it), standing on the NES cart's foot with the space
+       above it empty. -->
+  <path d="M 20.5 146.5 L 219.5 146.5 L 228 155 L 228 270.7 L 219.9 270.7 L 219.9 286 Q 219.9 288 217.9 288 L 22.1 288 Q 20.1 288 20.1 286 L 20.1 270.7 L 12 270.7 L 12 155 Z" fill="#fff"/>
+</svg>

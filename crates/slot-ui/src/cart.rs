@@ -2,11 +2,11 @@ use slot_store::gb::Class;
 use slot_store::{Cart, Outline, Platform};
 
 use crate::art;
-use crate::shell::{shell_for, snes_pal, Finish, Shell};
+use crate::shell::{japanese, shell_for, snes_pal, Finish, Shell};
 use crate::silhouette::{
     cart_depth, cart_mask, detail_mask, gb_cart_depth, gb_cart_mask, gb_detail_mask,
     nes_cart_depth, nes_cart_mask, nes_detail_mask, snes_cart_depth, snes_cart_mask,
-    snes_detail_mask, Detail, GbShell, SnesShell,
+    snes_detail_mask, Detail, GbShell, NesShell, SnesShell,
 };
 use crate::text;
 
@@ -104,11 +104,28 @@ const SNES_PAL_LABEL: (u32, u32, u32, u32) = {
     (x0, y0, x1 - x0, y1 - y0)
 };
 
+/// The Famicom cart's landscape label (famicom_cart.svg's face: 27.1..212.9 of 240,
+/// 160.7..256.9 of 288), shaped as cart_art.rs cuts it from pictures of the cart.
+pub const fn famicom_label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
+    (
+        (w * 113 + 500) / 1000,
+        (h * 558 + 500) / 1000,
+        (w * 887 + 500) / 1000,
+        (h * 892 + 500) / 1000,
+    )
+}
+
+const FAMICOM_LABEL: (u32, u32, u32, u32) = {
+    let (x0, y0, x1, y1) = famicom_label_panel(NES_CART_W, NES_CART_H);
+    (x0, y0, x1 - x0, y1 - y0)
+};
+
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
 const MAX_PX: f32 = LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
 const GB_MAX_PX: f32 = (GB_LABEL_H - 2 * PAD) as f32 / MAX_LINES as f32;
 const NES_MAX_PX: f32 = (NES_LABEL_H - 2 * PAD) as f32 / MAX_LINES as f32;
+const FAMICOM_MAX_PX: f32 = FAMICOM_LABEL.3 as f32 / (MAX_LINES as f32 * 1.36);
 const SNES_MAX_PX: f32 = SNES_LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
 const SNES_PAL_MAX_PX: f32 = SNES_PAL_LABEL.3 as f32 / (MAX_LINES as f32 * 1.36);
 const MIN_PX: f32 = 10.0;
@@ -148,7 +165,7 @@ struct Board {
 enum Shape {
     Gba,
     Gb(GbShell),
-    Nes,
+    Nes(NesShell),
     Snes(SnesShell),
 }
 
@@ -167,19 +184,56 @@ pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
 }
 
 /// A SNES cart's shape: as chosen in the cart menu (notched is the US cart, rounded the
-/// PAL / Super Famicom one), else by the region in the ROM's name.
+/// PAL / Super Famicom one), else where the ROM's header says it was sold, else the region in
+/// its name. Reads the ROM.
 pub fn snes_shell_of(cart: &Cart) -> Option<SnesShell> {
     (cart.platform == Platform::Snes).then(|| match cart.shell.map(|c| c.outline) {
         Some(Outline::Notched) => SnesShell::Us,
         Some(Outline::Rounded) => SnesShell::Pal,
-        _ if snes_pal(&cart.stem) => SnesShell::Pal,
-        _ => SnesShell::Us,
+        _ => match slot_store::region::snes_pal_or_japan(&cart.rom).unwrap_or_else(|| snes_pal(&cart.stem)) {
+            true => SnesShell::Pal,
+            false => SnesShell::Us,
+        },
     })
+}
+
+/// The cart's label picture at w x h: filling the label, but on the Famicom cart a tall (NES)
+/// label is shown whole, as filling would cut most of it away.
+pub fn fitted_label(cart: &Cart, w: u32, h: u32) -> Option<Vec<u8>> {
+    let path = shown_label(cart)?;
+    if nes_famicom_of(cart) {
+        art::label_fit(path, w, h)
+    } else {
+        art::cover(path, w, h)
+    }
+}
+
+/// The label a cart wears: a NES game keeps one for each of its carts, so swapping the
+/// shape swaps the picture; while it has only one, both carts show it.
+pub fn shown_label(cart: &Cart) -> Option<&std::path::Path> {
+    let (own, famicom) = (cart.label.as_deref(), cart.famicom_label.as_deref());
+    if nes_famicom_of(cart) {
+        famicom.or(own)
+    } else {
+        own.or(famicom)
+    }
+}
+
+/// A NES game on the Famicom cart: as chosen in the cart menu (notched is the NES cart,
+/// rounded the Famicom), else a ROM named as a Japanese release or on a Famicom-only board.
+pub fn nes_famicom_of(cart: &Cart) -> bool {
+    cart.platform == Platform::Nes
+        && match cart.shell.map(|c| c.outline) {
+            Some(Outline::Notched) => false,
+            Some(Outline::Rounded) => true,
+            _ => japanese(&cart.stem) || slot_store::region::nes_famicom_board(&cart.rom),
+        }
 }
 
 fn shape_of(cart: &Cart) -> Shape {
     match (cart.platform, gb_shell_of(cart)) {
-        (Platform::Nes, _) => Shape::Nes,
+        (Platform::Nes, _) if nes_famicom_of(cart) => Shape::Nes(NesShell::Famicom),
+        (Platform::Nes, _) => Shape::Nes(NesShell::Nes),
         (Platform::Snes, _) => Shape::Snes(snes_shell_of(cart).unwrap_or(SnesShell::Us)),
         (_, None) => Shape::Gba,
         (_, Some(shell)) => Shape::Gb(shell),
@@ -224,15 +278,24 @@ fn spec(shape: Shape) -> Spec {
                 traces_from: 0.84,
             },
         },
-        Shape::Nes => Spec {
+        Shape::Nes(shell) => Spec {
             w: NES_CART_W,
             h: NES_CART_H,
-            label: (NES_LABEL_X, NES_LABEL_Y, NES_LABEL_W, NES_LABEL_H),
-            mask: nes_cart_mask(),
-            depth: nes_cart_depth(),
-            detail: nes_detail_mask(),
-            max_px: NES_MAX_PX,
-            max_h: (NES_LABEL_H - 2 * PAD) as f32,
+            label: match shell {
+                NesShell::Nes => (NES_LABEL_X, NES_LABEL_Y, NES_LABEL_W, NES_LABEL_H),
+                NesShell::Famicom => FAMICOM_LABEL,
+            },
+            mask: nes_cart_mask(shell),
+            depth: nes_cart_depth(shell),
+            detail: nes_detail_mask(shell),
+            max_px: match shell {
+                NesShell::Nes => NES_MAX_PX,
+                NesShell::Famicom => FAMICOM_MAX_PX,
+            },
+            max_h: match shell {
+                NesShell::Nes => (NES_LABEL_H - 2 * PAD) as f32,
+                NesShell::Famicom => f32::INFINITY,
+            },
             rim: NES_RIM,
             board: Board {
                 x: (0.04, 0.96),
@@ -290,7 +353,7 @@ pub fn cart_box(platform: Platform) -> (u32, u32) {
     let s = spec(match platform {
         Platform::Gba => Shape::Gba,
         Platform::Gb | Platform::Gbc => Shape::Gb(GbShell::Notched),
-        Platform::Nes => Shape::Nes,
+        Platform::Nes => Shape::Nes(NesShell::Nes),
         Platform::Snes => Shape::Snes(SnesShell::Us),
     });
     (s.w, s.h)
@@ -304,8 +367,8 @@ pub fn gb_cart_shadow(shell: GbShell) -> CartFace {
     shadow(GB_CART_W, GB_CART_H, gb_cart_mask(shell))
 }
 
-pub fn nes_cart_shadow() -> CartFace {
-    shadow(NES_CART_W, NES_CART_H, nes_cart_mask())
+pub fn nes_cart_shadow(shell: NesShell) -> CartFace {
+    shadow(NES_CART_W, NES_CART_H, nes_cart_mask(shell))
 }
 
 pub fn snes_cart_shadow(shell: SnesShell) -> CartFace {
@@ -322,7 +385,7 @@ fn shadow(w: u32, h: u32, mask: &[u8]) -> CartFace {
 
 pub fn cart_face(cart: &Cart) -> CartFace {
     let (lw, lh) = label_size(cart);
-    let art = cart.label.as_deref().and_then(|p| art::cover(p, lw, lh));
+    let art = fitted_label(cart, lw, lh);
     cart_face_with(cart, art)
 }
 

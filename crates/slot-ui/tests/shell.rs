@@ -481,6 +481,7 @@ fn a_pal_snes_cart_is_the_lighter_grey() {
         code: String::new(),
         shell: None,
         title: String::new(),
+        famicom_label: None,
     };
     assert_eq!(slot_ui::shell_for(&cart("Mario (USA)")), slot_ui::SNES_SHELL);
     assert_eq!(slot_ui::shell_for(&cart("Mario (Europe)")), slot_ui::SNES_PAL_SHELL);
