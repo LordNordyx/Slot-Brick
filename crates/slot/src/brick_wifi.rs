@@ -87,10 +87,11 @@ static HELPER:std::sync::Mutex<()>=std::sync::Mutex::new(());
 /// blocked (saved networks are then never joined), or, with slot in place of its menu, start
 /// none at all. So wait a little for its own, repair that, or else start Wi-Fi here, as
 /// opening the Wi-Fi menu and turning it on would.
+/// Never in the way of startup: everything, even reading whether Wi-Fi is wanted, happens on
+/// its own thread, and nothing waits for it.
 pub fn repair_at_boot(){
-    let root=card_root();
-    if !wanted(&root){eprintln!("wifi: boot: Wi-Fi was turned off; leaving it off");return}
     let spawned=thread::Builder::new().name("slot-wifi-boot".into()).spawn(||{
+        if !wanted(&card_root()){eprintln!("wifi: boot: Wi-Fi was turned off; leaving it off");return}
         let quiet=AtomicBool::new(false);
         boot_repair(supplicant_answers,online,|up|helper_run(if up{"ensure"}else{"start"},&quiet),|ms|thread::sleep(Duration::from_millis(ms)));
     });
