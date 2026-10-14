@@ -76,14 +76,15 @@ doesn't flash anything to the device.
 **Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour and a
 solid, see-through or glitter finish for Game Boy and GBA carts, and the shape: original or Color
 for Game Boy carts, NES or Famicom for NES carts, US or Europe / Japan for SNES carts. NES and
-SNES carts only change shape, as the real ones came in their system's grey. On a GBA cart `START` opens the core picker: `Left` / `Right` swap the core, `Up` changes the colour
+SNES carts are always their system's grey, like the real ones; a NES game on the Famicom cart
+can have any colour, as Famicom carts came in many. On a GBA cart `START` opens the core picker: `Left` / `Right` swap the core, `Up` changes the colour
 and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
 in `Slot/Labels/cart_shell.ini`.
 
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run
 on FCEUmm. No BIOS is needed. NES carts are grey; a ROM named as a Japanese release, such as
-`Rockman (Japan).nes`, or on a chip only Famicom carts used, wears a coloured Famicom plastic
-instead (picked from its name, not the real cart's colour). NES ROMs don't say where they were
+`Rockman (Japan).nes`, or on a chip only Famicom carts used, gets the small, landscape Famicom
+cart instead, in a colour picked from its name (change it under `START` → Colour). NES ROMs don't say where they were
 sold, so for other Japanese games choose Famicom under `START` → Shape. Cart Art fetches NES labels too (see below), or put your own picture in
 `Slot/Labels/NES`. The picture is the TV's 256 x 224, padded to 4:3 at actual size or
 stretched to fill the screen with `L1` / `R1`. RetroAchievements work for NES too.

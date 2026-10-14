@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 288">
+  <defs>
+    <!-- The raised rim around the front, and the step down to the connector tab. -->
+    <g id="rim">
+      <path fill-rule="evenodd" d="M 22 141.4 L 218 141.4 L 224.6 148 L 224.6 262.6 L 15.4 262.6 L 15.4 148 Z M 22.6 142.6 L 217.4 142.6 L 223.4 148.6 L 223.4 261.4 L 16.6 261.4 L 16.6 148.6 Z"/>
+      <rect x="19.8" y="266" width="200.5" height="1.2"/>
+    </g>
+  </defs>
+  <g fill="#fff">
+    <use href="#rim" x="1.1" y="1.1"/>
+  </g>
+  <g fill="#000">
+    <use href="#rim"/>
+  </g>
+</svg>

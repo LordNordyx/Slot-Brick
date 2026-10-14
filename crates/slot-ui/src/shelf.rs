@@ -2,9 +2,9 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::cart::{cart_box, gb_shell_of, snes_shell_of, label_colour, label_text, CART_H, CART_W};
+use crate::cart::{cart_box, gb_shell_of, nes_famicom_of, snes_shell_of, label_colour, label_text, CART_H, CART_W};
 use crate::hud::Millis;
-use crate::silhouette::{GbShell, SnesShell};
+use crate::silhouette::{GbShell, NesShell, SnesShell};
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
@@ -48,13 +48,14 @@ const REPEAT_MS: [Millis; 4] = [110, 85, 65, 50];
 enum Backing {
     Gba,
     Gb(GbShell),
-    Nes,
+    Nes(NesShell),
     Snes(SnesShell),
 }
 
 fn backing(cart: &Cart) -> Backing {
     match cart.platform {
-        slot_store::Platform::Nes => Backing::Nes,
+        slot_store::Platform::Nes if nes_famicom_of(cart) => Backing::Nes(NesShell::Famicom),
+        slot_store::Platform::Nes => Backing::Nes(NesShell::Nes),
         slot_store::Platform::Snes => Backing::Snes(snes_shell_of(cart).unwrap_or(SnesShell::Us)),
         _ => gb_shell_of(cart).map_or(Backing::Gba, Backing::Gb),
     }
@@ -69,6 +70,7 @@ pub struct Shelf {
     gb_shadow: Option<TexId>,
     gbc_shadow: Option<TexId>,
     nes_shadow: Option<TexId>,
+    famicom_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
     snes_pal_shadow: Option<TexId>,
     /// Each cart's shadow shape: reading it needs the ROM, so it is read once, not per frame.
@@ -90,6 +92,7 @@ impl Shelf {
             gb_shadow: None,
             gbc_shadow: None,
             nes_shadow: None,
+            famicom_shadow: None,
             snes_shadow: None,
             snes_pal_shadow: None,
             ride: 0.0,
@@ -116,8 +119,11 @@ impl Shelf {
         }
     }
 
-    pub fn set_nes_shadow(&mut self, face: TexId) {
-        self.nes_shadow = Some(face);
+    pub fn set_nes_shadow(&mut self, shell: NesShell, face: TexId) {
+        match shell {
+            NesShell::Nes => self.nes_shadow = Some(face),
+            NesShell::Famicom => self.famicom_shadow = Some(face),
+        }
     }
 
     pub fn set_snes_shadow(&mut self, shell: SnesShell, face: TexId) {
@@ -381,7 +387,8 @@ impl Shelf {
                 let backing = match self.shells.get(i).copied() {
                     Some(Backing::Gb(GbShell::Notched)) => self.gb_shadow,
                     Some(Backing::Gb(GbShell::Rounded)) => self.gbc_shadow,
-                    Some(Backing::Nes) => self.nes_shadow,
+                    Some(Backing::Nes(NesShell::Nes)) => self.nes_shadow,
+                    Some(Backing::Nes(NesShell::Famicom)) => self.famicom_shadow,
                     Some(Backing::Snes(SnesShell::Us)) => self.snes_shadow,
                     Some(Backing::Snes(SnesShell::Pal)) => self.snes_pal_shadow,
                     Some(Backing::Gba) | None => self.shadow,

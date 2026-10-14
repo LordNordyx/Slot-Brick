@@ -5,10 +5,13 @@
   click each time the shelf moves to another game.
 - Cart colours: START on a game changes its cartridge's colour, finish (solid, see-through,
   glitter) and, for Game Boy carts, its shape, previewed live. NES and SNES carts only change
-  shape (NES or Famicom; US or PAL), as the real ones came in their system's grey. On GBA carts START opens the core
+  shape (NES or Famicom; US or PAL), as the real ones came in their system's grey; a Famicom
+  cart can have any colour. On GBA carts START opens the core
   picker, where Up/Down change the colour and finish.
 - SNES: European and Japanese games get the rounder PAL / Super Famicom cart, read from the ROM's
   header so ripped ROMs with no region in their name work too.
+- NES: Famicom games get the real Famicom cart, small, landscape and in colour, instead of a
+  coloured NES cart.
 - NES: a ROM on a chip only Famicom carts used (Konami VRC, Namco 163 and others) gets a Famicom
   plastic even without "(Japan)" in its name.
 - The core picker shows the cart in its real plastic instead of the default black, and its

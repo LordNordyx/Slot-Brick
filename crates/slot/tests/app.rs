@@ -2537,3 +2537,30 @@ fn moving_along_the_shelf_clicks_and_standing_still_does_not() {
     let heard = sfx_over(&mut app, 0.3);
     assert_eq!(heard.iter().map(|(_, s)| *s).collect::<Vec<_>>(), vec![Sfx::Click]);
 }
+
+#[test]
+fn a_famicom_cart_offers_a_colour_and_a_nes_cart_does_not() {
+    use slot_ui::CartRow::*;
+    let d = common::tmp_root_with_carts(&[]);
+    for stem in ["Mario (USA)", "Zzz (USA)"] {
+        std::fs::write(d.path().join(format!("Games/NES/{stem}.nes")), [0u8; 0x200]).unwrap();
+    }
+    let (d, mut app) = booted_on_shelf(d);
+    press(&mut app, Btn::Start);
+    press(&mut app, Btn::Left);
+    assert_eq!(rows_of(&mut app), vec![Shape, Colour, Reset], "the Famicom cart offered no colour");
+    let own = app.cart_menu().unwrap().1.unwrap().colour;
+    assert_eq!(own, slot_ui::famicom_shell("Mario (USA)").colour, "the Famicom cart started grey");
+    press(&mut app, Btn::Down);
+    press(&mut app, Btn::Right);
+    let red = app.cart_menu().unwrap().1.unwrap();
+    assert_ne!(red.colour, own);
+    press(&mut app, Btn::Up);
+    press(&mut app, Btn::Right);
+    assert_eq!(rows_of(&mut app), vec![Shape, Reset], "the NES cart kept the colour row");
+    press(&mut app, Btn::Left);
+    press(&mut app, Btn::A);
+    let saved = saved_shell(&d, "Mario (USA)").expect("A saved nothing");
+    let red_hex = format!("{:02x}{:02x}{:02x}", red.colour[0], red.colour[1], red.colour[2]);
+    assert!(saved.starts_with(&format!("rounded {red_hex}")), "{saved}");
+}

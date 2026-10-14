@@ -894,3 +894,31 @@ fn a_colour_saved_for_a_nes_or_snes_cart_is_ignored() {
         assert_eq!(shell_for(&cart), grey, "{platform:?} took the chosen colour");
     }
 }
+
+#[test]
+fn a_famicom_cart_is_small_and_landscape_and_wears_its_chosen_colour() {
+    use slot_store::{Outline, ShellChoice, ShellFinish};
+    use slot_ui::{nes_famicom_of, shell_for, NES_SHELL};
+    let nes = |stem: &str, shell: Option<ShellChoice>| slot_store::Cart {
+        platform: Platform::Nes, stem: stem.into(), rom: "missing.nes".into(), label: None,
+        code: String::new(), shell, title: String::new(),
+    };
+    let opaque = |c: &slot_store::Cart, fx: f32, fy: f32| {
+        let f = cart_face(c);
+        let (x, y) = ((f.w as f32 * fx) as u32, (f.h as f32 * fy) as u32);
+        f.rgba[((y * f.w + x) * 4 + 3) as usize] > 250
+    };
+    let us = nes("Mario (USA)", None);
+    let jp = nes("Mario (Japan)", None);
+    assert!(!nes_famicom_of(&us) && nes_famicom_of(&jp));
+    assert!(opaque(&us, 0.5, 0.2) && opaque(&us, 0.01, 0.5), "the NES cart lost its body");
+    assert!(!opaque(&jp, 0.5, 0.2), "the Famicom cart is as tall as a NES cart");
+    assert!(!opaque(&jp, 0.01, 0.7), "the Famicom cart is as wide as a NES cart");
+    assert!(opaque(&jp, 0.5, 0.7), "the Famicom cart is missing");
+
+    let pink = |outline| Some(ShellChoice { outline, colour: [0xe2, 0x8c, 0xa9], finish: ShellFinish::Glitter });
+    let fc = shell_for(&nes("Mario (USA)", pink(Outline::Rounded)));
+    assert_eq!(fc.colour, [0xe2, 0x8c, 0xa9]);
+    assert_eq!(fc.finish, Finish::Solid, "a Famicom cart took a finish");
+    assert_eq!(shell_for(&nes("Mario (Japan)", pink(Outline::Notched))), NES_SHELL);
+}

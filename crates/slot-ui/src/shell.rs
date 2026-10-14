@@ -100,9 +100,12 @@ const KIRBY: Shell = shell([0xec, 0x94, 0xb4], Finish::Translucent);
 
 pub fn shell_for(cart: &Cart) -> Shell {
     match cart.platform {
-        // NES and SNES carts came in their system's grey (Famicom carts in many colours): the
-        // plastic follows the shape, never a colour chosen for the cart.
-        Platform::Nes if crate::cart::nes_famicom_of(cart) => famicom_shell(&cart.stem),
+        // NES and SNES carts came in their system's grey: the plastic follows the shape. Famicom
+        // carts came in many colours, so theirs can be chosen.
+        Platform::Nes if crate::cart::nes_famicom_of(cart) => match cart.shell {
+            Some(choice) => shell(choice.colour, Finish::Solid),
+            None => famicom_shell(&cart.stem),
+        },
         Platform::Nes => NES_SHELL,
         Platform::Snes => match crate::cart::snes_shell_of(cart) {
             Some(crate::SnesShell::Pal) => SNES_PAL_SHELL,
