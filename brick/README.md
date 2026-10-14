@@ -81,12 +81,13 @@ can have any colour, as Famicom carts came in many. On a GBA cart `START` opens 
 and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
 in `Slot/Labels/cart_shell.ini`.
 
-**Choosing a label:** with Wi-Fi on, the cart menu's Label row (`L1` / `R1` in the GBA core
-picker) searches the same places Cart Art does and lets you flip through every label found for
-the game, its other regions included, each shown on the cart. `A` keeps the one showing, in place
-of the label the game had; `B` keeps the old one. `Y` opens the keyboard to type your own search
-(each word only has to begin a word of the name, so `yoshi island` finds *Super Mario World 2:
-Yoshi's Island*); it looks through every game of that console. The labels not picked are deleted when the menu closes. NES games keep
+**Choosing a label:** with Wi-Fi on, press `Y` on the cart menu's Label row (or in the GBA core
+picker) to search: the keyboard opens with the game's name filled in, so `START` searches right
+away, or change it first (each word only has to begin a word of the name, so `yoshi island`
+finds *Super Mario World 2: Yoshi's Island*). It looks through every game of that console in the
+places Cart Art uses. `Left` / `Right` (`L1` / `R1` in the picker) then flips through the labels
+found, each shown on the cart; `A` keeps the one showing, in place of the label the game had,
+and `B` keeps the old one. The labels not picked are deleted when the menu closes. NES games keep
 the NES and the Famicom cart's label apart: a label picked goes to the cart shape showing.
 
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run

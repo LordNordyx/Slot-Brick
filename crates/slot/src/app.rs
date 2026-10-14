@@ -1401,7 +1401,7 @@ impl App {
                 let typed = wifi.take_label_query();
                 self.wifi=None;
                 let stem = self.cart_menu.as_ref().or(self.picker_look.as_ref()).map(|m| m.stem.clone());
-                if let (Some(query), Some(stem)) = (typed, stem) {self.search_labels(&stem, Some(query));}
+                if let (Some(query), Some(stem)) = (typed, stem) {self.search_labels(&stem, query);}
             }
             return;
         }
@@ -3119,16 +3119,12 @@ impl App {
         self.shelf().carts.iter().position(|c| c.stem == stem)
     }
 
-    /// Left/Right on the label row (L1/R1 in the core picker): the first press searches for
-    /// labels, the next flip through what was found, each worn by the cart at once.
+    /// Left/Right on the label row (L1/R1 in the core picker): flips through the labels a
+    /// search (Y) found, each worn by the cart at once. Before one, there is nothing to flip.
     fn step_label(&mut self, stem: &str, by: isize) {
-        let Some(cart) = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+        let Some(pick) = self.label_pick.as_mut().filter(|p| p.stem == stem && !p.choices.is_empty()) else {
             return;
         };
-        let pick = self.label_pick.get_or_insert_with(|| LabelPick::new(&cart));
-        if pick.search.is_none() && pick.done.is_none() {
-            return self.search_labels(stem, None);
-        }
         let n = pick.choices.len() as isize + 1;
         pick.at = (pick.at as isize + by).rem_euclid(n) as usize;
         pick.jump = false;
@@ -3161,9 +3157,11 @@ impl App {
         }
     }
 
-    /// A search for the open cart's labels, by its own name or by `query`, typed: what an
-    /// earlier one found is put aside, the cart showing its own label until the first arrives.
-    fn search_labels(&mut self, stem: &str, query: Option<String>) {
+    /// A search for the open cart's labels by what was typed: what an earlier one found is put
+    /// aside, the cart showing its own label until the first arrives.
+    // Searches are typed, on the Brick's keyboard only.
+    #[cfg_attr(not(feature = "brick"), allow(dead_code))]
+    fn search_labels(&mut self, stem: &str, query: String) {
         let Some(root) = self.root.clone() else {
             return;
         };
@@ -3181,7 +3179,7 @@ impl App {
         pick.at = 0;
         pick.done = None;
         pick.jump = true;
-        pick.query = query.clone();
+        pick.query = Some(query.clone());
         let mut asked = cart;
         (asked.label, asked.famicom_label) = pick.original.clone();
         pick.search = Some(crate::cart_art::LabelSearch::start(root, asked, query));
@@ -4286,7 +4284,8 @@ struct LabelPick {
     offline: bool,
     /// The press that started the search wants the first label found.
     jump: bool,
-    /// What was typed to search for, if the search was not by the game's own name.
+    /// What was typed to search for: the keyboard starts from it again.
+    #[cfg_attr(not(feature = "brick"), allow(dead_code))]
     query: Option<String>,
 }
 
@@ -4322,12 +4321,8 @@ impl LabelPick {
         let choice = &self.choices[self.at - 1];
         let more = if searching { "+" } else { "" };
         let n = self.choices.len();
-        // A typed search can find other games: their names show, not just the region.
-        let what = if self.query.is_some() {
-            choice.caption.as_str()
-        } else {
-            choice.caption.split_once(" · ").map_or("", |(_, r)| r)
-        };
+        // A search can find other games: their names show, with the region.
+        let what = choice.caption.as_str();
         match what {
             "" => format!("{} of {n}{more}", self.at),
             w => format!("{w}  {} of {n}{more}", self.at),

@@ -889,18 +889,17 @@ pub struct LabelSearch {
 }
 
 impl LabelSearch {
-    /// Labels for `cart`: found by its own name and checksum, or with `query`, by what was
-    /// typed, among every game of its console.
-    pub fn start(root: PathBuf, cart: Cart, query: Option<String>) -> Self {
+    /// Labels for `cart`, found by what was typed among every game of its console.
+    pub fn start(root: PathBuf, cart: Cart, query: String) -> Self {
         Self::start_at(root, cart, query, Servers { labels: SLOT_ART.into(), photos: PHOTOS.into() })
     }
 
-    fn start_at(root: PathBuf, cart: Cart, query: Option<String>, servers: Servers) -> Self {
+    fn start_at(root: PathBuf, cart: Cart, query: String, servers: Servers) -> Self {
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let token = cancel.clone();
         let spawned = thread::Builder::new().name("slot-label-search".into()).spawn(move || {
-            let done = search(&root, &cart, query.as_deref(), &servers, &token, &tx);
+            let done = search(&root, &cart, &query, &servers, &token, &tx);
             let _ = tx.send(PickNews::Done(done));
         });
         if let Err(e) = spawned {
@@ -946,8 +945,15 @@ fn query_matches(query: &[String], name: &str) -> bool {
     !query.is_empty() && query.iter().all(|q| have.iter().any(|w| w.starts_with(q.as_str())))
 }
 
-fn search(root: &Path, cart: &Cart, query: Option<&str>, servers: &Servers, cancel: &AtomicBool, tx: &mpsc::Sender<PickNews>) -> Result<(), String> {
-    let typed = query.map(words);
+/// The order a typed search's names come in: those that are just what was typed first (so a
+/// full name finds its own game before the ones it begins), then the shortest.
+fn query_order(query: &[String], name: &str) -> (bool, usize) {
+    let title = name.split(['(', '[']).next().unwrap_or(name);
+    (words(title) != query, name.len())
+}
+
+fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &AtomicBool, tx: &mpsc::Sender<PickNews>) -> Result<(), String> {
+    let typed = words(query);
     // Each search in a folder of its own, the last one's cleared away: a search stopped
     // mid-download can then never put its picture among the next one's.
     let _ = std::fs::remove_dir_all(root.join(PICK_DIR));
@@ -971,23 +977,12 @@ fn search(root: &Path, cart: &Cart, query: Option<&str>, servers: &Servers, canc
     };
     if specs.is_empty() {
         let games = Games::load(root);
-        let crcs: Vec<u32> = match &typed {
-            // Every game of the console whose name has the words typed, shortest name first.
-            Some(q) => {
-                let platforms = platforms_for(cart.platform);
-                let mut hits: Vec<&Game> =
-                    games.list.iter().filter(|g| platforms.contains(&g.platform) && query_matches(q, &g.name)).collect();
-                hits.sort_by_key(|g| g.name.len());
-                hits.into_iter().map(|g| g.crc).collect()
-            }
-            None => {
-                let mut crcs = Crcs::load(root);
-                let crc = crcs.of(root, &cart.rom).map_err(|e| format!("cannot read the ROM: {e}"))?;
-                let mut cart = cart.clone();
-                cart.read_header();
-                games.candidates(&cart, crc).into_iter().map(|(crc, _)| crc).collect()
-            }
-        };
+        // Every game of the console whose name has the words typed.
+        let platforms = platforms_for(cart.platform);
+        let mut hits: Vec<&Game> =
+            games.list.iter().filter(|g| platforms.contains(&g.platform) && query_matches(&typed, &g.name)).collect();
+        hits.sort_by_key(|g| query_order(&typed, &g.name));
+        let crcs: Vec<u32> = hits.into_iter().map(|g| g.crc).collect();
         let labels = label_index(root, &servers.labels)?;
         let mut seen = std::collections::HashSet::new();
         for crc in crcs {
@@ -996,8 +991,8 @@ fn search(root: &Path, cart: &Cart, query: Option<&str>, servers: &Servers, canc
             }
             let Some(path) = labels.get(&crc).filter(|p| seen.insert(p.to_string())) else { continue };
             let name = games.list.iter().find(|g| g.crc == crc).map_or("", |g| g.name.as_str());
-            // A typed search can land on other games: their names say which.
-            let source = if typed.is_some() { name.split(" (").next().unwrap_or(name) } else { "Slot art" };
+            // A search can land on other games: their names say which.
+            let source = name.split(" (").next().unwrap_or(name);
             match get(&servers.labels, &format!("/{path}"), IMAGE_MAX) {
                 Ok(Some(png)) if is_png(&png) => {
                     if !offer(&png, caption(source, name)) {
@@ -1012,21 +1007,8 @@ fn search(root: &Path, cart: &Cart, query: Option<&str>, servers: &Servers, canc
     }
     for spec in specs {
         let index = PhotoIndex::load(root, spec);
-        let names: Vec<&String> = match &typed {
-            Some(q) => {
-                let mut names: Vec<&String> = index.names.iter().filter(|n| query_matches(q, n)).collect();
-                names.sort_by_key(|n| n.len());
-                names
-            }
-            None => {
-                let key = slot_store::title_key(&cart.stem);
-                // The best match first, then every other name of the same game (its other regions).
-                let best = same_title_match(&cart.stem, &index.names);
-                let mut names: Vec<&String> = index.names.iter().filter(|n| slot_store::title_key(n) == key).collect();
-                names.sort_by_key(|n| Some(n.as_str()) != best);
-                names
-            }
-        };
+        let mut names: Vec<&String> = index.names.iter().filter(|n| query_matches(&typed, n)).collect();
+        names.sort_by_key(|n| query_order(&typed, n));
         let mut seen = std::collections::HashSet::new();
         for name in names {
             for file in index.files[name].iter().filter(|f| photo_file_ok(f) && seen.insert(f.to_string())) {
@@ -1040,10 +1022,7 @@ fn search(root: &Path, cart: &Cart, query: Option<&str>, servers: &Servers, canc
                 };
                 // Only a picture a clean label can be cut from is offered.
                 if let Ok(label) = label_from_photo(&png, spec) {
-                    let source = match &typed {
-                        Some(_) => name.split(" (").next().unwrap_or(name),
-                        None => "LaunchBox",
-                    };
+                    let source = name.split(" (").next().unwrap_or(name);
                     if !offer(&label, caption(source, name)) {
                         return Ok(());
                     }
@@ -1311,10 +1290,10 @@ mod tests {
             (format!("/{us}"), 200, png_bytes()),
             (format!("/{eu}"), 200, png_bytes()),
         ]);
-        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart.clone(), None, servers(&server)));
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart.clone(), "Final Fantasy IV Advance".into(), servers(&server)));
         assert_eq!(done, Ok(()));
         let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
-        assert_eq!(captions, ["Slot art · USA", "Slot art · Europe"], "the cart's own release first");
+        assert_eq!(captions, ["Final Fantasy IV Advance · USA", "Final Fantasy IV Advance · Europe"]);
         assert!(found.iter().all(|c| c.path.starts_with(root.join(PICK_DIR))));
         let kept = keep_choice(root, &cart, &found[1].path).unwrap();
         assert_eq!(kept, root.join("Labels/GBA/Final Fantasy IV Advance (USA).png"));
@@ -1350,10 +1329,10 @@ mod tests {
         ]);
         let cart = scan(root).unwrap().into_iter().next().unwrap();
         let servers = Servers { labels: "http://127.0.0.1:1".into(), photos };
-        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, None, servers));
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, "Mega Man".into(), servers));
         assert_eq!(done, Ok(()));
         let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
-        assert_eq!(captions, ["LaunchBox · USA", "LaunchBox · Europe"], "Tengen's cart or another game was offered");
+        assert_eq!(captions, ["Mega Man · USA", "Mega Man · Europe", "Mega Man 2 · USA"], "Tengen's cart was offered");
     }
 
     #[test]
@@ -1365,6 +1344,9 @@ mod tests {
         assert!(!query_matches(&q("usa"), "Final Fantasy II (USA)"), "a region tag matched");
         assert!(!query_matches(&q("ff"), "Final Fantasy II (USA)"));
         assert!(!query_matches(&q("  "), "Final Fantasy II (USA)"), "nothing typed matched everything");
+        let mut names = vec!["Final Fantasy III (Japan)", "Final Fantasy II (USA) (Rev 1)", "Final Fantasy II (USA)"];
+        names.sort_by_key(|n| query_order(&q("final fantasy ii"), n));
+        assert_eq!(names, ["Final Fantasy II (USA)", "Final Fantasy II (USA) (Rev 1)", "Final Fantasy III (Japan)"], "a full name found another game first");
     }
 
     #[test]
@@ -1387,7 +1369,7 @@ mod tests {
         ]);
         let cart = scan(root).unwrap().into_iter().next().unwrap();
         let servers = Servers { labels: "http://127.0.0.1:1".into(), photos };
-        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, Some("yoshi island".into()), servers));
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, "yoshi island".into(), servers));
         assert_eq!(done, Ok(()));
         let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
         assert_eq!(captions, ["Super Mario World 2: Yoshi's Island · USA"]);
@@ -1423,7 +1405,7 @@ mod tests {
         let root = d.path();
         games(root, &["GBA\tFEEEBDE4\tBZ4E\tFinal Fantasy IV Advance (USA)"]);
         let cart = gba_rom(root, "Final Fantasy IV Advance (USA).gba", "BZ4E");
-        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, None, servers("http://127.0.0.1:1")));
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, "Final Fantasy".into(), servers("http://127.0.0.1:1")));
         assert!(found.is_empty());
         assert!(done.is_err(), "{done:?}");
     }

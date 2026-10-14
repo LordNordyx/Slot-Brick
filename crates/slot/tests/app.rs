@@ -2522,7 +2522,7 @@ fn a_famicom_cart_offers_a_colour_and_a_nes_cart_does_not() {
 }
 
 #[test]
-fn the_label_row_searches_only_online_and_b_leaves_the_label_as_it_was() {
+fn the_label_row_searches_only_with_y_and_online_and_b_leaves_the_label_as_it_was() {
     use slot_ui::CartRow::*;
     let (d, mut app) = on_shelf_gb(&["Tetris", "Zzz"]);
     press(&mut app, Btn::Start);
@@ -2531,7 +2531,7 @@ fn the_label_row_searches_only_online_and_b_leaves_the_label_as_it_was() {
         press(&mut app, Btn::Down);
     }
     press(&mut app, Btn::Right);
-    assert_eq!(app.label_caption(), Some(("Connect to Wi-Fi first".to_string(), false)), "searched with no network");
+    assert_eq!(app.label_caption(), Some(("Name only".to_string(), false)), "Right searched: only Y does");
     press(&mut app, Btn::Y);
     assert_eq!(app.label_caption(), Some(("Connect to Wi-Fi first".to_string(), false)), "typed a search with no network");
     press(&mut app, Btn::B);
