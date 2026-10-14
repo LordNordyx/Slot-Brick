@@ -58,6 +58,9 @@ pub const NES_SHELL: Shell = shell([0x8e, 0x8d, 0x8a], Finish::Solid);
 /// The SNES cart's lighter, cooler grey.
 pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
 
+/// The PAL and Super Famicom cart's lighter, warmer grey.
+pub const SNES_PAL_SHELL: Shell = shell([0xab, 0xab, 0xa7], Finish::Solid);
+
 /// Famicom carts came in many plastics. A Japanese release wears one of them, picked
 /// steadily from its name: a colour in the spirit of the Famicom, not its real one.
 pub const FAMICOM_SHELLS: [Shell; 8] = [
@@ -108,6 +111,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
         Platform::Gba => gba_shell_for(&cart.code),
         Platform::Gb | Platform::Gbc => gb_shell_for(&cart.rom),
         Platform::Nes => nes_shell_for(&cart.stem),
+        Platform::Snes if snes_pal(&cart.stem) => SNES_PAL_SHELL,
         Platform::Snes => SNES_SHELL,
     }
 }
@@ -122,6 +126,34 @@ pub fn nes_shell_for(stem: &str) -> Shell {
         .bytes()
         .fold(0x811c_9dc5u32, |h, b| (h ^ b as u32).wrapping_mul(0x0100_0193));
     FAMICOM_SHELLS[hash as usize % FAMICOM_SHELLS.len()]
+}
+
+/// A ROM named as a European or Japanese release and not a US one: it came on the rounder
+/// PAL / Super Famicom cart. No-Intro "(Europe)", "(Japan)", GoodTools "(E)", "(J)".
+pub fn snes_pal(stem: &str) -> bool {
+    const PAL: &[&str] = &[
+        "Japan", "Europe", "Germany", "France", "Spain", "Italy", "UK", "Australia",
+        "Netherlands", "Sweden", "Scandinavia", "J", "E", "G", "F", "S", "I", "A",
+    ];
+    let mut pal = false;
+    for region in region_tags(stem) {
+        if PAL.contains(&region) {
+            pal = true;
+        } else if matches!(region, "USA" | "Canada" | "Brazil" | "World")
+            // GoodTools codes with a US release: "(U)", "(JU)", "(UE)".
+            || region.len() <= 3 && region.contains('U') && region.bytes().all(|b| b.is_ascii_uppercase())
+        {
+            return false;
+        }
+    }
+    pal
+}
+
+fn region_tags(stem: &str) -> impl Iterator<Item = &str> {
+    stem.split(['(', '['])
+        .skip(1)
+        .filter_map(|t| t.split([')', ']']).next())
+        .flat_map(|tag| tag.split(',').map(str::trim))
 }
 
 /// No-Intro "(Japan)" or "(Japan, USA)", GoodTools "(J)".
@@ -230,6 +262,7 @@ pub fn shell_presets() -> Vec<(&'static str, Shell)> {
         ("Advance charcoal", DEFAULT_SHELL),
         ("NES grey", NES_SHELL),
         ("SNES grey", SNES_SHELL),
+        ("Super Famicom grey", SNES_PAL_SHELL),
         ("Advance Video grey", FAMILY[0].1),
     ];
     out.extend(

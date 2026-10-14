@@ -41,7 +41,7 @@ doesn't flash anything to the device.
 | `L1` / `R1`      | Switch shelves (GBA, GB, GBC, NES, SNES) |
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
-| `START`          | GBA: choose the emulator core           |
+| `START`          | Cart colour and finish (GBA: and core)   |
 | `HOME`           | Menu (settings, Wi-Fi, About)           |
 
 ### In game
@@ -73,6 +73,13 @@ doesn't flash anything to the device.
 | Press `Power`      | Sleep / wake                           |
 | Hold `Power`       | Shut down, or exit to the stock OS     |
 
+**Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour, a
+solid, see-through or glitter finish, and the shape: original or Color for Game Boy carts, US or
+Europe / Japan for SNES carts. On a
+GBA cart `START` opens the core picker: `Left` / `Right` swap the core, `Up` changes the colour
+and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
+in `Slot/Labels/cart_shell.ini`.
+
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run
 on FCEUmm. No BIOS is needed. NES carts are grey; a ROM named as a Japanese release, such as
 `Rockman (Japan).nes`, wears a coloured Famicom plastic instead (picked from its name, not the
@@ -81,7 +88,8 @@ real cart's colour). Cart Art fetches NES labels too (see below), or put your ow
 stretched to fill the screen with `L1` / `R1`. RetroAchievements work for NES too.
 
 **SNES:** put `.sfc` or `.smc` ROMs in `Slot/Games/SNES`; they get a shelf of SNES cartridges and
-run on Snes9x. No BIOS is needed. `L1` / `R1` and `X` / `Y` are the SNES's own buttons (no turbo
+run on Snes9x. No BIOS is needed. European and Japanese games, such as `Earthbound (Europe).sfc`,
+get the rounder PAL / Super Famicom cart. `L1` / `R1` and `X` / `Y` are the SNES's own buttons (no turbo
 on SNES), so `SELECT + X` switches the picture between original and full screen. Cart Art fetches
 SNES labels too, and RetroAchievements work.
 

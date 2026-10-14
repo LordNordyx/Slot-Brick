@@ -2,9 +2,9 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::cart::{cart_box, gb_shell_of, label_colour, label_text, CART_H, CART_W};
+use crate::cart::{cart_box, gb_shell_of, snes_shell_of, label_colour, label_text, CART_H, CART_W};
 use crate::hud::Millis;
-use crate::silhouette::GbShell;
+use crate::silhouette::{GbShell, SnesShell};
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
 
 const SIDE_SCALE: f32 = 0.78;
@@ -54,6 +54,7 @@ pub struct Shelf {
     gbc_shadow: Option<TexId>,
     nes_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
+    snes_pal_shadow: Option<TexId>,
     shells: Vec<Option<GbShell>>,
     ride: f32,
     vel: f32,
@@ -73,6 +74,7 @@ impl Shelf {
             gbc_shadow: None,
             nes_shadow: None,
             snes_shadow: None,
+            snes_pal_shadow: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -101,8 +103,11 @@ impl Shelf {
         self.nes_shadow = Some(face);
     }
 
-    pub fn set_snes_shadow(&mut self, face: TexId) {
-        self.snes_shadow = Some(face);
+    pub fn set_snes_shadow(&mut self, shell: SnesShell, face: TexId) {
+        match shell {
+            SnesShell::Us => self.snes_shadow = Some(face),
+            SnesShell::Pal => self.snes_pal_shadow = Some(face),
+        }
     }
 
     pub fn set_faces(&mut self, faces: Vec<TexId>) {
@@ -118,6 +123,16 @@ impl Shelf {
 
     pub fn set_face(&mut self, i: usize, tex: TexId) -> Option<TexId> {
         self.faces.get_mut(i).and_then(|f| f.replace(tex))
+    }
+
+    /// Puts cart `i` in another plastic or shape; its face, now out of date, is handed back.
+    pub fn set_shell(&mut self, i: usize, shell: Option<slot_store::ShellChoice>) -> Option<TexId> {
+        let cart = self.carts.get_mut(i)?;
+        cart.shell = shell;
+        if let Some(s) = self.shells.get_mut(i) {
+            *s = gb_shell_of(cart);
+        }
+        self.take_face(i)
     }
 
     pub fn take_face(&mut self, i: usize) -> Option<TexId> {
@@ -348,7 +363,10 @@ impl Shelf {
             if alpha < 1.0 {
                 let backing = match self.shells.get(i).copied().flatten() {
                     None if cart.platform == slot_store::Platform::Nes => self.nes_shadow,
-                    None if cart.platform == slot_store::Platform::Snes => self.snes_shadow,
+                    None if cart.platform == slot_store::Platform::Snes => match snes_shell_of(cart) {
+                        Some(SnesShell::Pal) => self.snes_pal_shadow,
+                        _ => self.snes_shadow,
+                    },
                     None => self.shadow,
                     Some(GbShell::Notched) => self.gb_shadow,
                     Some(GbShell::Rounded) => self.gbc_shadow,

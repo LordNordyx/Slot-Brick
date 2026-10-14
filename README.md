@@ -5,12 +5,12 @@
 <h1 align="center">Slot. for TrimUI Brick</h1>
 
 <p align="center">
-  A lightweight frontend for your Game Boy, Game Boy Color, and Game Boy Advance collection.<br>
+  A lightweight frontend for your Game Boy, Game Boy Color, Game Boy Advance, NES, and SNES collection.<br>
   Built for the <strong>original TrimUI Brick</strong> running <strong>stock firmware</strong>.
 </p>
 
 <p align="center">
-  <strong>GB · GBC · GBA</strong> &nbsp;|&nbsp; Stock firmware &nbsp;|&nbsp; Work in progress
+  <strong>GB · GBC · GBA · NES · SNES</strong> &nbsp;|&nbsp; Stock firmware &nbsp;|&nbsp; Work in progress
 </p>
 
 <p align="center">
@@ -36,6 +36,8 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 
 | Feature | Details |
 | :--- | :--- |
+| **NES and SNES** | Their own shelves of NES and SNES cartridges, running on FCEUmm and Snes9x. No BIOS needed. |
+| **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
 | **Brick integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
@@ -99,10 +101,10 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 | :--- | :--- |
 | `Left` / `Right` | Browse the carousel |
 | `Up` / `Down` | Jump to the previous / next letter |
-| `L1` / `R1` | Switch between the GB, GBC, and GBA shelves |
+| `L1` / `R1` | Switch between the GB, GBC, GBA, NES, and SNES shelves |
 | Tap `A` | Resume the last save state |
 | Hold `A` | Start the game fresh |
-| `START` | Choose the emulator core |
+| `START` | Customise the cartridge (GBA: also choose the emulator core) |
 | `HOME` | Open the menu: settings, Wi-Fi, and About |
 
 ### In game
@@ -116,11 +118,11 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 | `SELECT` + `R1` | Save state |
 | `SELECT` + `L1` | Load the most recent save state |
 | `SELECT` + `A` | Cycle shaders (next) |
-| `SELECT` + `X` | **GBA:** switch between 3:2 and 4:3 full screen; saved per game |
+| `SELECT` + `X` | **GBA / SNES:** switch between original and full screen; saved per game |
 | `SELECT` + `Y` | Toggle colour correction |
 | `SELECT` + `Up` / `Down` | Adjust brightness |
 | `SELECT` + `Left` / `Right` | Adjust the blue light filter |
-| `L1` / `R1` | **GB / GBC:** switch between stretched / original picture |
+| `L1` / `R1` | **GB / GBC / NES:** switch between stretched / original picture. On SNES they are the game's own buttons |
 | Hold `L2` | Rewind |
 | Hold `R2` | Fast-forward |
 | Double-tap `R2` | Lock fast-forward on; press again to unlock |
@@ -133,6 +135,24 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 | `Fn` slider | Mute / unmute |
 | Press `Power` | Sleep / wake; game state is saved before sleep |
 | Hold `Power` | Shut down or exit to the stock OS |
+
+## Customising cartridges
+
+Press `START` on a game on the shelf to change its cartridge:
+
+- **Colour:** the original, plain colours, or special-edition plastics.
+- **Finish:** solid, see-through, or glitter.
+- **Shape:** Game Boy carts can use the original or the Color shape, and SNES carts the US or the Europe / Japan shape.
+
+The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, and `Down` the finish.
+
+## NES and SNES
+
+- Put `.nes` ROMs in `Slot/Games/NES` and `.sfc` / `.smc` ROMs in `Slot/Games/SNES`.
+- No BIOS is needed for either.
+- Japanese NES releases get a coloured Famicom cart.
+- European and Japanese SNES games get the rounder PAL / Super Famicom cart.
+- On SNES, `X`, `Y`, `L1`, and `R1` go to the game.
 
 ## Stock firmware apps
 

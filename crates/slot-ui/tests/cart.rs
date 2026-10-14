@@ -821,3 +821,34 @@ fn a_clear_cart_lights_its_label_recess_no_brighter_than_its_plastic() {
         "the recess edge {lit:?} glares against the plastic {plastic:?}"
     );
 }
+
+#[test]
+fn a_pal_snes_cart_is_narrower_and_the_menu_can_swap_the_shape() {
+    use slot_store::{Outline, ShellChoice, ShellFinish};
+    use slot_ui::{snes_shell_of, SnesShell};
+    let snes = |stem: &str, outline: Option<Outline>| slot_store::Cart {
+        platform: Platform::Snes,
+        stem: stem.into(),
+        rom: format!("Games/SNES/{stem}.sfc").into(),
+        label: None,
+        code: String::new(),
+        shell: outline.map(|outline| ShellChoice { outline, colour: [0x80; 3], finish: ShellFinish::Solid }),
+        title: String::new(),
+    };
+    let side = |c: &slot_store::Cart| {
+        let f = cart_face(c);
+        f.rgba[(((f.h / 2) * f.w + 4) * 4 + 3) as usize]
+    };
+    let us = snes("Mario (USA)", None);
+    let pal = snes("Mario (Europe)", None);
+    assert_eq!(snes_shell_of(&us), Some(SnesShell::Us));
+    assert_eq!(snes_shell_of(&pal), Some(SnesShell::Pal));
+    assert!(side(&us) > 250, "the US cart's wing is missing");
+    assert_eq!(side(&pal), 0, "the PAL cart fills the US cart's width");
+
+    let forced = snes("Mario (USA)", Some(Outline::Rounded));
+    assert_eq!(snes_shell_of(&forced), Some(SnesShell::Pal));
+    let forced = snes("Mario (Europe)", Some(Outline::Notched));
+    assert_eq!(snes_shell_of(&forced), Some(SnesShell::Us));
+    assert_eq!(snes_shell_of(&snes("Mario (Europe)", Some(Outline::Auto))), Some(SnesShell::Pal));
+}

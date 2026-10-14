@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 157">
+  <!-- The PAL and Super Famicom cart: rounder and a little narrower than the US one, so it
+       stands in the same box with room either side. -->
+  <path d="M 45.2 0 L 194.9 0 L 194.9 2 L 224 2 Q 230 2 230 8 L 230 151 Q 230 157 224 157 L 16 157 Q 10 157 10 151 L 10 8 Q 10 2 16 2 L 45.2 2 Z" fill="#fff"/>
+</svg>
