@@ -28,6 +28,8 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          # The whole history and tags: the notes list what changed since the last release.
+          fetch-depth: 0
 
       - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
@@ -48,19 +50,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          SUBJECT: ${{ github.event.head_commit.message }}
         run: |
-          short=$(git rev-parse --short HEAD)
-          # A merge's first line only names the branch; the PR's title is the next one.
-          title=$(printf '%s\n' "$SUBJECT" | sed '/^$/d' | head -1)
-          case "$title" in "Merge pull request"*) title=$(printf '%s\n' "$SUBJECT" | sed '/^$/d' | sed -n 2p);; esac
-          {
-            echo "The latest build of \`main\`, made automatically: ${short}, $(date -u '+%Y-%m-%d %H:%M UTC')."
-            echo
-            echo "$title"
-            echo
-            echo "Not a numbered release: it may have bugs. To install, copy everything inside the \`SD-CARD\` folder to the card's root (see the README). To update, replace \`Slot/System/slot\` and any other changed files."
-          } > notes.md
+          bash brick/dev-notes.sh > notes.md
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           gh release create dev slot-brick-dev-sd-card.zip \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease
