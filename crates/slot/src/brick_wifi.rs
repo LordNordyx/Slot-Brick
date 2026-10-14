@@ -81,36 +81,53 @@ fn supplicant_up()->bool{SOCKETS.iter().any(|s|Path::new(s).exists())}
 /// One helper at a time: the boot repair and the menu may both ask, and two helpers
 /// stopping and starting the same supplicant would undo each other.
 static HELPER:std::sync::Mutex<()>=std::sync::Mutex::new(());
-/// At startup: the firmware starts a supplicant with the radio still blocked, so saved
-/// networks are never joined until something repairs it. Do that in the background, as
-/// opening the Wi-Fi menu would, so Wi-Fi comes up on its own. The firmware may start its
-/// supplicant after slot, so wait for it rather than look once.
+/// At startup: Wi-Fi as it was left. The firmware may start a supplicant with the radio still
+/// blocked (saved networks are then never joined), or, with slot in place of its menu, start
+/// none at all. So wait a little for its own, repair that, or else start Wi-Fi here, as
+/// opening the Wi-Fi menu and turning it on would.
 pub fn repair_at_boot(){
+    let root=card_root();
+    if !wanted(&root){eprintln!("wifi: boot: Wi-Fi was turned off; leaving it off");return}
     let spawned=thread::Builder::new().name("slot-wifi-boot".into()).spawn(||{
-        boot_repair(supplicant_up,online,||helper_run("ensure",&AtomicBool::new(false)),|ms|thread::sleep(Duration::from_millis(ms)));
+        let quiet=AtomicBool::new(false);
+        boot_repair(supplicant_up,online,|up|helper_run(if up{"ensure"}else{"start"},&quiet),|ms|thread::sleep(Duration::from_millis(ms)));
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
 }
-/// How long startup waits for the firmware's supplicant, and for a saved network to join.
-const BOOT_WAIT_MS:u64=60_000;
+/// Where the Wi-Fi menu's on/off is kept, so startup brings Wi-Fi back as it was.
+const CHOICE_FILE:&str="Config/wifi.txt";
+/// Wi-Fi was left on: as last turned on or off in the menu, else whenever a network is saved.
+fn wanted(root:&Path)->bool{
+    match fs::read_to_string(root.join(CHOICE_FILE)).map(|s|s.trim().to_string()).as_deref(){
+        Ok("off")=>false,
+        Ok("on")=>true,
+        _=>[Path::new("/etc/wifi/wpa_supplicant.conf").to_path_buf(),root.join("Config/wpa_supplicant.conf")].iter()
+            .any(|p|fs::read_to_string(p).is_ok_and(|s|s.lines().any(|l|l.trim_start().starts_with("network="))))
+    }
+}
+fn remember(on:bool){
+    let path=card_root().join(CHOICE_FILE);
+    if let Err(e)=fs::write(&path,if on{"on\n"}else{"off\n"}){eprintln!("wifi: {}: {e}",path.display());}
+}
+/// How long startup waits for the firmware's own supplicant, and for a saved network to join.
+const FIRMWARE_WAIT_MS:u64=10_000;
 const JOIN_WAIT_MS:u64=20_000;
 const BOOT_POLL_MS:u64=1_000;
-/// Wait for a supplicant, repair it, and if no network has joined a while later, repair once
-/// more: the firmware can still be bringing the radio up the first time.
-fn boot_repair(up:impl Fn()->bool,online:impl Fn()->bool,mut ensure:impl FnMut()->Result<()>,sleep:impl Fn(u64)){
+/// Give the firmware a moment to start its supplicant; then repair it, or start one
+/// (`bring_up(up)`). If no network has joined a while later, do it once more: the firmware
+/// can still be bringing the radio up, or undo what was done.
+fn boot_repair(up:impl Fn()->bool,online:impl Fn()->bool,mut bring_up:impl FnMut(bool)->Result<()>,sleep:impl Fn(u64)){
     let mut waited=0;
-    while !up(){
-        if waited>=BOOT_WAIT_MS{eprintln!("wifi: boot repair: no supplicant after {} s; Wi-Fi left off",BOOT_WAIT_MS/1000);return}
-        sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;
-    }
+    while !up() && waited<FIRMWARE_WAIT_MS{sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;}
     for attempt in 1..=2{
-        if let Err(e)=ensure(){eprintln!("wifi: boot repair {attempt}: {e}");}
+        let was_up=up();
+        if !was_up{eprintln!("wifi: boot: no supplicant; starting Wi-Fi");}
+        if let Err(e)=bring_up(was_up){eprintln!("wifi: boot repair {attempt}: {e}");}
         let mut waited=0;
         while waited<JOIN_WAIT_MS{
             if online(){eprintln!("wifi: boot repair: online");return}
             sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;
         }
-        if !up(){return}
     }
     eprintln!("wifi: boot repair: not online (no saved network in range?)");
 }
@@ -174,6 +191,7 @@ fn run(job:Job,cancel:&AtomicBool)->Result<Reply>{
     }
     if let Job::Power(on)=job{
         service(on,cancel)?;
+        remember(on);
         if !on{return Ok(Reply{on:false,status:"Wi-Fi off".into(),networks:Some(Vec::new())})}
         for _ in 0..20{if Control::open().is_ok(){break}pause(cancel,250)?;}
         return run(Job::Scan(false),cancel)
@@ -493,20 +511,31 @@ impl Painter{
     impl Mock{fn new(steps:Vec<(&str,Result<&str>)>)->Self{Self{steps:RefCell::new(steps.into_iter().map(|(a,b)|(a.into(),b.map(String::from))).collect())}}fn done(&self){assert!(self.steps.borrow().is_empty());}}
     impl Supplicant for Mock{fn command(&self,s:&str)->Result<String>{let(a,b)=self.steps.borrow_mut().pop_front().expect("unexpected command");assert_eq!(a,s);b}}
     fn network()->Network{Network{ssid:b"Test".to_vec(),signal:-40,security:Security::Personal,saved:None}}
-    #[test]fn boot_repair_waits_for_a_late_supplicant_then_repairs_once_it_joins(){
-        let t=Cell::new(0u64);let runs=Cell::new(0);
-        // The supplicant appears 5 s in; a network joins 3 s after the repair.
-        boot_repair(||t.get()>=5_000,||runs.get()>0&&t.get()>=8_000,||{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
-        assert_eq!(runs.get(),1,"repaired {} times",runs.get());
+    #[test]fn boot_repair_repairs_a_late_firmware_supplicant(){
+        let t=Cell::new(0u64);let runs=RefCell::new(Vec::new());
+        // The firmware's supplicant appears 5 s in; a network joins 3 s after the repair.
+        boot_repair(||t.get()>=5_000,||!runs.borrow().is_empty()&&t.get()>=8_000,|up|{runs.borrow_mut().push(up);Ok(())},|ms|t.set(t.get()+ms));
+        assert_eq!(*runs.borrow(),vec![true],"repaired the firmware's supplicant once");
     }
-    #[test]fn boot_repair_tries_twice_then_gives_up_and_never_without_a_supplicant(){
+    #[test]fn boot_repair_starts_wifi_itself_when_the_firmware_never_does(){
+        let t=Cell::new(0u64);let started=Cell::new(false);
+        boot_repair(||started.get(),||started.get()&&t.get()>=FIRMWARE_WAIT_MS+2_000,|up|{assert!(!up);started.set(true);Ok(())},|ms|t.set(t.get()+ms));
+        assert!(started.get(),"Wi-Fi was never started");
+        assert!(t.get()<=FIRMWARE_WAIT_MS+JOIN_WAIT_MS,"waited past joining");
+    }
+    #[test]fn boot_repair_tries_twice_then_gives_up(){
         let t=Cell::new(0u64);let runs=Cell::new(0);
-        boot_repair(||true,||false,||{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
+        boot_repair(||true,||false,|_|{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
         assert_eq!(runs.get(),2);
-        let runs=Cell::new(0);let t=Cell::new(0u64);
-        boot_repair(||false,||false,||{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
-        assert_eq!(runs.get(),0,"repaired with no supplicant");
-        assert!(t.get()<=BOOT_WAIT_MS+BOOT_POLL_MS,"waited forever");
+    }
+    #[test]fn wifi_comes_back_as_it_was_left(){
+        let d=tempfile::tempdir().unwrap();
+        fs::create_dir_all(d.path().join("Config")).unwrap();
+        fs::write(d.path().join(CHOICE_FILE),"off\n").unwrap();assert!(!wanted(d.path()));
+        fs::write(d.path().join(CHOICE_FILE),"on\n").unwrap();assert!(wanted(d.path()));
+        fs::remove_file(d.path().join(CHOICE_FILE)).unwrap();
+        fs::write(d.path().join("Config/wpa_supplicant.conf"),"ctrl_interface=/var/run/wpa_supplicant\nnetwork={\n ssid=\"Home\"\n}\n").unwrap();
+        assert!(wanted(d.path()),"a saved network and no choice yet: Wi-Fi on");
     }
     #[test]fn parse_scans(){let n=scan_rows("header\na\t2412\t-80\t[WPA2-PSK-CCMP]\tMy\\x20WiFi\nb\t2412\t-40\t[WPA2-PSK-CCMP]\tMy WiFi\nc\t2412\t-30\t[ESS]\tCafe\nd\t2412\t-20\t[WPA2-EAP-CCMP]\tWork\n","header\n7\tMy WiFi\tany\t[CURRENT]\n");assert_eq!(n.len(),3);assert_eq!(n[0].security,Security::Unsupported);assert_eq!(n[2].signal,-40);assert_eq!(n[2].saved,Some(7));}
     #[test]fn password_bytes(){assert!(psk("short").is_err());assert!(psk("1234567\n").is_err());assert_eq!(psk("Abc\"\\123").unwrap(),"\"Abc\"\\123\"");assert_eq!(psk(&"a".repeat(64)).unwrap(),"a".repeat(64));assert!(psk(&"z".repeat(64)).is_err());}

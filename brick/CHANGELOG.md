@@ -1,6 +1,8 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Wi-Fi comes back on at startup as it was left: Slot remembers whether Wi-Fi was on, and
+  starts it itself when the firmware does not (it may not, with Slot in place of its menu).
 - Cart colours: START on a game changes its cartridge's colour, finish (solid, see-through,
   glitter) and, for Game Boy carts, its shape, previewed live. NES and SNES carts only change
   shape (NES or Famicom; US or PAL), as the real ones came in their system's grey; a Famicom
