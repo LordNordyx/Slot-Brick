@@ -2,7 +2,7 @@ use slot_store::{Cart, Platform};
 use slot_ui::{
     cart_box, draw_empty_slot, edge, foot_y, housing, icon_box, opening, recess, seated_box, Draw,
     Shelf, SlotChrome, TexId, ALERT_PX, CART_H, CART_W, GB_LABEL_H, GB_LABEL_Y, LABEL_H, LABEL_Y,
-    MOUTH_H, NES_LABEL_H, NES_LABEL_Y, OUT_H, OUT_W,
+    MOUTH_H, NES_LABEL_H, NES_LABEL_Y, OUT_H, OUT_W, SNES_LABEL_H, SNES_LABEL_Y,
 };
 
 const CENTRED: f32 = (OUT_W - CART_W) as f32 / 2.0;
@@ -47,9 +47,21 @@ fn nes() -> Cart {
     }
 }
 
+fn snes() -> Cart {
+    Cart {
+        platform: Platform::Snes,
+        stem: "Super Mario Kart".into(),
+        rom: "Games/SNES/Super Mario Kart.sfc".into(),
+        label: None,
+        code: String::new(),
+        shell: None,
+        title: String::new(),
+    }
+}
+
 /// Every cart shape the slot takes.
-fn both() -> [(&'static str, Cart); 3] {
-    [("the GBA cart", cart()), ("the Game Boy pak", pak()), ("the NES cart", nes())]
+fn both() -> [(&'static str, Cart); 4] {
+    [("the GBA cart", cart()), ("the Game Boy pak", pak()), ("the NES cart", nes()), ("the SNES cart", snes())]
 }
 
 fn label_band(c: &Cart) -> (f32, f32) {
@@ -57,6 +69,7 @@ fn label_band(c: &Cart) -> (f32, f32) {
         Platform::Gba => (LABEL_Y as f32, LABEL_H as f32),
         Platform::Gb | Platform::Gbc => (GB_LABEL_Y as f32, GB_LABEL_H as f32),
         Platform::Nes => (NES_LABEL_Y as f32, NES_LABEL_H as f32),
+        Platform::Snes => (SNES_LABEL_Y as f32, SNES_LABEL_H as f32),
     };
     let k = seated_box(c.platform).1 as f32 / cart_box(c.platform).1 as f32;
     (y * k, h * k)

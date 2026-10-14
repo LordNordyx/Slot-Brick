@@ -46,3 +46,13 @@ fn a_booted_app_root_has_the_same_folders() {
         assert!(d.path().join(name).is_dir(), "app root is missing {name}");
     }
 }
+
+#[test]
+fn every_platform_has_its_games_labels_saves_and_states_folders() {
+    for platform in slot_store::Platform::ALL {
+        for top in ["Games", "Labels", "Saves", "States"] {
+            let want = format!("{top}/{}", platform.dir_name());
+            assert!(slot::root::DIRS.contains(&want.as_str()), "{want} is not created at startup");
+        }
+    }
+}

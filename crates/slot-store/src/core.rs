@@ -11,10 +11,11 @@ pub enum Core {
     Mgba,
     Gpsp,
     Fceumm,
+    Snes9x,
 }
 
 impl Core {
-    pub const ALL: [Core; 3] = [Core::Mgba, Core::Gpsp, Core::Fceumm];
+    pub const ALL: [Core; 4] = [Core::Mgba, Core::Gpsp, Core::Fceumm, Core::Snes9x];
     /// The GBA's choice of cores, the picker board's two sockets (in Core::index order).
     pub const PICKER: [Core; 2] = [Core::Mgba, Core::Gpsp];
 
@@ -23,6 +24,7 @@ impl Core {
             Core::Mgba => "mgba",
             Core::Gpsp => "gpsp",
             Core::Fceumm => "fceumm",
+            Core::Snes9x => "snes9x",
         }
     }
 
@@ -35,6 +37,7 @@ impl Core {
             Core::Mgba => "mGBA",
             Core::Gpsp => "gpSP",
             Core::Fceumm => "FCEUmm",
+            Core::Snes9x => "Snes9x",
         }
     }
 
@@ -43,15 +46,17 @@ impl Core {
             "mgba" => Some(Core::Mgba),
             "gpsp" => Some(Core::Gpsp),
             "fceumm" => Some(Core::Fceumm),
+            "snes9x" => Some(Core::Snes9x),
             _ => None,
         }
     }
 
     pub fn runs(self, platform: Platform) -> bool {
         match self {
-            Core::Mgba => platform != Platform::Nes,
+            Core::Mgba => matches!(platform, Platform::Gba | Platform::Gb | Platform::Gbc),
             Core::Gpsp => platform == Platform::Gba,
             Core::Fceumm => platform == Platform::Nes,
+            Core::Snes9x => platform == Platform::Snes,
         }
     }
 
@@ -59,6 +64,7 @@ impl Core {
         match platform {
             Platform::Gba | Platform::Gb | Platform::Gbc => Core::Mgba,
             Platform::Nes => Core::Fceumm,
+            Platform::Snes => Core::Snes9x,
         }
     }
 }

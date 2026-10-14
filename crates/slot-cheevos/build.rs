@@ -24,7 +24,7 @@ fn main() {
         .include("libretro")
         .define("RC_STATIC", None)
         .define("RC_CLIENT_SUPPORTS_HASH", None)
-        // GB, GBC, GBA and NES hash the ROM file itself: no discs, archives or encryption.
+        // GB, GBC, GBA, NES and SNES hash the ROM file itself: no discs, archives or encryption.
         .define("RC_HASH_NO_DISC", None)
         .define("RC_HASH_NO_ENCRYPTED", None)
         .define("RC_HASH_NO_ZIP", None)

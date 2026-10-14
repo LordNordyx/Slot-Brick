@@ -4,9 +4,9 @@
 //!
 //! - GB, GBC, GBA: label scans from the slot art set behind Cart Studio (art.slot-cfw.fyi,
 //!   scans from ScreenScraper), found by the ROM's CRC32.
-//! - NES: the set has none, so the label is cut out of a LaunchBox Games Database "Cart -
-//!   Front" picture (images.launchbox-app.com), found by the ROM's file name. Only pictures
-//!   of the standard NES cart are used, whose label always sits in the same place.
+//! - NES, SNES: the set has none, so the label is cut out of a LaunchBox Games Database
+//!   "Cart - Front" picture (images.launchbox-app.com), found by the ROM's file name. Only
+//!   pictures of the standard US cart are used, whose label always sits in the same place.
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -15,18 +15,55 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use slot_store::{atomic_write, best_match, scan, Cart, Platform};
+use slot_store::{atomic_write, best_match, same_title_match, scan, Cart, Platform};
 
 /// Origins: `https://host`, or `http://host:port` for the tests' local server.
 const SLOT_ART: &str = "https://art.slot-cfw.fyi";
-const NES_ART: &str = "https://images.launchbox-app.com";
-/// NES cart pictures by game name, shipped on the card: built by brick/make-nes-cart-labels.py.
-const NES_LABELS: &str = "System/nes-cart-labels.txt";
-/// Pictures tried per NES game before giving up: the first may be a gold or odd cart.
-const NES_TRIES: usize = 3;
-/// A cut NES label's height at most: the shelf draws it a few hundred pixels tall, and some
-/// pictures are 3000 pixels high, which would cost megabytes on the card for nothing.
-const NES_LABEL_MAX_H: u32 = 512;
+const PHOTOS: &str = "https://images.launchbox-app.com";
+/// Pictures tried per game before giving up: the first may be a gold or odd cart.
+const PHOTO_TRIES: usize = 3;
+/// A cut label's longer side at most: the shelf draws it a few hundred pixels across, and
+/// some pictures are 3000 pixels or more, which would cost megabytes on the card for nothing.
+const LABEL_MAX: u32 = 512;
+
+/// A console whose labels are cut from pictures of its cart: where the picture list is, the
+/// standard cart's shape (height / width), where its label sits and where plain plastic
+/// shows (side: beside the label, to learn the plastic's colour; plain: must be that
+/// colour), all as fractions of the cart's outline.
+struct CartPhoto {
+    platform: Platform,
+    /// Built by brick/make-cart-labels.py, shipped on the card.
+    index: &'static str,
+    aspect: (f32, f32),
+    label: [f32; 4],
+    side: [f32; 4],
+    plain: [[f32; 4]; 2],
+}
+
+/// The NES cart: label top right of a full-height grip.
+const NES_PHOTO: CartPhoto = CartPhoto {
+    platform: Platform::Nes,
+    index: "System/nes-cart-labels.txt",
+    aspect: (1.08, 1.16),
+    label: [0.405, 0.006, 0.865, 0.680],
+    side: [0.02, 0.3, 0.065, 0.6],
+    plain: [[0.42, 0.73, 0.85, 0.80], [0.885, 0.1, 0.93, 0.6]],
+};
+
+/// The US SNES cart: label across the top of the middle, ridged wings either side.
+const SNES_PHOTO: CartPhoto = CartPhoto {
+    platform: Platform::Snes,
+    index: "System/snes-cart-labels.txt",
+    aspect: (0.62, 0.67),
+    label: [0.200, 0.008, 0.807, 0.432],
+    side: [0.04, 0.35, 0.10, 0.65],
+    plain: [[0.25, 0.47, 0.75, 0.55], [0.88, 0.2, 0.97, 0.8]],
+};
+
+fn photo_spec(platform: Platform) -> Option<&'static CartPhoto> {
+    [&NES_PHOTO, &SNES_PHOTO].into_iter().find(|p| p.platform == platform)
+}
+
 const LISTING_MAX: usize = 8 << 20;
 const IMAGE_MAX: usize = 8 << 20;
 /// The index changes rarely; a week-old copy saves a megabyte per run.
@@ -69,7 +106,7 @@ pub struct ArtJob {
 
 impl ArtJob {
     pub fn start(root: PathBuf) -> Self {
-        Self::start_at(root, Servers { labels: SLOT_ART.into(), nes: NES_ART.into() })
+        Self::start_at(root, Servers { labels: SLOT_ART.into(), photos: PHOTOS.into() })
     }
 
     /// Tests point the servers at a local one.
@@ -99,21 +136,22 @@ impl Drop for ArtJob {
     }
 }
 
-/// The label scans' origin and the NES cart pictures'.
+/// The label scans' origin and the cart pictures'.
 struct Servers {
     labels: String,
-    nes: String,
+    photos: String,
 }
 
 /// Everything fetched or computed once per run.
 struct Sources<'a> {
     root: &'a Path,
     server: &'a str,
-    nes_server: &'a str,
+    photo_server: &'a str,
     labels: Option<HashMap<u32, String>>,
     crcs: Crcs,
     games: Games,
-    nes: NesLabels,
+    /// Each console's picture list, read when its first cart needs it.
+    photos: HashMap<Platform, PhotoIndex>,
 }
 
 fn run(
@@ -132,11 +170,11 @@ fn run(
     let mut src = Sources {
         root,
         server: &servers.labels,
-        nes_server: &servers.nes,
+        photo_server: &servers.photos,
         labels: None,
         crcs: Crcs::load(root),
         games: Games::load(root),
-        nes: NesLabels::load(root),
+        photos: HashMap::new(),
     };
     let result = (|| {
         for (at, cart) in carts.iter().enumerate() {
@@ -149,9 +187,9 @@ fn run(
                 name: cart.stem.clone(),
             });
             // No label scan (homebrew, most hacks): the shelf's file-name label stays.
-            let outcome = match cart.platform {
-                Platform::Nes => fetch_nes_label(cart, &src)?,
-                _ => fetch_label(cart, &mut src)?,
+            let outcome = match photo_spec(cart.platform) {
+                Some(spec) => fetch_photo_label(cart, spec, &mut src)?,
+                None => fetch_label(cart, &mut src)?,
             };
             let place = format!("{}/{}", cart.platform.dir_name(), cart.stem);
             match outcome {
@@ -210,6 +248,7 @@ fn platforms_for(platform: Platform) -> &'static [Platform] {
         Platform::Gb => &[Platform::Gb, Platform::Gbc],
         Platform::Gbc => &[Platform::Gbc, Platform::Gb],
         Platform::Nes => &[Platform::Nes],
+        Platform::Snes => &[Platform::Snes],
     }
 }
 
@@ -244,72 +283,72 @@ fn fetch_label(cart: &Cart, src: &mut Sources) -> Result<Outcome, String> {
     Ok(save_label(src.root, &cart, &png, format!("label scan {path} ({how})")))
 }
 
-/// NES cart pictures by name, "Title (Region)" as the name matching scores them.
+/// Cart pictures by name, "Title (Region)" as the name matching scores them.
 #[derive(Default)]
-struct NesLabels {
+struct PhotoIndex {
     names: Vec<String>,
     files: HashMap<String, Vec<String>>,
 }
 
-impl NesLabels {
-    fn load(root: &Path) -> Self {
-        let text = std::fs::read_to_string(root.join(NES_LABELS)).unwrap_or_default();
-        let mut labels = NesLabels::default();
+impl PhotoIndex {
+    fn load(root: &Path, spec: &CartPhoto) -> Self {
+        let text = std::fs::read_to_string(root.join(spec.index)).unwrap_or_default();
+        let mut index = PhotoIndex::default();
         for (name, file) in text.lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.split_once('\t')) {
-            if !labels.files.contains_key(name) {
-                labels.names.push(name.to_string());
+            if !index.files.contains_key(name) {
+                index.names.push(name.to_string());
             }
-            labels.files.entry(name.to_string()).or_default().push(file.to_string());
+            index.files.entry(name.to_string()).or_default().push(file.to_string());
         }
-        labels
+        index
     }
 }
 
 /// A file name on the picture host, nothing that could leave its root.
-fn nes_file_ok(file: &str) -> bool {
+fn photo_file_ok(file: &str) -> bool {
     file.len() <= 64
         && file.ends_with(".png")
         && !file.starts_with('.')
         && file.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
 }
 
-/// A NES label, cut from a picture of the cart found by the ROM's name. A ROM that says it is
-/// a hack only matches a hack's picture, as for the other platforms. Err stops the run: the
-/// picture host cannot be reached, so every other NES cart would wait on it too.
-fn fetch_nes_label(cart: &Cart, src: &Sources) -> Result<Outcome, String> {
-    let Some(name) = best_match(&cart.stem, &src.nes.names) else {
+/// A label cut from a picture of the cart, found by the ROM's name: the same title only, as
+/// the lists hold many hacks whose names begin with a real game's. A ROM that says it is a
+/// hack only matches a hack's picture, as for the other platforms. Err stops the run: the
+/// picture host cannot be reached, so every other cart would wait on it too.
+fn fetch_photo_label(cart: &Cart, spec: &CartPhoto, src: &mut Sources) -> Result<Outcome, String> {
+    let root = src.root;
+    let index = src.photos.entry(spec.platform).or_insert_with(|| PhotoIndex::load(root, spec));
+    let Some(name) = same_title_match(&cart.stem, &index.names) else {
         return Ok(Outcome::NoMatch);
     };
     let mut why = Vec::new();
-    for file in src.nes.files[name].iter().filter(|f| nes_file_ok(f)).take(NES_TRIES) {
+    for file in index.files[name].iter().filter(|f| photo_file_ok(f)).take(PHOTO_TRIES) {
         // One picture failing (too large, refused, gone) leaves the game's others to try.
-        let png = match get(src.nes_server, &format!("/{file}"), IMAGE_MAX) {
+        let png = match get(src.photo_server, &format!("/{file}"), IMAGE_MAX) {
             Ok(Some(png)) => png,
             Ok(None) => {
                 why.push(format!("{file}: gone"));
                 continue;
             }
-            Err(e) if crate::net::unreachable(&e) => return Err(format!("Can't reach the NES picture server: {e}")),
+            Err(e) if crate::net::unreachable(&e) => return Err(format!("Can't reach the cart picture server: {e}")),
             Err(e) => {
                 why.push(format!("{file}: {e}"));
                 continue;
             }
         };
-        match nes_label(&png) {
-            Ok(label) => return Ok(save_label(src.root, cart, &label, format!("{name} cart {file}"))),
+        match label_from_photo(&png, spec) {
+            Ok(label) => return Ok(save_label(root, cart, &label, format!("{name} cart {file}"))),
             Err(e) => why.push(format!("{file}: {e}")),
         }
     }
     Ok(Outcome::Unusable(format!("{name}: {}", why.join("; "))))
 }
 
-/// Where the label sits on the standard NES cart, as fractions of the cart's outline.
-const NES_LABEL_AT: [f32; 4] = [0.405, 0.006, 0.865, 0.680];
-
-/// Cuts the label out of a front picture of a NES cart, as a PNG. Only the standard cart
-/// (Nintendo's mould: label top right, plain plastic beside and below it) is used; others
-/// (Tengen, Famicom, a box) put the label elsewhere and are refused.
-fn nes_label(png: &[u8]) -> Result<Vec<u8>, &'static str> {
+/// Cuts the label out of a front picture of a cart, as a PNG. Only the standard cart (the
+/// spec's shape, plain plastic where it should be) is used; others (Tengen, Famicom, PAL,
+/// a box) put the label elsewhere and are refused.
+fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static str> {
     let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
     let alpha = |x: u32, y: u32| rgba[((y * w + x) * 4 + 3) as usize];
     // The cart's outline: a cut-out picture is transparent around it.
@@ -325,8 +364,8 @@ fn nes_label(png: &[u8]) -> Result<Vec<u8>, &'static str> {
         return Err("an empty picture");
     }
     let (cw, ch) = ((x1 - x0) as f32, (y1 - y0) as f32);
-    if !(1.08..=1.16).contains(&(ch / cw)) || cw < 120.0 {
-        return Err("not a NES cart's shape");
+    if !(spec.aspect.0..=spec.aspect.1).contains(&(ch / cw)) || cw < 120.0 {
+        return Err("not the cart's shape");
     }
     let at = |fx: f32, fy: f32| {
         let x = (x0 + (cw * fx) as u32).min(x1 - 1);
@@ -334,29 +373,30 @@ fn nes_label(png: &[u8]) -> Result<Vec<u8>, &'static str> {
         let i = ((y * w + x) * 4) as usize;
         [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
     };
-    // The plastic left of the grip.
-    let mut side: Vec<[u8; 4]> = [0.02, 0.035, 0.05, 0.065]
-        .iter()
-        .flat_map(|fx| [0.3, 0.4, 0.5, 0.6].map(|fy| at(*fx, fy)))
-        .collect();
+    let grid = |[fx0, fy0, fx1, fy1]: [f32; 4], n: usize| {
+        (0..n * n).map(move |i| {
+            (fx0 + (fx1 - fx0) * (i % n) as f32 / (n - 1) as f32, fy0 + (fy1 - fy0) * (i / n) as f32 / (n - 1) as f32)
+        })
+    };
+    // The plastic beside the label.
+    let mut side: Vec<[u8; 4]> = grid(spec.side, 4).map(|(fx, fy)| at(fx, fy)).collect();
     side.sort_by_key(|p| p[0] as u32 + p[1] as u32 + p[2] as u32);
     let shell = side[side.len() / 2];
-    let share = |[fx0, fy0, fx1, fy1]: [f32; 4]| {
-        let n = 12;
-        let same = (0..n * n)
-            .map(|i| at(fx0 + (fx1 - fx0) * (i % n) as f32 / (n - 1) as f32, fy0 + (fy1 - fy0) * (i / n) as f32 / (n - 1) as f32))
+    let share = |region: [f32; 4]| {
+        let same = grid(region, 12)
+            .map(|(fx, fy)| at(fx, fy))
             .filter(|p| p[3] >= 128 && (0..3).all(|c| p[c].abs_diff(shell[c]) <= 40))
             .count();
-        same as f32 / (n * n) as f32
+        same as f32 / 144.0
     };
-    if share([0.42, 0.73, 0.85, 0.80]) < 0.7 || share([0.885, 0.1, 0.93, 0.6]) < 0.7 {
-        return Err("not the standard NES cart");
+    if spec.plain.iter().any(|r| share(*r) < 0.7) {
+        return Err("not the standard cart");
     }
-    if share(NES_LABEL_AT) > 0.5 {
+    if share(spec.label) > 0.5 {
         return Err("no label on the cart");
     }
     // Rounded inward, so no sliver of plastic rides along the label's edge.
-    let [fx0, fy0, fx1, fy1] = NES_LABEL_AT;
+    let [fx0, fy0, fx1, fy1] = spec.label;
     let (lx, ly) = (x0 + (cw * fx0).ceil() as u32, y0 + (ch * fy0).ceil() as u32);
     let (lw, lh) = (x0 + (cw * fx1) as u32 - lx, y0 + (ch * fy1) as u32 - ly);
     let mut out = Vec::with_capacity((lw * lh * 4) as usize);
@@ -364,7 +404,7 @@ fn nes_label(png: &[u8]) -> Result<Vec<u8>, &'static str> {
         let i = ((y * w + lx) * 4) as usize;
         out.extend_from_slice(&rgba[i..i + (lw * 4) as usize]);
     }
-    let (out, lw, lh) = shrink(out, lw, lh, NES_LABEL_MAX_H);
+    let (out, lw, lh) = shrink(out, lw, lh, LABEL_MAX);
     let mut bytes = Vec::new();
     let mut e = png::Encoder::new(&mut bytes, lw, lh);
     e.set_color(png::ColorType::Rgba);
@@ -375,13 +415,14 @@ fn nes_label(png: &[u8]) -> Result<Vec<u8>, &'static str> {
     Ok(bytes)
 }
 
-/// `rgba` (w x h) scaled down to at most `max_h` tall, each pixel the average of the ones it
-/// covers; a smaller picture is kept as it is.
-fn shrink(rgba: Vec<u8>, w: u32, h: u32, max_h: u32) -> (Vec<u8>, u32, u32) {
-    if h <= max_h {
+/// `rgba` (w x h) scaled down so its longer side is at most `max`, each pixel the average of
+/// the ones it covers; a smaller picture is kept as it is.
+fn shrink(rgba: Vec<u8>, w: u32, h: u32, max: u32) -> (Vec<u8>, u32, u32) {
+    if w.max(h) <= max {
         return (rgba, w, h);
     }
-    let (nw, nh) = (((w as u64 * max_h as u64) / h as u64).max(1) as u32, max_h);
+    let scale = |v: u32| ((v as u64 * max as u64) / w.max(h) as u64).max(1) as u32;
+    let (nw, nh) = (scale(w), scale(h));
     let mut out = Vec::with_capacity((nw * nh * 4) as usize);
     for y in 0..nh {
         let (sy0, sy1) = (y * h / nh, ((y + 1) * h / nh).max(y * h / nh + 1));
@@ -1003,11 +1044,11 @@ mod tests {
     }
 
     fn servers(labels: &str) -> Servers {
-        Servers { labels: labels.into(), nes: "http://127.0.0.1:1".into() }
+        Servers { labels: labels.into(), photos: "http://127.0.0.1:1".into() }
     }
 
     /// A cut-out picture of a cart: `shell` plastic, transparent around it, with a label of
-    /// `label` colour at `at` (fractions of the cart, as NES_LABEL_AT).
+    /// `label` colour at `at` (fractions of the cart, as NES_PHOTO.label).
     fn cart_png(w: u32, h: u32, shell: [u8; 3], label: [u8; 3], at: [f32; 4]) -> Vec<u8> {
         let pad = 10;
         let (pw, ph) = (w + 2 * pad, h + 2 * pad);
@@ -1035,17 +1076,17 @@ mod tests {
 
     #[test]
     fn a_nes_label_is_cut_from_the_standard_cart_and_odd_ones_are_refused() {
-        let label = nes_label(&cart_png(280, 312, GREY, RED, NES_LABEL_AT)).expect("the standard cart");
+        let label = label_from_photo(&cart_png(280, 312, GREY, RED, NES_PHOTO.label), &NES_PHOTO).expect("the standard cart");
         let (rgba, w, h) = decode_rgba(&label).unwrap();
         assert!((w as f32 / 280.0 - 0.46).abs() < 0.01 && (h as f32 / 312.0 - 0.674).abs() < 0.01, "{w}x{h}");
         assert!(rgba.chunks_exact(4).all(|p| p == [0xc0, 0x20, 0x20, 255]), "shell inside the label");
         // Tengen's black cart: the label lower down, over where Nintendo's has plain plastic.
         let tengen = cart_png(280, 318, [20, 20, 20], RED, [0.15, 0.3, 0.85, 0.9]);
-        assert_eq!(nes_label(&tengen), Err("not the standard NES cart"));
+        assert_eq!(label_from_photo(&tengen, &NES_PHOTO), Err("not the standard cart"));
         let famicom = cart_png(400, 250, GREY, RED, [0.1, 0.1, 0.9, 0.7]);
-        assert_eq!(nes_label(&famicom), Err("not a NES cart's shape"));
-        assert_eq!(nes_label(&cart_png(280, 312, GREY, GREY, NES_LABEL_AT)), Err("no label on the cart"));
-        assert_eq!(nes_label(b"<html>"), Err("not a readable PNG"));
+        assert_eq!(label_from_photo(&famicom, &NES_PHOTO), Err("not the cart's shape"));
+        assert_eq!(label_from_photo(&cart_png(280, 312, GREY, GREY, NES_PHOTO.label), &NES_PHOTO), Err("no label on the cart"));
+        assert_eq!(label_from_photo(b"<html>", &NES_PHOTO), Err("not a readable PNG"));
     }
 
     #[test]
@@ -1059,9 +1100,9 @@ mod tests {
         let (odd, w, h) = shrink(rgba.clone(), 4, 4, 3);
         assert_eq!((w, h, odd.len()), (3, 3, 36), "a size that does not divide evenly");
         assert_eq!(shrink(rgba.clone(), 4, 4, 4), (rgba, 4, 4));
-        let tall = cart_png(1400, 1560, GREY, RED, NES_LABEL_AT);
-        let (_, w, h) = decode_rgba(&nes_label(&tall).unwrap()).unwrap();
-        assert_eq!(h, NES_LABEL_MAX_H);
+        let tall = cart_png(1400, 1560, GREY, RED, NES_PHOTO.label);
+        let (_, w, h) = decode_rgba(&label_from_photo(&tall, &NES_PHOTO).unwrap()).unwrap();
+        assert_eq!(h, LABEL_MAX);
         assert!((w as f32 / h as f32 - 644.0 / 1051.0).abs() < 0.01, "{w}x{h} lost the label's shape");
     }
 
@@ -1074,15 +1115,15 @@ mod tests {
         std::fs::write(&path, b"NES\x1a").unwrap();
         std::fs::create_dir_all(root.join("System")).unwrap();
         std::fs::create_dir_all(root.join("Logs")).unwrap();
-        std::fs::write(root.join(NES_LABELS), "Mega Man (USA)\trefused.png\nMega Man (USA)\tgood.png\n").unwrap();
-        let down = Servers { labels: "http://127.0.0.1:1".into(), nes: "http://127.0.0.1:1".into() };
+        std::fs::write(root.join(NES_PHOTO.index), "Mega Man (USA)\trefused.png\nMega Man (USA)\tgood.png\n").unwrap();
+        let down = Servers { labels: "http://127.0.0.1:1".into(), photos: "http://127.0.0.1:1".into() };
         let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), down));
-        assert!(done.unwrap_err().starts_with("Can't reach the NES picture server"));
+        assert!(done.unwrap_err().starts_with("Can't reach the cart picture server"));
         let nes = serve(vec![
             ("/refused.png".into(), 403, b"no".to_vec()),
-            ("/good.png".into(), 200, cart_png(280, 312, GREY, RED, NES_LABEL_AT)),
+            ("/good.png".into(), 200, cart_png(280, 312, GREY, RED, NES_PHOTO.label)),
         ]);
-        let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), Servers { labels: "http://127.0.0.1:1".into(), nes }));
+        let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), Servers { labels: "http://127.0.0.1:1".into(), photos: nes }));
         assert_eq!(done, Ok(Summary { found: 1, missing: 0, failed: 0 }), "the refused picture ended the game");
     }
 
@@ -1095,19 +1136,54 @@ mod tests {
         std::fs::write(&path, b"NES\x1a").unwrap();
         std::fs::create_dir_all(root.join("System")).unwrap();
         std::fs::create_dir_all(root.join("Logs")).unwrap();
-        std::fs::write(root.join(NES_LABELS), "Hard Drivin' (USA)\ttengen.png\n").unwrap();
+        std::fs::write(root.join(NES_PHOTO.index), "Hard Drivin' (USA)\ttengen.png\n").unwrap();
         let nes = serve(vec![("/tengen.png".into(), 200, cart_png(280, 318, [20, 20, 20], RED, [0.15, 0.3, 0.85, 0.9]))]);
-        let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), Servers { labels: "http://127.0.0.1:1".into(), nes }));
+        let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), Servers { labels: "http://127.0.0.1:1".into(), photos: nes }));
         assert_eq!(done, Ok(Summary { found: 0, missing: 1, failed: 0 }));
         let report = std::fs::read_to_string(root.join(REPORT)).unwrap();
-        assert!(report.contains("no label  NES/Hard Drivin' (USA): Hard Drivin' (USA): tengen.png: not the standard NES cart"), "{report}");
+        assert!(report.contains("no label  NES/Hard Drivin' (USA): Hard Drivin' (USA): tengen.png: not the standard cart"), "{report}");
+    }
+
+    const SNES_GREY: [u8; 3] = [0x95, 0x94, 0x9a];
+
+    #[test]
+    fn a_snes_label_is_cut_from_the_us_cart_and_a_pal_one_is_refused() {
+        let label = label_from_photo(&cart_png(640, 410, SNES_GREY, RED, SNES_PHOTO.label), &SNES_PHOTO).expect("the US cart");
+        let (rgba, w, h) = decode_rgba(&label).unwrap();
+        assert!((w as f32 / 640.0 - 0.607).abs() < 0.01 && (h as f32 / 410.0 - 0.424).abs() < 0.01, "{w}x{h}");
+        assert!(rgba.chunks_exact(4).all(|p| p == [0xc0, 0x20, 0x20, 255]), "plastic inside the label");
+        // PAL and Super Famicom carts are taller for their width, their label elsewhere.
+        let pal = cart_png(640, 560, SNES_GREY, RED, [0.15, 0.1, 0.85, 0.6]);
+        assert_eq!(label_from_photo(&pal, &SNES_PHOTO), Err("not the cart's shape"));
+        // A NES picture is no SNES cart, nor the other way round.
+        assert!(label_from_photo(&cart_png(280, 312, GREY, RED, NES_PHOTO.label), &SNES_PHOTO).is_err());
+        assert!(label_from_photo(&cart_png(640, 410, SNES_GREY, RED, SNES_PHOTO.label), &NES_PHOTO).is_err());
+    }
+
+    #[test]
+    fn a_snes_cart_gets_its_label_from_the_snes_list_only() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        for rom in ["Games/SNES/Super Mario Kart (USA).sfc", "Games/NES/Super Mario Kart (USA).nes"] {
+            let path = root.join(rom);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"x").unwrap();
+        }
+        std::fs::create_dir_all(root.join("System")).unwrap();
+        std::fs::create_dir_all(root.join("Logs")).unwrap();
+        std::fs::write(root.join(SNES_PHOTO.index), "Super Mario Kart (USA)\tkart.png\n").unwrap();
+        let photos = serve(vec![("/kart.png".into(), 200, cart_png(640, 410, SNES_GREY, RED, SNES_PHOTO.label))]);
+        let (got, done) = drain(&ArtJob::start_at(root.to_path_buf(), Servers { labels: "http://127.0.0.1:1".into(), photos }));
+        assert_eq!(done, Ok(Summary { found: 1, missing: 1, failed: 0 }), "the NES cart has no list, the SNES one is found");
+        assert_eq!(got[0].platform, Platform::Snes);
+        assert!(root.join("Labels/SNES/Super Mario Kart (USA).png").exists());
     }
 
     #[test]
     fn only_plain_file_names_are_asked_of_the_picture_host() {
-        assert!(nes_file_ok("r2_9a3090ee-82d1-4664-8e2c-6bfda50d44f4.png"));
+        assert!(photo_file_ok("r2_9a3090ee-82d1-4664-8e2c-6bfda50d44f4.png"));
         for bad in ["../x.png", "a/b.png", "a b.png", "x.jpg", ".png", "x.png?y=1", &"a".repeat(70)] {
-            assert!(!nes_file_ok(bad), "{bad}");
+            assert!(!photo_file_ok(bad), "{bad}");
         }
     }
 
@@ -1123,16 +1199,16 @@ mod tests {
         std::fs::create_dir_all(root.join("System")).unwrap();
         std::fs::create_dir_all(root.join("Logs")).unwrap();
         std::fs::write(
-            root.join(NES_LABELS),
+            root.join(NES_PHOTO.index),
             "# test\nMega Man (USA)\ttengen.png\nMega Man (USA)\tnintendo.png\nMega Man (Japan)\t../evil.png\n",
         )
         .unwrap();
         let tengen = cart_png(280, 318, [20, 20, 20], RED, [0.15, 0.3, 0.85, 0.9]);
         let nes = serve(vec![
             ("/tengen.png".into(), 200, tengen),
-            ("/nintendo.png".into(), 200, cart_png(280, 312, GREY, RED, NES_LABEL_AT)),
+            ("/nintendo.png".into(), 200, cart_png(280, 312, GREY, RED, NES_PHOTO.label)),
         ]);
-        let servers = Servers { labels: "http://127.0.0.1:1".into(), nes };
+        let servers = Servers { labels: "http://127.0.0.1:1".into(), photos: nes };
         let (got, done) = drain(&ArtJob::start_at(root.to_path_buf(), servers));
         assert_eq!(done, Ok(Summary { found: 1, missing: 2, failed: 0 }), "the label server was never needed");
         assert_eq!(got[0].stem, "Mega Man (USA)");
@@ -1141,6 +1217,50 @@ mod tests {
         let report = std::fs::read_to_string(root.join(REPORT)).unwrap();
         assert!(report.contains("no match  NES/Mega Man (Hack)"), "a hack wore the game's label: {report}");
         assert!(!root.join(CRC_CACHE).exists(), "a NES ROM was checksummed for nothing");
+    }
+
+    /// As live_nes_labels, for SNES carts: `SLOT_LIVE_ART=1 ... live_snes_labels -- --ignored`.
+    #[test]
+    #[ignore = "needs internet"]
+    fn live_snes_labels() {
+        if std::env::var_os("SLOT_LIVE_ART").is_none() {
+            return;
+        }
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        std::fs::create_dir_all(root.join("System")).unwrap();
+        std::fs::create_dir_all(root.join("Logs")).unwrap();
+        let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../brick/card/Slot").join(SNES_PHOTO.index);
+        std::fs::copy(shipped, root.join(SNES_PHOTO.index)).unwrap();
+        for g in [
+            "Super Mario Kart (USA)",
+            "Super Mario World (USA)",
+            "Super Metroid (Japan, USA) (En,Ja)",
+            "Donkey Kong Country (USA) (Rev 2)",
+            "Chrono Trigger (USA)",
+            "F-Zero (USA)",
+            "Final Fantasy II (USA)",
+            "Not A Real Game",
+        ] {
+            let path = root.join("Games/SNES").join(format!("{g}.sfc"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, b"x").unwrap();
+        }
+        let (_, done) = drain(&ArtJob::start(root.to_path_buf()));
+        eprintln!("{}", std::fs::read_to_string(root.join(REPORT)).unwrap_or_default());
+        let done = done.unwrap();
+        assert!(done.found >= 2 && done.failed == 0, "{done:?}");
+        if let Some(out) = std::env::var_os("SLOT_ART_PREVIEW") {
+            for mut cart in scan(root).unwrap().into_iter().filter(|c| c.label.is_some()) {
+                cart.read_header();
+                let face = slot_ui::cart_face_with(&cart, crate::label_cache::label_art(root, &cart));
+                let path = Path::new(&out).join(format!("snes-{}.png", cart.stem));
+                let mut e = png::Encoder::new(std::fs::File::create(path).unwrap(), face.w, face.h);
+                e.set_color(png::ColorType::Rgba);
+                e.set_depth(png::BitDepth::Eight);
+                e.write_header().unwrap().write_image_data(&face.rgba).unwrap();
+            }
+        }
     }
 
     /// The real picture host and the shipped index: `SLOT_LIVE_ART=1 ... live_nes_labels --
@@ -1155,8 +1275,8 @@ mod tests {
         let root = d.path();
         std::fs::create_dir_all(root.join("System")).unwrap();
         std::fs::create_dir_all(root.join("Logs")).unwrap();
-        let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../brick/card/Slot").join(NES_LABELS);
-        std::fs::copy(shipped, root.join(NES_LABELS)).unwrap();
+        let shipped = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../brick/card/Slot").join(NES_PHOTO.index);
+        std::fs::copy(shipped, root.join(NES_PHOTO.index)).unwrap();
         let games = [
             "Super Mario Bros. (World)",
             "Legend of Zelda, The (USA)",

@@ -142,6 +142,17 @@ const PREFIX_MIN: usize = 8;
 
 /// The libretro name for a ROM named `stem`, if any of `names` is a good match.
 pub fn best_match<'a>(stem: &str, names: &'a [String]) -> Option<&'a str> {
+    matching(stem, names, true)
+}
+
+/// As best_match, but only a name with the very same title: never a longer one that begins
+/// with it. For lists full of hacks and homebrew ("Super Metroid Legacy"), where a game
+/// missing from the list must not take a look-alike's place.
+pub fn same_title_match<'a>(stem: &str, names: &'a [String]) -> Option<&'a str> {
+    matching(stem, names, false)
+}
+
+fn matching<'a>(stem: &str, names: &'a [String], longer: bool) -> Option<&'a str> {
     let exact = libretro_name(stem);
     if let Some(n) = names.iter().find(|n| n.eq_ignore_ascii_case(&exact)) {
         return Some(n);
@@ -174,7 +185,7 @@ pub fn best_match<'a>(stem: &str, names: &'a [String]) -> Option<&'a str> {
     if !same.is_empty() {
         return pick(same);
     }
-    if key.len() < PREFIX_MIN {
+    if !longer || key.len() < PREFIX_MIN {
         return None;
     }
     // "pokemon_emerald" -> "Pokemon - Emerald Version": the shortest longer title wins.

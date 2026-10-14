@@ -274,3 +274,4 @@ unsigned slot_cheevos_console_gba(void) { return RC_CONSOLE_GAMEBOY_ADVANCE; }
 unsigned slot_cheevos_console_gb(void) { return RC_CONSOLE_GAMEBOY; }
 unsigned slot_cheevos_console_gbc(void) { return RC_CONSOLE_GAMEBOY_COLOR; }
 unsigned slot_cheevos_console_nes(void) { return RC_CONSOLE_NINTENDO; }
+unsigned slot_cheevos_console_snes(void) { return RC_CONSOLE_SUPER_NINTENDO; }

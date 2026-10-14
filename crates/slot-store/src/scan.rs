@@ -30,8 +30,9 @@ impl Cart {
                     self.title = title;
                 }
             }
-            // An iNES header names no game: the file name is the title.
-            Platform::Nes => {}
+            // The file name is the title: an iNES header names no game, and a SNES header's
+            // sits at one of several places a copier header can shift.
+            Platform::Nes | Platform::Snes => {}
         }
     }
 }

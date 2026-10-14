@@ -1,4 +1,4 @@
-# NES cart pictures from the LaunchBox Games Database (https://gamesdb.launchbox-app.com/Metadata.zip): name (region), file
+# Nintendo Entertainment System cart pictures from the LaunchBox Games Database (https://gamesdb.launchbox-app.com/Metadata.zip): name (region), file
  Allison of Astra (S1-E2): Allison Doesn't Go Hawaiian (World)	82e9d8a3-b38c-47d2-8faa-1b7b127fcdbc.png
 !Clik! (World)	23c49d7c-ad10-41eb-afc2-60c0b9879456.png
 0 to X (World)	3f47509f-ebd9-4096-a8da-91fffe9adb22.png

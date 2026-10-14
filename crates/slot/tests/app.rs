@@ -2290,6 +2290,20 @@ fn home_x_toggles_a_gba_cart_between_3_2_and_full_screen_and_remembers_it() {
 }
 
 #[test]
+fn a_snes_game_keeps_l_and_r_and_switches_its_picture_with_home_x() {
+    let d = common::tmp_root_with_carts(&[]);
+    std::fs::write(d.path().join("Games/SNES/Super Mario Kart.sfc"), [0u8; 0x200]).unwrap();
+    let mut s = session_playing(d.path());
+    assert_eq!(s.app().canvas(), Platform::Snes.canvas(), "the SNES cart is not the one playing");
+    assert!(s.app().taken_buttons().is_empty(), "slot kept L1/R1 from a SNES game");
+    let start = s.app().source_rect();
+    s.app_mut().apply(slot_input::Action::PictureToggle);
+    assert_eq!(video_mode_for(d.path(), "Super Mario Kart"), VideoMode::Stretch);
+    assert_eq!(s.app().toast(), Some(slot_ui::Toast::PictureFull));
+    assert_ne!(s.app().source_rect(), start);
+}
+
+#[test]
 fn home_x_does_nothing_on_the_shelf() {
     let d = common::tmp_root_with_carts(&["Emerald", "Fusion"]);
     let (mut s, _motor) = common::session_with_platform(d.path());
