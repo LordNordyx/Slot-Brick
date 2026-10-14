@@ -296,6 +296,10 @@ pub struct App {
     /// The cart's plastic while the core picker is open: Up/Down change it there.
     picker_look: Option<CartMenu>,
     cart_menu_faces: Option<slot_ui::CartMenuFaces>,
+    /// Labels found for the cart open in the cart menu or the core picker, to choose from.
+    label_pick: Option<LabelPick>,
+    /// The label row's words as last drawn, [dim, lit]: rebuilt by the frontend when they change.
+    label_caption_faces: Option<(String, [(TexId, u32, u32); 2])>,
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
     core_faces_stem: Option<String>,
@@ -451,6 +455,8 @@ impl App {
             cart_menu: None,
             picker_look: None,
             cart_menu_faces: None,
+            label_pick: None,
+            label_caption_faces: None,
             core_board_face: None,
             core_lid_face: None,
             core_faces_stem: None,
@@ -1861,6 +1867,7 @@ impl App {
         if self.core_picker.is_some_and(|p| p.finished(now)) {
             self.core_picker = None;
         }
+        self.poll_label_pick();
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -2734,6 +2741,18 @@ impl App {
                 x += w.saturating_sub(HINT_EDGE) as f32 + gap;
             }
         }
+        // Above the legend: the label line, L1/R1 flipping through labels found for the cart.
+        if let Some((_, [_, (tex, w, h)])) = self.label_caption_faces {
+            out.push(Draw::Tex {
+                x: ((OUT_W as f32 - w as f32) / 2.0).round(),
+                // In the gap between the board's foot and the legend.
+                y: ((slot_ui::BOARD_Y + slot_ui::BOARD_H as f32 + CORE_LEGEND_Y) / 2.0 - h as f32 / 2.0).round(),
+                w: w as f32,
+                h: h as f32,
+                tex,
+                alpha: lift,
+            });
+        }
     }
 
     fn draw_game_menu(&self, menu: GameMenu, out: &mut Vec<Draw>) {
@@ -2923,7 +2942,8 @@ impl App {
         }
         self.close_game_menu();
         self.core_picker = None;
-        // A cart left mid-change goes back to the plastic it had.
+        // A cart left mid-change goes back to the plastic and label it had.
+        self.end_label_pick(false);
         if let Some(look) = self.picker_look.take() {
             self.preview_shell(&look.stem, look.before);
         }
@@ -3053,24 +3073,34 @@ impl App {
             return;
         };
         let before = menu.chosen();
+        let on_label = menu.row == slot_ui::CartRow::Label;
         match action {
             Action::GbaDown(Btn::Up) => menu.step_row(-1),
             Action::GbaDown(Btn::Down) => menu.step_row(1),
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft if on_label => self.step_label(&menu.stem, -1),
+            Action::GbaDown(Btn::Right) | Action::ShelfRight if on_label => self.step_label(&menu.stem, 1),
             Action::GbaDown(Btn::Left) | Action::ShelfLeft => menu.step_value(-1),
             Action::GbaDown(Btn::Right) | Action::ShelfRight => menu.step_value(1),
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => {
+                self.end_label_pick(false);
                 return self.preview_shell(&menu.stem, menu.before);
             }
             Action::GbaDown(Btn::A) => {
                 if menu.row == slot_ui::CartRow::Reset {
                     menu.reset();
+                    self.end_label_pick(false);
                     self.preview_shell(&menu.stem, None);
                 }
+                self.end_label_pick(true);
                 return self.save_shell(&menu);
             }
             _ => {}
         }
         if menu.chosen() != before {
+            // A label found for one shape is not one for another: the search starts over.
+            if menu.chosen().map(|c| c.outline) != before.map(|c| c.outline) {
+                self.end_label_pick(false);
+            }
             self.preview_shell(&menu.stem, menu.chosen());
         }
         self.cart_menu = Some(menu);
@@ -3080,6 +3110,158 @@ impl App {
     /// remembered when a menu opened, which a rescan could have moved.
     fn shelf_index_of(&self, stem: &str) -> Option<usize> {
         self.shelf().carts.iter().position(|c| c.stem == stem)
+    }
+
+    /// Left/Right on the label row (L1/R1 in the core picker): the first press searches for
+    /// labels, the next flip through what was found, each worn by the cart at once.
+    fn step_label(&mut self, stem: &str, by: isize) {
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let Some(cart) = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+            return;
+        };
+        let pick = self.label_pick.get_or_insert_with(|| LabelPick::new(&cart));
+        if pick.search.is_none() && pick.done.is_none() {
+            if !self.net_up {
+                pick.offline = true;
+                return;
+            }
+            pick.offline = false;
+            pick.jump = true;
+            let mut asked = cart;
+            (asked.label, asked.famicom_label) = pick.original.clone();
+            pick.search = Some(crate::cart_art::LabelSearch::start(root, asked));
+            return;
+        }
+        let n = pick.choices.len() as isize + 1;
+        pick.at = (pick.at as isize + by).rem_euclid(n) as usize;
+        pick.jump = false;
+        self.show_label_pick();
+    }
+
+    /// The cart wears the label picked (or its own, at 0) for the shape it is on now.
+    fn show_label_pick(&mut self) {
+        let Some(pick) = &self.label_pick else {
+            return;
+        };
+        let (own, famicom) = pick.original.clone();
+        let chosen = pick.at.checked_sub(1).and_then(|i| pick.choices.get(i)).map(|c| c.path.clone());
+        let stem = pick.stem.clone();
+        let Some(index) = self.shelf_index_of(&stem) else {
+            return;
+        };
+        let shelf = self.shelf_mut();
+        let Some(cart) = shelf.carts.get_mut(index) else {
+            return;
+        };
+        let on_famicom = cart.platform == Platform::Nes && slot_ui::nes_famicom_of(cart);
+        (cart.label, cart.famicom_label) = (own, famicom);
+        if let Some(path) = chosen {
+            if on_famicom {
+                cart.famicom_label = Some(path);
+            } else {
+                cart.label = Some(path);
+            }
+        }
+        let stale = shelf.take_face(index);
+        self.stale_faces.extend(stale);
+    }
+
+    /// The menu closed: with `keep`, the label picked is written to the card as the cart's;
+    /// otherwise the cart wears its own again. The search, if still running, stops.
+    fn end_label_pick(&mut self, keep: bool) {
+        let Some(mut pick) = self.label_pick.take() else {
+            return;
+        };
+        pick.search = None;
+        let chosen = pick.at.checked_sub(1).and_then(|i| pick.choices.get(i)).map(|c| c.path.clone());
+        let (Some(root), Some(path), true) = (self.root.clone(), chosen, keep) else {
+            pick.at = 0;
+            self.label_pick = Some(pick);
+            self.show_label_pick();
+            self.label_pick = None;
+            if let Some(root) = &self.root {
+                crate::cart_art::forget_choices(root);
+            }
+            return;
+        };
+        let Some(mut cart) = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+            return;
+        };
+        (cart.label, cart.famicom_label) = pick.original.clone();
+        match crate::cart_art::keep_choice(&root, &cart, &path) {
+            Ok(kept) => eprintln!("slot: label: kept {} for {}", kept.display(), cart.stem),
+            Err(e) => {
+                eprintln!("slot: label: {e}");
+                self.card_failing.store(true, Ordering::Relaxed);
+            }
+        }
+        // Read back from the card: the label kept, or the one it had if writing failed. The
+        // labels not kept are not kept on the card either.
+        self.adopt_label(cart.platform, &cart.stem, None);
+        crate::cart_art::forget_choices(&root);
+    }
+
+    /// Labels arriving from the search: the first one is shown at once if the press that
+    /// started it is still the last.
+    fn poll_label_pick(&mut self) {
+        let Some(pick) = &mut self.label_pick else {
+            return;
+        };
+        let news = pick.search.as_ref().map(|s| s.poll()).unwrap_or_default();
+        let mut show = false;
+        for n in news {
+            match n {
+                crate::cart_art::PickNews::Found(choice) => {
+                    pick.choices.push(choice);
+                    if pick.jump {
+                        pick.jump = false;
+                        pick.at = 1;
+                        show = true;
+                    }
+                }
+                crate::cart_art::PickNews::Done(result) => {
+                    if let Err(e) = &result {
+                        eprintln!("slot: label search: {e}");
+                    }
+                    pick.done = Some(result.is_ok());
+                    pick.search = None;
+                }
+            }
+        }
+        if show {
+            self.show_label_pick();
+        }
+    }
+
+    /// The words the label row (or the core picker's label line) should show now.
+    /// With true for the picker's wider line.
+    pub fn label_caption(&self) -> Option<(String, bool)> {
+        let in_menu = self.cart_menu.as_ref().is_some_and(|m| m.rows.contains(&slot_ui::CartRow::Label));
+        let in_picker = self.core_picker.is_some() && self.picker_look.is_some();
+        if !in_menu && !in_picker {
+            return None;
+        }
+        let stem = self.cart_menu.as_ref().or(self.picker_look.as_ref()).map(|m| m.stem.as_str())?;
+        let cart = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i));
+        let pick = self.label_pick.as_ref().filter(|p| p.stem == stem);
+        let words = match pick {
+            Some(p) => p.caption(),
+            None if cart.is_some_and(|c| slot_ui::shown_label(c).is_some()) => "Current".to_string(),
+            None => "Name only".to_string(),
+        };
+        Some(if in_picker && !in_menu { (format!("L1 / R1  Label: {words}"), true) } else { (words, false) })
+    }
+
+    /// The caption's faces, built by the frontend for `text`.
+    pub fn set_label_caption_faces(&mut self, text: String, faces: [(TexId, u32, u32); 2]) {
+        self.label_caption_faces = Some((text, faces));
+    }
+
+    /// The text the label caption faces show now, so the frontend knows when to rebuild them.
+    pub fn label_caption_built(&self) -> Option<&str> {
+        self.label_caption_faces.as_ref().map(|(t, _)| t.as_str())
     }
 
     /// The cart on the shelf wears `shell`; its face is rebuilt for the next frame.
@@ -3129,6 +3311,7 @@ impl App {
                 },
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
+            label: self.label_caption_faces.as_ref().map(|(_, f)| *f),
         }
         .draw(out);
     }
@@ -3161,6 +3344,14 @@ impl App {
     }
 
     fn core_picker_input(&mut self, action: Action) {
+        // L1/R1: labels found for the cart, previewed on the lid.
+        if let Action::GbaDown(dir @ (Btn::L1 | Btn::R1)) = action {
+            let open = self.core_picker.is_some_and(|p| !p.closing());
+            if let (true, Some(stem)) = (open, self.picker_look.as_ref().map(|l| l.stem.clone())) {
+                self.step_label(&stem, if dir == Btn::L1 { -1 } else { 1 });
+            }
+            return;
+        }
         // Up/Down: the cart's colour and finish, previewed on the lid.
         if let Action::GbaDown(dir @ (Btn::Up | Btn::Down)) = action {
             let open = self.core_picker.is_some_and(|p| !p.closing());
@@ -3194,6 +3385,7 @@ impl App {
         if !closing && picker.closing() {
             if let Some(look) = self.picker_look.take() {
                 let kept = if press == Press::Keep { look.chosen() } else { look.before };
+                self.end_label_pick(press == Press::Keep);
                 self.preview_shell(&look.stem, kept);
                 if press == Press::Keep {
                     self.save_shell(&look);
@@ -4024,6 +4216,61 @@ struct CartMenu {
 
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
 
+/// Labels found for one cart, to flip through: 0 is the label it had.
+struct LabelPick {
+    stem: String,
+    /// The cart's labels when the pick began (its own, its Famicom one), put back by B.
+    original: (Option<PathBuf>, Option<PathBuf>),
+    search: Option<crate::cart_art::LabelSearch>,
+    choices: Vec<crate::cart_art::Choice>,
+    at: usize,
+    /// The search ended: whether it could be made at all.
+    done: Option<bool>,
+    /// Asked with Wi-Fi off.
+    offline: bool,
+    /// The press that started the search wants the first label found.
+    jump: bool,
+}
+
+impl LabelPick {
+    fn new(cart: &Cart) -> Self {
+        LabelPick {
+            stem: cart.stem.clone(),
+            original: (cart.label.clone(), cart.famicom_label.clone()),
+            search: None,
+            choices: Vec::new(),
+            at: 0,
+            done: None,
+            offline: false,
+            jump: false,
+        }
+    }
+
+    fn caption(&self) -> String {
+        let searching = self.search.is_some();
+        if self.offline {
+            return "Connect to Wi-Fi first".into();
+        }
+        if self.at == 0 {
+            return match (searching, self.done, self.choices.len()) {
+                (true, _, 0) => "Searching...".into(),
+                (false, Some(false), 0) => "Can't search now".into(),
+                (false, Some(true), 0) => "None found".into(),
+                (_, _, n) if n > 0 => format!("Current (of {})", n + 1),
+                _ => "Current".into(),
+            };
+        }
+        let choice = &self.choices[self.at - 1];
+        let region = choice.caption.split_once(" · ").map_or("", |(_, r)| r);
+        let more = if searching { "+" } else { "" };
+        let n = self.choices.len();
+        match region {
+            "" => format!("{} of {n}{more}", self.at),
+            r => format!("{r}  {} of {n}{more}", self.at),
+        }
+    }
+}
+
 fn finish_of(finish: ShellFinish) -> slot_ui::Finish {
     match finish {
         ShellFinish::Solid => slot_ui::Finish::Solid,
@@ -4076,8 +4323,10 @@ impl CartMenu {
             _ => (colour, finish),
         };
         let rows = match cart.platform {
-            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
-            Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
+            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Label, CartRow::Reset],
+            Platform::Gb | Platform::Gbc => {
+                vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Label, CartRow::Reset]
+            }
             Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
         };
         let mut menu = CartMenu {
@@ -4112,9 +4361,9 @@ impl CartMenu {
             return;
         }
         self.rows = if self.on_famicom() {
-            vec![CartRow::Shape, CartRow::Colour, CartRow::Reset]
+            vec![CartRow::Shape, CartRow::Colour, CartRow::Label, CartRow::Reset]
         } else {
-            vec![CartRow::Shape, CartRow::Reset]
+            vec![CartRow::Shape, CartRow::Label, CartRow::Reset]
         };
         if !self.rows.contains(&self.row) {
             self.row = CartRow::Shape;
@@ -4154,7 +4403,8 @@ impl CartMenu {
                 self.shape = step(self.shape, OUTLINES.len());
                 self.fit_rows();
             }
-            slot_ui::CartRow::Reset => {}
+            // Labels are stepped by the app, which runs their search.
+            slot_ui::CartRow::Label | slot_ui::CartRow::Reset => {}
         }
     }
 

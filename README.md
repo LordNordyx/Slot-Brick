@@ -143,10 +143,11 @@ Press `START` on a game on the shelf to change its cartridge:
 - **Colour** (Game Boy, GBA and Famicom): the original, plain colours, or special-edition plastics.
 - **Finish** (Game Boy and GBA): solid, see-through, or glitter.
 - **Shape:** Game Boy carts can use the original or the Color shape, NES carts the NES or a Famicom cart, and SNES carts the US or the Europe / Japan cart.
+- **Label:** with Wi-Fi on, `Left` / `Right` searches for the game's label and flips through every one found (its other regions too), shown on the cart as you go.
 
 NES and SNES carts are always their system's grey, like the real ones. Famicom carts came in many colours, so a NES game on the Famicom cart can have any colour.
 
-The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, and `Down` the finish.
+The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, `Down` the finish, and `L1` / `R1` the label.
 
 ## NES and SNES
 

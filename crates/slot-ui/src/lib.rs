@@ -45,7 +45,7 @@ pub use cart::{
     NES_LABEL_Y, SNES_CART_H, SNES_CART_W, SNES_LABEL_H, SNES_LABEL_W, SNES_LABEL_X, SNES_LABEL_Y,
 };
 pub use cart_menu::{
-    cart_menu_label_face, cart_menu_legend_faces, cart_menu_value_face, colour_choices,
+    cart_menu_label_face, cart_menu_legend_faces, cart_menu_value_face, colour_choices, label_caption_face,
     finish_name, CartMenuFaces, CartMenuView, CartRow, FINISHES, NES_SHAPES, SHAPES, SNES_SHAPES,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};

@@ -848,6 +848,190 @@ fn reply_of(reply: &crate::net::Response, origin: &str) -> Result<Reply, String>
     }
 }
 
+/// Where the labels a search finds wait, as pictures, until one is kept.
+pub const PICK_DIR: &str = "System/Cache/LabelPick";
+/// Enough to choose from: more are mostly the same picture again.
+const PICK_MAX: usize = 12;
+
+/// A label found for the cart menu to offer: where it waits, and where it came from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Choice {
+    pub path: PathBuf,
+    pub caption: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PickNews {
+    Found(Choice),
+    /// The search is over: Err when it could not be made at all (no network, no index).
+    Done(Result<(), String>),
+}
+
+/// Every label the sources have for one cart, fetched one after another in the background,
+/// so the cart menu can offer them to choose from. Dropping it stops the search.
+pub struct LabelSearch {
+    rx: mpsc::Receiver<PickNews>,
+    cancel: Arc<AtomicBool>,
+}
+
+impl LabelSearch {
+    pub fn start(root: PathBuf, cart: Cart) -> Self {
+        Self::start_at(root, cart, Servers { labels: SLOT_ART.into(), photos: PHOTOS.into() })
+    }
+
+    fn start_at(root: PathBuf, cart: Cart, servers: Servers) -> Self {
+        let (tx, rx) = mpsc::channel();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let token = cancel.clone();
+        let spawned = thread::Builder::new().name("slot-label-search".into()).spawn(move || {
+            let done = search(&root, &cart, &servers, &token, &tx);
+            let _ = tx.send(PickNews::Done(done));
+        });
+        if let Err(e) = spawned {
+            eprintln!("slot: label search: {e}");
+        }
+        LabelSearch { rx, cancel }
+    }
+
+    pub fn poll(&self) -> Vec<PickNews> {
+        self.rx.try_iter().collect()
+    }
+}
+
+impl Drop for LabelSearch {
+    fn drop(&mut self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+}
+
+/// "USA, Europe" from "Pokemon - Emerald Version (USA, Europe)": the first tag in brackets.
+fn region_of(name: &str) -> &str {
+    name.split_once('(').and_then(|(_, r)| r.split_once(')')).map_or("", |(r, _)| r.trim())
+}
+
+fn caption(source: &str, name: &str) -> String {
+    match region_of(name) {
+        "" => source.to_string(),
+        region => format!("{source} · {region}"),
+    }
+}
+
+fn search(root: &Path, cart: &Cart, servers: &Servers, cancel: &AtomicBool, tx: &mpsc::Sender<PickNews>) -> Result<(), String> {
+    // Each search in a folder of its own, the last one's cleared away: a search stopped
+    // mid-download can then never put its picture among the next one's.
+    let _ = std::fs::remove_dir_all(root.join(PICK_DIR));
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let dir = root.join(PICK_DIR).join(stamp.to_string());
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot write to the card: {e}"))?;
+    let mut found = 0;
+    // A label goes to the card (the face builder reads it from there) and then to the menu.
+    let mut offer = |png: &[u8], caption: String| -> bool {
+        let path = dir.join(format!("{found}.png"));
+        if atomic_write(&path, png).is_err() {
+            return true;
+        }
+        found += 1;
+        tx.send(PickNews::Found(Choice { path, caption })).is_ok() && found < PICK_MAX
+    };
+    // Everything for the cart's shape: on the Famicom cart, NES pictures too (shown whole).
+    let specs: &[&CartPhoto] = match cart.platform {
+        Platform::Nes if slot_ui::nes_famicom_of(cart) => &[&FAMICOM_PHOTO, &NES_PHOTO],
+        _ => photo_specs(cart),
+    };
+    if specs.is_empty() {
+        let mut crcs = Crcs::load(root);
+        let crc = crcs.of(root, &cart.rom).map_err(|e| format!("cannot read the ROM: {e}"))?;
+        let mut cart = cart.clone();
+        cart.read_header();
+        let games = Games::load(root);
+        let labels = label_index(root, &servers.labels)?;
+        let mut seen = std::collections::HashSet::new();
+        for (crc, _) in games.candidates(&cart, crc) {
+            if cancel.load(Ordering::Relaxed) {
+                return Ok(());
+            }
+            let Some(path) = labels.get(&crc).filter(|p| seen.insert(p.to_string())) else { continue };
+            let name = games.list.iter().find(|g| g.crc == crc).map_or("", |g| g.name.as_str());
+            match get(&servers.labels, &format!("/{path}"), IMAGE_MAX) {
+                Ok(Some(png)) if is_png(&png) => {
+                    if !offer(&png, caption("Slot art", name)) {
+                        return Ok(());
+                    }
+                }
+                Err(e) if crate::net::unreachable(&e) => return Err(format!("Can't reach the label server: {e}")),
+                _ => {}
+            }
+        }
+        return Ok(());
+    }
+    for spec in specs {
+        let index = PhotoIndex::load(root, spec);
+        let key = slot_store::title_key(&cart.stem);
+        // The best match first, then every other name of the same game (its other regions).
+        let best = same_title_match(&cart.stem, &index.names);
+        let mut names: Vec<&String> = index.names.iter().filter(|n| slot_store::title_key(n) == key).collect();
+        names.sort_by_key(|n| Some(n.as_str()) != best);
+        let mut seen = std::collections::HashSet::new();
+        for name in names {
+            for file in index.files[name].iter().filter(|f| photo_file_ok(f) && seen.insert(f.to_string())) {
+                if cancel.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
+                let png = match get(&servers.photos, &format!("/{file}"), IMAGE_MAX) {
+                    Ok(Some(png)) => png,
+                    Err(e) if crate::net::unreachable(&e) => return Err(format!("Can't reach the cart picture server: {e}")),
+                    _ => continue,
+                };
+                // Only a picture a clean label can be cut from is offered.
+                if let Ok(label) = label_from_photo(&png, spec) {
+                    let source = if spec.sub.is_empty() { "LaunchBox" } else { "LaunchBox Famicom" };
+                    if !offer(&label, caption(source, name)) {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The labels a search found and nobody kept, gone from the card. In the background: the
+/// card is slow, and nothing waits on it.
+pub fn forget_choices(root: &Path) {
+    // Only the searches there now: one started a moment later keeps its folder.
+    let Ok(entries) = std::fs::read_dir(root.join(PICK_DIR)) else {
+        return;
+    };
+    let old: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    let spawned = thread::Builder::new().name("slot-label-pick".into()).spawn(move || {
+        for dir in old {
+            if let Err(e) = std::fs::remove_dir_all(&dir).or_else(|_| std::fs::remove_file(&dir)) {
+                eprintln!("slot: label search: {}: {e}", dir.display());
+            }
+        }
+    });
+    if let Err(e) = spawned {
+        eprintln!("slot: label search: {e}");
+    }
+}
+
+/// The label kept from a search: written where the cart's label for its current shape goes,
+/// in place of any it had.
+pub fn keep_choice(root: &Path, cart: &Cart, choice: &Path) -> std::io::Result<PathBuf> {
+    let famicom = cart.platform == Platform::Nes && slot_ui::nes_famicom_of(cart);
+    let existing = if famicom { &cart.famicom_label } else { &cart.label };
+    let dir = root.join("Labels").join(cart.platform.dir_name()).join(if famicom { slot_store::FAMICOM_LABELS } else { "" });
+    // A label already there under another case keeps its name, so no second one appears.
+    let target = existing
+        .as_ref()
+        .filter(|p| !p.starts_with(root.join(PICK_DIR)))
+        .cloned()
+        .unwrap_or_else(|| dir.join(format!("{}.png", cart.stem)));
+    std::fs::create_dir_all(&dir)?;
+    atomic_write(&target, &std::fs::read(choice)?)?;
+    Ok(target)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1032,6 +1216,96 @@ mod tests {
         assert_eq!(done, Ok(Summary { found: 1, missing: 0, failed: 0 }));
         let report = std::fs::read_to_string(root.join(REPORT)).unwrap();
         assert!(report.contains("(game code BZ4E)"), "{report}");
+    }
+
+    fn search_all(search: &LabelSearch) -> (Vec<Choice>, Result<(), String>) {
+        let mut found = Vec::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
+        while std::time::Instant::now() < deadline {
+            for news in search.poll() {
+                match news {
+                    PickNews::Found(c) => found.push(c),
+                    PickNews::Done(done) => return (found, done),
+                }
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        panic!("the search never ended");
+    }
+
+    #[test]
+    fn a_label_search_offers_every_region_of_the_game_and_keeps_the_one_picked() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        games(root, &[
+            "GBA\t27F2BC67\tBZ4P\tFinal Fantasy IV Advance (Europe) (En,Fr,De,Es,It)",
+            "GBA\tFEEEBDE4\tBZ4E\tFinal Fantasy IV Advance (USA)",
+        ]);
+        let cart = gba_rom(root, "Final Fantasy IV Advance (USA).gba", "BZ4E");
+        let (us, eu) = ("GBA/support-texture/FEEEBDE4.png", "GBA/support-texture/27F2BC67.png");
+        let server = serve(vec![
+            (
+                "/index.json".into(),
+                200,
+                format!(r#"{{"FEEEBDE4": {{"support-texture": "{us}"}}, "27F2BC67": {{"support-texture": "{eu}"}}}}"#).into_bytes(),
+            ),
+            (format!("/{us}"), 200, png_bytes()),
+            (format!("/{eu}"), 200, png_bytes()),
+        ]);
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart.clone(), servers(&server)));
+        assert_eq!(done, Ok(()));
+        let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
+        assert_eq!(captions, ["Slot art · USA", "Slot art · Europe"], "the cart's own release first");
+        assert!(found.iter().all(|c| c.path.starts_with(root.join(PICK_DIR))));
+        let kept = keep_choice(root, &cart, &found[1].path).unwrap();
+        assert_eq!(kept, root.join("Labels/GBA/Final Fantasy IV Advance (USA).png"));
+        assert_eq!(std::fs::read(kept).unwrap(), png_bytes());
+        forget_choices(root);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let left = || std::fs::read_dir(root.join(PICK_DIR)).map_or(0, |d| d.count());
+        while left() > 0 && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(left(), 0, "the labels not kept stayed on the card");
+        assert!(root.join("Labels/GBA/Final Fantasy IV Advance (USA).png").exists(), "the kept one went too");
+    }
+
+    #[test]
+    fn a_label_search_offers_only_pictures_a_label_can_be_cut_from() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let rom = root.join("Games/NES/Mega Man (USA).nes");
+        std::fs::create_dir_all(rom.parent().unwrap()).unwrap();
+        std::fs::write(&rom, b"NES\x1a").unwrap();
+        std::fs::create_dir_all(root.join("System")).unwrap();
+        std::fs::write(
+            root.join(NES_PHOTO.index),
+            "# test\nMega Man (USA)\tus.png\nMega Man (Europe)\teu.png\nMega Man (Europe)\ttengen.png\nMega Man 2 (USA)\ttwo.png\n",
+        )
+        .unwrap();
+        let photos = serve(vec![
+            ("/us.png".into(), 200, cart_png(280, 312, GREY, RED, NES_PHOTO.label)),
+            ("/eu.png".into(), 200, cart_png(280, 312, GREY, [0x20, 0x20, 0xc0], NES_PHOTO.label)),
+            ("/tengen.png".into(), 200, cart_png(280, 318, [20, 20, 20], RED, [0.15, 0.3, 0.85, 0.9])),
+            ("/two.png".into(), 200, cart_png(280, 312, GREY, RED, NES_PHOTO.label)),
+        ]);
+        let cart = scan(root).unwrap().into_iter().next().unwrap();
+        let servers = Servers { labels: "http://127.0.0.1:1".into(), photos };
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, servers));
+        assert_eq!(done, Ok(()));
+        let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
+        assert_eq!(captions, ["LaunchBox · USA", "LaunchBox · Europe"], "Tengen's cart or another game was offered");
+    }
+
+    #[test]
+    fn a_label_search_without_the_server_says_so() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        games(root, &["GBA\tFEEEBDE4\tBZ4E\tFinal Fantasy IV Advance (USA)"]);
+        let cart = gba_rom(root, "Final Fantasy IV Advance (USA).gba", "BZ4E");
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, servers("http://127.0.0.1:1")));
+        assert!(found.is_empty());
+        assert!(done.is_err(), "{done:?}");
     }
 
     #[test]

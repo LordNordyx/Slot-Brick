@@ -52,6 +52,8 @@ pub struct Frontend {
     polaroid_texes: Vec<TexId>,
     title_tex: Option<TexId>,
     faces: FaceBuilder,
+    /// The label row's words, [dim, lit], rewritten as the label search goes.
+    label_caption_tex: [Option<TexId>; 2],
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     rebuild_faces: RebuildFaces,
@@ -143,6 +145,7 @@ impl Frontend {
             polaroid_texes: Vec::new(),
             title_tex: None,
             faces: FaceBuilder::spawn(),
+            label_caption_tex: [None, None],
             cart_faces,
             rebuild,
             rebuild_faces: RebuildFaces::default(),
@@ -511,6 +514,7 @@ impl Frontend {
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
+        sync_label_caption(self.session.app_mut(), compositor, &mut self.label_caption_tex);
         sync_core_picker(
             self.session.app_mut(),
             compositor,
@@ -858,6 +862,24 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     app.set_sticker_face(id);
 }
 
+/// The label row's words, drawn again only when they change.
+fn sync_label_caption(app: &mut App, compositor: &mut Compositor, tex: &mut [Option<TexId>; 2]) {
+    let Some((text, wide)) = app.label_caption() else {
+        return;
+    };
+    if app.label_caption_built() == Some(text.as_str()) {
+        return;
+    }
+    let faces = [false, true].map(|lit| slot_ui::label_caption_face(&text, lit, wide));
+    let [dim, lit] = [0, 1].map(|i| {
+        let f = &faces[i];
+        // No font: a clear pixel, so there is still a texture to point at.
+        let (w, h, rgba) = if f.rgba.is_empty() { (1, 1, vec![0; 4]) } else { (f.w, f.h, f.rgba.clone()) };
+        (upload_rgba(compositor, &mut tex[i], w, h, &rgba), w, h)
+    });
+    app.set_label_caption_faces(text, [dim, lit]);
+}
+
 fn sync_core_picker(
     app: &mut App,
     compositor: &mut Compositor,
@@ -870,7 +892,7 @@ fn sync_core_picker(
     // Keyed by the cart and the plastic it wears, so a colour or finish changed in the picker
     // (or the cart menu) rebuilds the lid it shows.
     let cart = app.selected_stem().and_then(|stem| app.carts().find(|c| c.stem == stem)).cloned();
-    let highlighted = cart.as_ref().map(|c| format!("{}\n{:?}", c.stem, c.shell));
+    let highlighted = cart.as_ref().map(crate::face_builder::face_key);
     if let Some(cart) = cart {
         if *asked != highlighted {
             builder.request(cart);

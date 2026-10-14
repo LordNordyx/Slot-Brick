@@ -81,6 +81,12 @@ can have any colour, as Famicom carts came in many. On a GBA cart `START` opens 
 and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
 in `Slot/Labels/cart_shell.ini`.
 
+**Choosing a label:** with Wi-Fi on, the cart menu's Label row (`L1` / `R1` in the GBA core
+picker) searches the same places Cart Art does and lets you flip through every label found for
+the game, its other regions included, each shown on the cart. `A` keeps the one showing, in place
+of the label the game had; `B` keeps the old one. The labels not picked are deleted when the menu closes. NES games keep
+the NES and the Famicom cart's label apart: a label picked goes to the cart shape showing.
+
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run
 on FCEUmm. No BIOS is needed. NES carts are grey; a ROM named as a Japanese release, such as
 `Rockman (Japan).nes`, or on a chip only Famicom carts used, gets the small, landscape Famicom

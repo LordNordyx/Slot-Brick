@@ -14,11 +14,12 @@ pub enum CartRow {
     Colour,
     Finish,
     Shape,
+    Label,
     Reset,
 }
 
 impl CartRow {
-    pub const ALL: [CartRow; 4] = [CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset];
+    pub const ALL: [CartRow; 5] = [CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Label, CartRow::Reset];
 
     pub fn index(self) -> usize {
         self as usize
@@ -29,6 +30,7 @@ impl CartRow {
             CartRow::Colour => "COLOUR",
             CartRow::Finish => "FINISH",
             CartRow::Shape => "SHAPE",
+            CartRow::Label => "LABEL",
             CartRow::Reset => "RESET TO ORIGINAL",
         }
     }
@@ -115,6 +117,8 @@ pub struct CartMenuView<'a> {
     pub shape: usize,
     pub cart: Option<(TexId, u32, u32)>,
     pub faces: Option<&'a CartMenuFaces>,
+    /// The label row's value, [dim, lit]: written as the search goes, so not among `faces`.
+    pub label: Option<[(TexId, u32, u32); 2]>,
 }
 
 const PANEL_X: f32 = 300.0;
@@ -168,6 +172,7 @@ impl CartMenuView<'_> {
                 CartRow::Colour => faces.colours.get(self.colour),
                 CartRow::Finish => faces.finishes.get(self.finish),
                 CartRow::Shape => faces.shapes.get(self.shape),
+                CartRow::Label => self.label.as_ref(),
                 CartRow::Reset => None,
             };
             let Some(&value) = value else {
@@ -212,6 +217,12 @@ pub fn cart_menu_label_face(row: CartRow) -> UndoFace {
 /// A value: dim, or lit on the selected row; shrunk to fit beside its label.
 pub fn cart_menu_value_face(value: &str, lit: bool) -> UndoFace {
     text_face(value, if lit { MENU_INK } else { DIM_INK }, VALUE_W)
+}
+
+/// The label row's value, or with `wide` the core picker's label line: the words change as
+/// labels are found, so they get more room than the fixed values.
+pub fn label_caption_face(value: &str, lit: bool, wide: bool) -> UndoFace {
+    text_face(value, if lit { MENU_INK } else { DIM_INK }, if wide { 440.0 } else { 200.0 })
 }
 
 pub fn cart_menu_legend_faces() -> [UndoFace; 4] {

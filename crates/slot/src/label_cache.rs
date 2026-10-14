@@ -16,6 +16,8 @@ const OLD_DIRS: [&str; 1] = ["System/Cache/Labels"];
 
 /// Removes older label caches in the background: they can be large, the card slow.
 pub fn forget_old(root: &Path) {
+    // Labels a search found and nobody kept, should Slot have stopped before clearing them.
+    crate::cart_art::forget_choices(root);
     let old: Vec<PathBuf> = OLD_DIRS.iter().map(|d| root.join(d)).filter(|d| d.is_dir()).collect();
     if old.is_empty() {
         return;
@@ -36,6 +38,10 @@ const HEAD: usize = 24;
 pub fn label_art(root: &Path, cart: &Cart) -> Option<Vec<u8>> {
     let src = shown_label(cart)?;
     let (w, h) = label_size(cart);
+    // A label being chosen in the cart menu is shown, not cached: it is likely gone in a moment.
+    if src.starts_with(root.join(crate::cart_art::PICK_DIR)) {
+        return fitted_label(cart, w, h);
+    }
     let stamp = stamp(src)?;
     let cached = cache_path(root, cart);
     if let Some(art) = read(&cached, stamp, w, h) {
