@@ -1,8 +1,6 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- Sounds: a snap when a cart opens for editing, timed to the GBA cart's lid coming off, and a
-  click each time the shelf moves to another game.
 - Cart colours: START on a game changes its cartridge's colour, finish (solid, see-through,
   glitter) and, for Game Boy carts, its shape, previewed live. NES and SNES carts only change
   shape (NES or Famicom; US or PAL), as the real ones came in their system's grey; a Famicom

@@ -336,8 +336,6 @@ pub struct App {
     video_mode: VideoMode,
     link: Option<LinkSession>,
     sfx: Option<Sfx>,
-    /// The shelf and game last seen on the shelf, so moving to another clicks.
-    browsed: Option<(usize, usize)>,
     polaroids: Option<Polaroids>,
     pending: Option<(PendingUndo, Millis)>,
     legend_faces: Vec<TexId>,
@@ -493,7 +491,6 @@ impl App {
             video_mode: VideoMode::default(),
             link: None,
             sfx: None,
-            browsed: None,
             polaroids: None,
             pending: None,
             legend_faces: Vec::new(),
@@ -1854,9 +1851,6 @@ impl App {
             if picker.waiting() && (ready || picker.waited(now) >= FACES_WAIT_MS) {
                 picker.start(now);
             }
-            if picker.lid_off_due(now, (Sfx::Edit.lead() * 1000.0) as Millis) {
-                self.sfx = Some(Sfx::Edit);
-            }
         }
         if self.core_picker.is_some_and(|p| p.finished(now)) {
             self.core_picker = None;
@@ -1903,14 +1897,6 @@ impl App {
                 Phase::Ejecting { .. } => Sfx::Eject,
                 _ => Sfx::Insert,
             });
-        }
-        if matches!(self.phase, Phase::Shelf) {
-            // A click each time the shelf moves on to another game (or another shelf).
-            let here = (self.shelf_at, self.shelf().index);
-            if self.browsed.is_some_and(|was| was != here) && self.sfx.is_none() {
-                self.sfx = Some(Sfx::Click);
-            }
-            self.browsed = Some(here);
         }
         if let Some(phase) = next {
             self.phase = phase;
@@ -3052,7 +3038,6 @@ impl App {
             return;
         };
         self.cart_menu = Some(CartMenu::open(&cart));
-        self.sfx = Some(Sfx::Edit);
         self.shelf_mut().release_hold();
         self.play_held = None;
     }

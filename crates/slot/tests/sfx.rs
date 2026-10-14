@@ -7,7 +7,7 @@ use slot::session::Session;
 
 #[test]
 fn the_contacts_in_the_clip_are_where_the_lead_says() {
-    for s in [Sfx::Insert, Sfx::Eject, Sfx::Edit, Sfx::Click] {
+    for s in [Sfx::Insert, Sfx::Eject] {
         let v = s.render(48_000);
         let at = v
             .chunks_exact(2)
