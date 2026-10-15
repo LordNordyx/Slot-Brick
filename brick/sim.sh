@@ -56,7 +56,11 @@ art_hosts() {
     for host in art.slot-cfw.fyi images.launchbox-app.com; do
         # Short: a resolver that cannot answer for the host must not hold up the sim.
         addr=$(timeout 3 getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1{print $1}') || addr=
-        [ -z "$addr" ] || printf -- '--add-host %s:%s ' "$host" "$addr"
+        # An address and nothing else: what this prints is split into docker's arguments.
+        case "$addr" in
+            *[!0-9.]* | '') continue ;;
+        esac
+        printf -- '--add-host %s:%s ' "$host" "$addr"
     done
 }
 
