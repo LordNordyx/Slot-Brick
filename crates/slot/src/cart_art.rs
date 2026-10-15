@@ -884,10 +884,10 @@ fn reply_of(reply: &crate::net::Response, origin: &str) -> Result<Reply, String>
 /// Where the labels a search finds wait, as pictures, until one is kept.
 pub const PICK_DIR: &str = "System/Cache/LabelPick";
 /// Enough to choose from: more are mostly the same picture again.
-/// How far ahead of the label being looked at a search downloads. The list is as long as the
-/// console's game list; staying a few ahead keeps flipping instant without fetching a
-/// thousand pictures nobody asks to see.
-const LOOKAHEAD: usize = 8;
+/// How far past the page being looked at a search runs: one page more, and no further. The
+/// list is as long as the console's game list, so the next page being ready the moment it is
+/// turned to is worth fetching ahead for; the one after it is not, until it is asked for.
+const LOOKAHEAD: usize = slot_ui::PAGE;
 /// How often a search that is far enough ahead looks again at how far the picker has flipped.
 const WAIT: Duration = Duration::from_millis(100);
 
