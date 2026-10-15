@@ -49,13 +49,12 @@ fresh() {
     python3 -I brick/sim/make-rom.py "$1/card/Slot/Games/GB/Pocket Test.gb"
 }
 
-# Where the cart art and label servers live. Docker resolves names with this machine's DNS;
-# where that cannot answer for one of them but the shell can, the address is passed in, so
+# Where the cart art and label servers live. Docker looks names up with this machine's DNS;
+# where that cannot answer for one of them, resolve.py does and the address is passed in, so
 # the label search and Get Cart Art can be tried in the sim.
 art_hosts() {
     for host in art.slot-cfw.fyi images.launchbox-app.com; do
-        # Short: a resolver that cannot answer for the host must not hold up the sim.
-        addr=$(timeout 3 getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1{print $1}') || addr=
+        addr=$(python3 -I brick/sim/resolve.py "$host" 2>/dev/null) || continue
         # An address and nothing else: what this prints is split into docker's arguments.
         case "$addr" in
             *[!0-9.]* | '') continue ;;
