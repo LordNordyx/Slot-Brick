@@ -49,6 +49,17 @@ fresh() {
     python3 -I brick/sim/make-rom.py "$1/card/Slot/Games/GB/Pocket Test.gb"
 }
 
+# Where the cart art and label servers live. Docker resolves names with this machine's DNS;
+# where that cannot answer for one of them but the shell can, the address is passed in, so
+# the label search and Get Cart Art can be tried in the sim.
+art_hosts() {
+    for host in art.slot-cfw.fyi images.launchbox-app.com; do
+        # Short: a resolver that cannot answer for the host must not hold up the sim.
+        addr=$(timeout 3 getent ahostsv4 "$host" 2>/dev/null | awk 'NR==1{print $1}') || addr=
+        [ -z "$addr" ] || printf -- '--add-host %s:%s ' "$host" "$addr"
+    done
+}
+
 scenarios() {
     if [ $# -eq 0 ]; then
         ls brick/sim/scenarios/*.sim
@@ -92,7 +103,9 @@ case "$cmd" in
         docker rm -f "$NAME" > /dev/null 2>&1 || true
         echo "Brick simulator at http://127.0.0.1:$port/ (card kept in $live/card; FRESH=1 starts over)"
         # Published on this machine's loopback only.
-        docker_run --name "$NAME" -p "127.0.0.1:$port:$port" \
+        # art_hosts prints flags that are meant to be split into words.
+        # shellcheck disable=SC2046
+        docker_run --name "$NAME" $(art_hosts) -p "127.0.0.1:$port:$port" \
             -e SLOT_ROOT="/src/$live/card/Slot" -e SLOT_HW_ROOT="/src/$live/hw" \
             -e SLOT_SIM_HTTP="0.0.0.0:$port" ${SLOT_SIM_TIME:+-e SLOT_SIM_TIME="$SLOT_SIM_TIME"} \
             "$IMAGE" "$BIN"

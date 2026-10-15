@@ -20,6 +20,11 @@ on the CPU, at full speed. The test card has one real game, Pocket Test, a tiny 
 made by `make-rom.py`. The other carts are stand-ins that the cores refuse. To play your own
 games under `task sim`, copy them into `target-sim/live/card/Slot/Games/<shelf>/`.
 
+Cart art and label searches really go to the internet, so they need DNS that can answer for
+`art.slot-cfw.fyi` and `images.launchbox-app.com`. Where the machine's resolver cannot (a
+resolver that does not handle the `.fyi` TLD is the usual cause), `serve` looks the hosts up
+itself and passes their addresses to the container.
+
 What it can't tell you: speed and CPU clocks on the H700, real audio underruns, and Wi-Fi
 (there's no supplicant). Test those on the Brick.
 
