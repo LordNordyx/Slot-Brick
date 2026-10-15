@@ -890,7 +890,9 @@ fn sync_label_grid(app: &mut App, compositor: &mut Compositor, tex: &mut LabelGr
         return;
     }
     let query = app.label_grid_query().unwrap_or_default();
-    let title = face(compositor, &mut tex.title, slot_ui::title_face(&format!("FIND A LABEL  {query}")));
+    let heading =
+        if query.is_empty() { "FIND A LABEL".to_string() } else { format!("FIND A LABEL \u{b7} {query}") };
+    let title = face(compositor, &mut tex.title, slot_ui::title_face(&heading));
     let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
     let mut legend = [(caption.0, 0u32); 3];
     for (i, hint) in slot_ui::label_grid_legend_faces().into_iter().enumerate() {
