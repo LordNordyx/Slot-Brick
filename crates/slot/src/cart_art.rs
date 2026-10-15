@@ -972,9 +972,6 @@ fn words(name: &str) -> Vec<String> {
 
 /// Every word typed begins a word of the name (its region tags left out): "yoshi island"
 /// matches "Super Mario World 2: Yoshi's Island (USA)".
-fn query_matches(query: &[String], name: &str) -> bool {
-    !query.is_empty() && missed(query, name) == 0
-}
 /// How many of the typed words begin no word of the name's title. 0 is a full match.
 fn missed(query: &[String], name: &str) -> usize {
     let title = name.split(['(', '[']).next().unwrap_or(name);
@@ -1391,17 +1388,24 @@ mod tests {
     }
 
     #[test]
-    fn typed_words_each_begin_a_word_of_the_name() {
+    fn what_is_typed_orders_the_names_rather_than_leaving_any_out() {
         let q = |s: &str| words(s);
-        assert!(query_matches(&q("yoshi island"), "Super Mario World 2: Yoshi's Island (USA)"));
-        assert!(query_matches(&q("Super Mario World 2 - Yoshi's Island"), "Super Mario World 2: Yoshi's Island"));
-        assert!(query_matches(&q("FINAL fant ii"), "Final Fantasy II (USA)"));
-        assert!(!query_matches(&q("usa"), "Final Fantasy II (USA)"), "a region tag matched");
-        assert!(!query_matches(&q("ff"), "Final Fantasy II (USA)"));
-        assert!(!query_matches(&q("  "), "Final Fantasy II (USA)"), "nothing typed matched everything");
+        assert_eq!(missed(&q("yoshi island"), "Super Mario World 2: Yoshi's Island (USA)"), 0);
+        assert_eq!(missed(&q("Super Mario World 2 - Yoshi's Island"), "Super Mario World 2: Yoshi's Island"), 0);
+        assert_eq!(missed(&q("FINAL fant ii"), "Final Fantasy II (USA)"), 0);
+        assert_eq!(missed(&q("usa"), "Final Fantasy II (USA)"), 1, "a region tag matched");
+        assert_eq!(missed(&q("ff"), "Final Fantasy II (USA)"), 1);
         let mut names = vec!["Final Fantasy III (Japan)", "Final Fantasy II (USA) (Rev 1)", "Final Fantasy II (USA)"];
         names.sort_by_key(|n| query_order(&q("final fantasy ii"), n));
         assert_eq!(names, ["Final Fantasy II (USA)", "Final Fantasy II (USA) (Rev 1)", "Final Fantasy III (Japan)"], "a full name found another game first");
+        // A name with none of the words typed is still offered, last.
+        let mut names = vec!["Zelda (USA)", "Final Fantasy II (USA)"];
+        names.sort_by_key(|n| query_order(&q("final fantasy"), n));
+        assert_eq!(names, ["Final Fantasy II (USA)", "Zelda (USA)"]);
+        // Nothing typed leaves every name in, the shortest first.
+        let mut names = vec!["Final Fantasy II (USA)", "Zelda (USA)"];
+        names.sort_by_key(|n| query_order(&q("  "), n));
+        assert_eq!(names, ["Zelda (USA)", "Final Fantasy II (USA)"]);
     }
 
     /// Collects what a search has offered so far, giving it a moment to stop on its own.
