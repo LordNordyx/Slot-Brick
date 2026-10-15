@@ -1,0 +1,23 @@
+# The quick menu and its pages open from the shelf, and B backs out.
+press a
+phase Shelf
+press menu
+phase QuickMenu
+snap menu
+press a
+snap menu-screen
+press b
+press down
+press a
+snap menu-gameplay
+press b
+press down
+press down
+press down
+press down
+press down
+press a
+snap menu-date-time
+press b
+press b
+phase Shelf

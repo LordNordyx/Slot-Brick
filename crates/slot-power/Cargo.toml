@@ -12,3 +12,4 @@ tempfile = { workspace = true }
 
 [features]
 brick = []
+sim = []

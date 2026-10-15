@@ -11,6 +11,7 @@ default = ["host"]
 host = ["dep:glutin", "dep:glutin-winit", "dep:winit", "dep:raw-window-handle"]
 device = []
 test-support = []
+sim = ["brick"]
 
 [dependencies]
 gl = { workspace = true }

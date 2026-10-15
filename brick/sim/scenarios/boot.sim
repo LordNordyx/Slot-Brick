@@ -1,0 +1,8 @@
+# First boot: the Brick asks for the time, then shows the shelf.
+phase SetClock
+snap clock
+press a
+phase Shelf
+snap shelf
+press right
+snap shelf-next

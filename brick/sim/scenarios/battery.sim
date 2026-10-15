@@ -1,0 +1,9 @@
+# The status bar follows the battery and the charger.
+press a
+phase Shelf
+set battery 10  # 5 % or less shuts the Brick down
+wait 10500  # the battery is read every 10 s
+snap battery-low
+set charging 1
+wait 10500  # the battery is read every 10 s
+snap battery-charging

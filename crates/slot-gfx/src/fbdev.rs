@@ -26,6 +26,8 @@ const EGL_CONTEXT_CLIENT_VERSION: i32 = 0x3098;
 const EGL_OPENGL_ES_API: u32 = 0x30A0;
 const EGL_WINDOW_BIT: i32 = 0x0004;
 const EGL_OPENGL_ES2_BIT: i32 = 0x0004;
+#[cfg(feature = "sim")]
+const EGL_PBUFFER_BIT: i32 = 0x0001;
 
 type Ptr = *mut c_void;
 type GetDisplay = unsafe extern "C" fn(Ptr) -> Ptr;
@@ -38,6 +40,8 @@ type MakeCurrent = unsafe extern "C" fn(Ptr, Ptr, Ptr, Ptr) -> u32;
 type QuerySurface = unsafe extern "C" fn(Ptr, Ptr, i32, *mut i32) -> u32;
 type SwapBuffers = unsafe extern "C" fn(Ptr, Ptr) -> u32;
 type SwapInterval = unsafe extern "C" fn(Ptr, i32) -> u32;
+#[cfg(feature = "sim")]
+type CreatePbufferSurface = unsafe extern "C" fn(Ptr, Ptr, *const i32) -> Ptr;
 type GetProcAddress = unsafe extern "C" fn(*const c_char) -> *const c_void;
 type GetError = unsafe extern "C" fn() -> i32;
 type Terminate = unsafe extern "C" fn(Ptr) -> u32;
@@ -56,6 +60,8 @@ struct Egl {
     get_proc_address: GetProcAddress,
     get_error: GetError,
     terminate: Terminate,
+    #[cfg(feature = "sim")]
+    create_pbuffer_surface: CreatePbufferSurface,
     _lib: Library,
 }
 
@@ -124,6 +130,8 @@ impl Egl {
                 get_proc_address: sym(&lib, "eglGetProcAddress")?,
                 get_error: sym(&lib, "eglGetError")?,
                 terminate: sym(&lib, "eglTerminate")?,
+                #[cfg(feature = "sim")]
+                create_pbuffer_surface: sym(&lib, "eglCreatePbufferSurface")?,
                 _lib: lib,
             })
         }
@@ -234,6 +242,108 @@ impl FbdevSurface {
                 _window: window,
             })
         }
+    }
+}
+
+/// The simulator's screen: the same EGL and GLES2 the Brick draws with, into an offscreen
+/// pbuffer the size of the Brick's panel, so frames can be read back and shown elsewhere.
+#[cfg(feature = "sim")]
+impl FbdevSurface {
+    pub fn offscreen(size: (u32, u32)) -> Result<Self, GfxError> {
+        let egl = Egl::load()?;
+        let gles = open("libGLESv2.so.2").or_else(|_| open("libGLESv2.so"))?;
+        unsafe {
+            let display = (egl.get_display)(std::ptr::null_mut());
+            if display.is_null() {
+                return Err(egl.fail("eglGetDisplay"));
+            }
+            if (egl.initialize)(display, std::ptr::null_mut(), std::ptr::null_mut()) == 0 {
+                return Err(egl.fail("eglInitialize"));
+            }
+            if (egl.bind_api)(EGL_OPENGL_ES_API) == 0 {
+                return Err(egl.fail("eglBindAPI"));
+            }
+            let attrs = [
+                EGL_SURFACE_TYPE,
+                EGL_PBUFFER_BIT,
+                EGL_RED_SIZE,
+                8,
+                EGL_GREEN_SIZE,
+                8,
+                EGL_BLUE_SIZE,
+                8,
+                EGL_RENDERABLE_TYPE,
+                EGL_OPENGL_ES2_BIT,
+                EGL_NONE,
+            ];
+            let mut config: Ptr = std::ptr::null_mut();
+            let mut found = 0;
+            if (egl.choose_config)(display, attrs.as_ptr(), &mut config, 1, &mut found) == 0
+                || found == 0
+            {
+                return Err(egl.fail("eglChooseConfig (pbuffer)"));
+            }
+            let pbuffer_attrs = [EGL_WIDTH, size.0 as i32, EGL_HEIGHT, size.1 as i32, EGL_NONE];
+            let surface = (egl.create_pbuffer_surface)(display, config, pbuffer_attrs.as_ptr());
+            if surface.is_null() {
+                return Err(egl.fail("eglCreatePbufferSurface"));
+            }
+            let context_attrs = [EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE];
+            let context = (egl.create_context)(
+                display,
+                config,
+                std::ptr::null_mut(),
+                context_attrs.as_ptr(),
+            );
+            if context.is_null() {
+                return Err(egl.fail("eglCreateContext"));
+            }
+            if (egl.make_current)(display, surface, surface, context) == 0 {
+                return Err(egl.fail("eglMakeCurrent"));
+            }
+            Ok(FbdevSurface {
+                egl,
+                gles,
+                display,
+                surface,
+                context,
+                size,
+                _window: Box::new(FbdevWindow {
+                    width: size.0 as u16,
+                    height: size.1 as u16,
+                }),
+            })
+        }
+    }
+
+    /// The last frame drawn, as top-to-bottom RGBA rows. Needs the GL context current,
+    /// so it is called from the thread that renders.
+    pub fn read_rgba(&self) -> Vec<u8> {
+        let (w, h) = (self.size.0 as usize, self.size.1 as usize);
+        let mut pixels = vec![0u8; w * h * 4];
+        unsafe {
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
+            gl::ReadPixels(
+                0,
+                0,
+                w as i32,
+                h as i32,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                pixels.as_mut_ptr().cast(),
+            );
+        }
+        // GL rows run bottom to top; images run top to bottom. The panel has no alpha.
+        let row = w * 4;
+        let mut flipped = Vec::with_capacity(pixels.len());
+        for y in (0..h).rev() {
+            flipped.extend_from_slice(&pixels[y * row..(y + 1) * row]);
+        }
+        for px in flipped.chunks_exact_mut(4) {
+            px[3] = 255;
+        }
+        flipped
     }
 }
 

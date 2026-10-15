@@ -1,0 +1,7 @@
+# A file that is no game: the core refuses it and the shelf stays put.
+press a
+phase Shelf
+press a
+wait 3000
+phase Shelf
+snap refused

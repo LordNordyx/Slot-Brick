@@ -6,3 +6,4 @@ target-docker/
 dist-brick/
 brick/core-src/
 brick/core-build/
+target-sim/

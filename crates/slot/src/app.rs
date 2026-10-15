@@ -2005,7 +2005,7 @@ impl App {
         if self.now() >= self.brick_switch_at {
             self.brick_switch_at = self.now() + 200;
             self.net_up = crate::brick_wifi::online();
-            if let Ok(value) = std::fs::read_to_string("/sys/class/gpio/gpio243/value") {
+            if let Ok(value) = std::fs::read_to_string(slot_power::hw("/sys/class/gpio/gpio243/value")) {
                 match value.trim() {
                     "0" => self.set_brick_mute(false),
                     "1" => self.set_brick_mute(true),
@@ -3942,6 +3942,10 @@ fn clock_screen(utc: i64, offset_min: i16, from_menu: bool) -> Phase {
 }
 
 fn system_secs() -> i64 {
+    #[cfg(feature = "sim")]
+    if let Some(secs) = std::env::var("SLOT_SIM_TIME").ok().and_then(|v| v.parse().ok()) {
+        return secs;
+    }
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)

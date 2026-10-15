@@ -1,6 +1,7 @@
 #[cfg(feature = "brick")]
 mod brick;
 mod device;
+mod hw;
 #[cfg(feature = "brick")]
 pub use brick::BrickPlatform;
 mod motor;
@@ -11,6 +12,9 @@ pub use device::{
     has_bit, motor_change, read_only, read_only_in, record_first_frame, rumble_node,
     trace_first_frame, uptime_seconds, DevicePlatform,
 };
+pub use hw::hw;
+#[cfg(feature = "sim")]
+pub use hw::sim_root;
 pub use motor::Motor;
 pub use power::Power;
 pub use sim::SimPlatform;
