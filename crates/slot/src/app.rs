@@ -3128,6 +3128,10 @@ impl App {
         let n = pick.choices.len() as isize + 1;
         pick.at = (pick.at as isize + by).rem_euclid(n) as usize;
         pick.jump = false;
+        // The search only runs a few ahead of here, so flipping on is what fetches the rest.
+        if let Some(search) = &pick.search {
+            search.looking_at(pick.at);
+        }
         self.show_label_pick();
     }
 
@@ -3264,6 +3268,9 @@ impl App {
                     if pick.jump {
                         pick.jump = false;
                         pick.at = 1;
+                        if let Some(search) = &pick.search {
+                            search.looking_at(pick.at);
+                        }
                         show = true;
                     }
                 }

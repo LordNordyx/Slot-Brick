@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -408,7 +408,20 @@ fn fetch_photo_label(cart: &Cart, spec: &CartPhoto, src: &mut Sources) -> Result
 /// Cuts the label out of a front picture of a cart, as a PNG. Only the standard cart (the
 /// spec's shape, plain plastic where it should be) is used; others (Tengen, Famicom, PAL,
 /// a box) put the label elsewhere and are refused.
+/// How picky a cut is. The bulk run writes labels nobody has looked at, so it takes only a
+/// clean one off a standard cart. A search is flipped through by eye, so it offers anything a
+/// label-shaped piece can be cut from and leaves the judging to whoever is picking.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Cut {
+    Clean,
+    Loose,
+}
+
 fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static str> {
+    label_cut(png, spec, Cut::Clean)
+}
+
+fn label_cut(png: &[u8], spec: &CartPhoto, cut: Cut) -> Result<Vec<u8>, &'static str> {
     let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
     let alpha = |x: u32, y: u32| rgba[((y * w + x) * 4 + 3) as usize];
     // The cart's outline: a cut-out picture is transparent around it.
@@ -424,7 +437,11 @@ fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static st
         return Err("an empty picture");
     }
     let (cw, ch) = ((x1 - x0) as f32, (y1 - y0) as f32);
-    if !(spec.aspect.0..=spec.aspect.1).contains(&(ch / cw)) || cw < 120.0 {
+    // Too small to cut anything legible from, whichever cut this is.
+    if cw < 120.0 {
+        return Err("not the cart's shape");
+    }
+    if cut == Cut::Clean && !(spec.aspect.0..=spec.aspect.1).contains(&(ch / cw)) {
         return Err("not the cart's shape");
     }
     let at = |fx: f32, fy: f32| {
@@ -449,11 +466,13 @@ fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static st
             .count();
         same as f32 / 144.0
     };
-    if spec.plain.iter().any(|r| share(*r) < 0.7) {
-        return Err("not the standard cart");
-    }
-    if share(spec.art) > 0.5 {
-        return Err("no label on the cart");
+    if cut == Cut::Clean {
+        if spec.plain.iter().any(|r| share(*r) < 0.7) {
+            return Err("not the standard cart");
+        }
+        if share(spec.art) > 0.5 {
+            return Err("no label on the cart");
+        }
     }
     // Rounded inward, so no sliver of plastic rides along the label's edge.
     let [fx0, fy0, fx1, fy1] = spec.label;
@@ -865,7 +884,12 @@ fn reply_of(reply: &crate::net::Response, origin: &str) -> Result<Reply, String>
 /// Where the labels a search finds wait, as pictures, until one is kept.
 pub const PICK_DIR: &str = "System/Cache/LabelPick";
 /// Enough to choose from: more are mostly the same picture again.
-const PICK_MAX: usize = 12;
+/// How far ahead of the label being looked at a search downloads. The list is as long as the
+/// console's game list; staying a few ahead keeps flipping instant without fetching a
+/// thousand pictures nobody asks to see.
+const LOOKAHEAD: usize = 8;
+/// How often a search that is far enough ahead looks again at how far the picker has flipped.
+const WAIT: Duration = Duration::from_millis(100);
 
 /// A label found for the cart menu to offer: where it waits, and where it came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -886,6 +910,8 @@ pub enum PickNews {
 pub struct LabelSearch {
     rx: mpsc::Receiver<PickNews>,
     cancel: Arc<AtomicBool>,
+    /// Which label is being looked at: the search keeps LOOKAHEAD ahead of it and no further.
+    looked_at: Arc<AtomicUsize>,
 }
 
 impl LabelSearch {
@@ -898,18 +924,25 @@ impl LabelSearch {
         let (tx, rx) = mpsc::channel();
         let cancel = Arc::new(AtomicBool::new(false));
         let token = cancel.clone();
+        let looked_at = Arc::new(AtomicUsize::new(0));
+        let place = looked_at.clone();
         let spawned = thread::Builder::new().name("slot-label-search".into()).spawn(move || {
-            let done = search(&root, &cart, &query, &servers, &token, &tx);
+            let done = search(&root, &cart, &query, &servers, &token, &place, &tx);
             let _ = tx.send(PickNews::Done(done));
         });
         if let Err(e) = spawned {
             eprintln!("slot: label search: {e}");
         }
-        LabelSearch { rx, cancel }
+        LabelSearch { rx, cancel, looked_at }
     }
 
     pub fn poll(&self) -> Vec<PickNews> {
         self.rx.try_iter().collect()
+    }
+
+    /// The label the picker has flipped to, which is how far ahead the search may run.
+    pub fn looking_at(&self, at: usize) {
+        self.looked_at.fetch_max(at, Ordering::Relaxed);
     }
 }
 
@@ -940,19 +973,23 @@ fn words(name: &str) -> Vec<String> {
 /// Every word typed begins a word of the name (its region tags left out): "yoshi island"
 /// matches "Super Mario World 2: Yoshi's Island (USA)".
 fn query_matches(query: &[String], name: &str) -> bool {
+    !query.is_empty() && missed(query, name) == 0
+}
+/// How many of the typed words begin no word of the name's title. 0 is a full match.
+fn missed(query: &[String], name: &str) -> usize {
     let title = name.split(['(', '[']).next().unwrap_or(name);
     let have = words(title);
-    !query.is_empty() && query.iter().all(|q| have.iter().any(|w| w.starts_with(q.as_str())))
+    query.iter().filter(|q| !have.iter().any(|w| w.starts_with(q.as_str()))).count()
 }
 
 /// The order a typed search's names come in: those that are just what was typed first (so a
 /// full name finds its own game before the ones it begins), then the shortest.
-fn query_order(query: &[String], name: &str) -> (bool, usize) {
+fn query_order(query: &[String], name: &str) -> (usize, bool, usize) {
     let title = name.split(['(', '[']).next().unwrap_or(name);
-    (words(title) != query, name.len())
+    (missed(query, name), words(title) != query, name.len())
 }
 
-fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &AtomicBool, tx: &mpsc::Sender<PickNews>) -> Result<(), String> {
+fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &AtomicBool, looked_at: &AtomicUsize, tx: &mpsc::Sender<PickNews>) -> Result<(), String> {
     let typed = words(query);
     // Each search in a folder of its own, the last one's cleared away: a search stopped
     // mid-download can then never put its picture among the next one's.
@@ -968,7 +1005,18 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
             return true;
         }
         found += 1;
-        tx.send(PickNews::Found(Choice { path, caption })).is_ok() && found < PICK_MAX
+        if tx.send(PickNews::Found(Choice { path, caption })).is_err() {
+            return false;
+        }
+        // Nothing is left out of the list, so wait here rather than fetch a picture that is a
+        // hundred flips away. Flipping on raises `looked_at` and the search carries on.
+        while found >= looked_at.load(Ordering::Relaxed) + LOOKAHEAD {
+            if cancel.load(Ordering::Relaxed) {
+                return false;
+            }
+            thread::sleep(WAIT);
+        }
+        true
     };
     // Everything for the cart's shape: on the Famicom cart, NES pictures too (shown whole).
     let specs: &[&CartPhoto] = match cart.platform {
@@ -977,10 +1025,9 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
     };
     if specs.is_empty() {
         let games = Games::load(root);
-        // Every game of the console whose name has the words typed.
         let platforms = platforms_for(cart.platform);
-        let mut hits: Vec<&Game> =
-            games.list.iter().filter(|g| platforms.contains(&g.platform) && query_matches(&typed, &g.name)).collect();
+        // Every game of the console, the closest to what was typed first: nothing is left out.
+        let mut hits: Vec<&Game> = games.list.iter().filter(|g| platforms.contains(&g.platform)).collect();
         hits.sort_by_key(|g| query_order(&typed, &g.name));
         let crcs: Vec<u32> = hits.into_iter().map(|g| g.crc).collect();
         let labels = label_index(root, &servers.labels)?;
@@ -1007,7 +1054,7 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
     }
     for spec in specs {
         let index = PhotoIndex::load(root, spec);
-        let mut names: Vec<&String> = index.names.iter().filter(|n| query_matches(&typed, n)).collect();
+        let mut names: Vec<&String> = index.names.iter().collect();
         names.sort_by_key(|n| query_order(&typed, n));
         let mut seen = std::collections::HashSet::new();
         for name in names {
@@ -1021,7 +1068,7 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
                     _ => continue,
                 };
                 // Only a picture a clean label can be cut from is offered.
-                if let Ok(label) = label_from_photo(&png, spec) {
+                if let Ok(label) = label_cut(&png, spec, Cut::Loose) {
                     let source = name.split(" (").next().unwrap_or(name);
                     if !offer(&label, caption(source, name)) {
                         return Ok(());
@@ -1309,7 +1356,7 @@ mod tests {
     }
 
     #[test]
-    fn a_label_search_offers_only_pictures_a_label_can_be_cut_from() {
+    fn a_label_search_offers_odd_carts_too_but_the_bulk_run_still_refuses_them() {
         let d = tempfile::tempdir().unwrap();
         let root = d.path();
         let rom = root.join("Games/NES/Mega Man (USA).nes");
@@ -1329,10 +1376,18 @@ mod tests {
         ]);
         let cart = scan(root).unwrap().into_iter().next().unwrap();
         let servers = Servers { labels: "http://127.0.0.1:1".into(), photos };
+        let tengen = cart_png(280, 318, [20, 20, 20], RED, [0.15, 0.3, 0.85, 0.9]);
         let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, "Mega Man".into(), servers));
         assert_eq!(done, Ok(()));
         let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
-        assert_eq!(captions, ["Mega Man · USA", "Mega Man · Europe", "Mega Man 2 · USA"], "Tengen's cart was offered");
+        assert_eq!(
+            captions,
+            ["Mega Man · USA", "Mega Man · Europe", "Mega Man · Europe", "Mega Man 2 · USA"],
+            "Tengen's odd cart was left out of a search"
+        );
+        // The bulk run writes labels unseen, so it still takes none off a cart like that.
+        assert!(label_cut(&tengen, &NES_PHOTO, Cut::Loose).is_ok());
+        assert_eq!(label_from_photo(&tengen, &NES_PHOTO), Err("not the standard cart"));
     }
 
     #[test]
@@ -1347,6 +1402,54 @@ mod tests {
         let mut names = vec!["Final Fantasy III (Japan)", "Final Fantasy II (USA) (Rev 1)", "Final Fantasy II (USA)"];
         names.sort_by_key(|n| query_order(&q("final fantasy ii"), n));
         assert_eq!(names, ["Final Fantasy II (USA)", "Final Fantasy II (USA) (Rev 1)", "Final Fantasy III (Japan)"], "a full name found another game first");
+    }
+
+    /// Collects what a search has offered so far, giving it a moment to stop on its own.
+    fn search_so_far(search: &LabelSearch) -> (Vec<Choice>, bool) {
+        let mut found = Vec::new();
+        let mut done = false;
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while std::time::Instant::now() < deadline {
+            for news in search.poll() {
+                match news {
+                    PickNews::Found(c) => found.push(c),
+                    PickNews::Done(_) => done = true,
+                }
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        (found, done)
+    }
+
+    #[test]
+    fn a_search_stays_a_few_labels_ahead_until_the_picker_flips_on() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let rom = root.join("Games/SNES/Yoshi (hack).sfc");
+        std::fs::create_dir_all(rom.parent().unwrap()).unwrap();
+        std::fs::write(&rom, [0u8; 0x200]).unwrap();
+        std::fs::create_dir_all(root.join("System")).unwrap();
+        let many = LOOKAHEAD + 4;
+        let mut index = String::from("# test\n");
+        let mut routes = Vec::new();
+        for i in 0..many {
+            index.push_str(&format!("Game {i} (USA)\t{i}.png\n"));
+            routes.push((format!("/{i}.png"), 200, cart_png(640, 410, SNES_GREY, RED, SNES_PHOTO.label)));
+        }
+        std::fs::write(root.join(SNES_PHOTO.index), index).unwrap();
+        let servers = Servers { labels: "http://127.0.0.1:1".into(), photos: serve(routes) };
+        let cart = scan(root).unwrap().into_iter().next().unwrap();
+        let search = LabelSearch::start_at(root.to_path_buf(), cart, "game".into(), servers);
+
+        let (found, done) = search_so_far(&search);
+        assert_eq!(found.len(), LOOKAHEAD, "the search ran past the label being looked at");
+        assert!(!done, "the search ended instead of waiting");
+
+        // Flipping on lets the rest through.
+        search.looking_at(many);
+        let (rest, done) = search_all(&search);
+        assert_eq!(done, Ok(()));
+        assert_eq!(found.len() + rest.len(), many);
     }
 
     #[test]
@@ -1372,7 +1475,11 @@ mod tests {
         let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, "yoshi island".into(), servers));
         assert_eq!(done, Ok(()));
         let captions: Vec<&str> = found.iter().map(|c| c.caption.as_str()).collect();
-        assert_eq!(captions, ["Super Mario World 2: Yoshi's Island · USA"]);
+        // Nothing is left out: what was typed only decides the order.
+        assert_eq!(
+            captions,
+            ["Super Mario World 2: Yoshi's Island · USA", "Yoshi's Safari · USA", "Super Mario World · USA"]
+        );
     }
 
     #[test]
