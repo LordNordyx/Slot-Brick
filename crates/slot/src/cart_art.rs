@@ -1077,6 +1077,13 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
     Ok(())
 }
 
+/// A label as a picture to show in the grid: its pixels, no bigger than `max` either way.
+pub fn label_picture(png: &[u8], max: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let (rgba, w, h) = decode_rgba(png)?;
+    let (rgba, w, h) = if w.max(h) > max { shrink(rgba, w, h, max) } else { (rgba, w, h) };
+    (w > 0 && h > 0).then_some((rgba, w, h))
+}
+
 /// The labels a search found and nobody kept, gone from the card. In the background: the
 /// card is slow, and nothing waits on it.
 pub fn forget_choices(root: &Path) {

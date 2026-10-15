@@ -14,12 +14,11 @@ pub enum CartRow {
     Colour,
     Finish,
     Shape,
-    Label,
     Reset,
 }
 
 impl CartRow {
-    pub const ALL: [CartRow; 5] = [CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Label, CartRow::Reset];
+    pub const ALL: [CartRow; 4] = [CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset];
 
     pub fn index(self) -> usize {
         self as usize
@@ -30,7 +29,6 @@ impl CartRow {
             CartRow::Colour => "COLOUR",
             CartRow::Finish => "FINISH",
             CartRow::Shape => "SHAPE",
-            CartRow::Label => "LABEL",
             CartRow::Reset => "RESET TO ORIGINAL",
         }
     }
@@ -117,8 +115,6 @@ pub struct CartMenuView<'a> {
     pub shape: usize,
     pub cart: Option<(TexId, u32, u32)>,
     pub faces: Option<&'a CartMenuFaces>,
-    /// The label row's value, [dim, lit]: written as the search goes, so not among `faces`.
-    pub label: Option<[(TexId, u32, u32); 2]>,
 }
 
 const PANEL_X: f32 = 300.0;
@@ -172,7 +168,6 @@ impl CartMenuView<'_> {
                 CartRow::Colour => faces.colours.get(self.colour),
                 CartRow::Finish => faces.finishes.get(self.finish),
                 CartRow::Shape => faces.shapes.get(self.shape),
-                CartRow::Label => self.label.as_ref(),
                 CartRow::Reset => None,
             };
             let Some(&value) = value else {
@@ -192,9 +187,8 @@ impl CartMenuView<'_> {
         }
         let [cancel, change, save, reset, search] = faces.legend;
         let hints: &[(TexId, u32)] = match self.row {
-            CartRow::Reset => &[cancel, reset],
-            CartRow::Label => &[cancel, change, search, save],
-            _ => &[cancel, change, save],
+            CartRow::Reset => &[cancel, search, reset],
+            _ => &[cancel, change, search, save],
         };
         for (tex, w, x) in centred_hints(hints, LEGEND_GAP) {
             push(out, tex, x, LEGEND_Y, w, HINT_H);

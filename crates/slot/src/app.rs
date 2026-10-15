@@ -300,6 +300,8 @@ pub struct App {
     label_pick: Option<LabelPick>,
     /// The label row's words as last drawn, [dim, lit]: rebuilt by the frontend when they change.
     label_caption_faces: Option<(String, [(TexId, u32, u32); 2])>,
+    /// The label grid's pictures and words, drawn and uploaded by the frontend.
+    label_grid_faces: Option<LabelGridFaces>,
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
     core_faces_stem: Option<String>,
@@ -457,6 +459,7 @@ impl App {
             cart_menu_faces: None,
             label_pick: None,
             label_caption_faces: None,
+            label_grid_faces: None,
             core_board_face: None,
             core_lid_face: None,
             core_faces_stem: None,
@@ -1438,6 +1441,7 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                _ if self.label_grid_open() => self.label_grid_input(action),
                 _ if self.cart_menu.is_some() => self.cart_menu_input(action),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     if self.shelf().carts.get(self.shelf().index).is_some_and(|c| c.platform == Platform::Gba) {
@@ -2444,6 +2448,9 @@ impl App {
         if let Some(menu) = &self.cart_menu {
             self.draw_cart_menu(menu, out);
         }
+        if self.label_grid_open() {
+            self.draw_label_grid(out);
+        }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
         }
@@ -3079,13 +3086,10 @@ impl App {
             return;
         };
         let before = menu.chosen();
-        let on_label = menu.row == slot_ui::CartRow::Label;
         match action {
             Action::GbaDown(Btn::Up) => menu.step_row(-1),
             Action::GbaDown(Btn::Down) => menu.step_row(1),
-            Action::GbaDown(Btn::Y) if on_label => self.type_label_search(&menu.stem),
-            Action::GbaDown(Btn::Left) | Action::ShelfLeft if on_label => self.step_label(&menu.stem, -1),
-            Action::GbaDown(Btn::Right) | Action::ShelfRight if on_label => self.step_label(&menu.stem, 1),
+            Action::GbaDown(Btn::Y) => self.type_label_search(&menu.stem),
             Action::GbaDown(Btn::Left) | Action::ShelfLeft => menu.step_value(-1),
             Action::GbaDown(Btn::Right) | Action::ShelfRight => menu.step_value(1),
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => {
@@ -3121,6 +3125,63 @@ impl App {
 
     /// Left/Right on the label row (L1/R1 in the core picker): flips through the labels a
     /// search (Y) found, each worn by the cart at once. Before one, there is nothing to flip.
+    /// The grid of labels a search found. The cursor walks it; A wears the one under it and
+    /// goes back to the cart menu, B goes back leaving the cart as it was, Y searches again.
+    fn label_grid_input(&mut self, action: Action) {
+        let Some(pick) = &self.label_pick else {
+            return;
+        };
+        let (found, stem) = (pick.choices.len(), pick.stem.clone());
+        let by: isize = match action {
+            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => return self.end_label_pick(false),
+            // Nothing found yet means nothing to wear: A then just goes back.
+            Action::GbaDown(Btn::A) | Action::Insert => return self.end_label_pick(found > 0),
+            Action::GbaDown(Btn::Y) => {
+                self.close_label_grid();
+                return self.type_label_search(&stem);
+            }
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => -1,
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => 1,
+            Action::GbaDown(Btn::Up) => -(slot_ui::GRID_COLS as isize),
+            Action::GbaDown(Btn::Down) => slot_ui::GRID_COLS as isize,
+            _ => return,
+        };
+        let Some(pick) = &mut self.label_pick else {
+            return;
+        };
+        // Never past the last one found: the rest are still on their way.
+        let last = found.saturating_sub(1) as isize;
+        pick.at = (pick.cursor() as isize + by).clamp(0, last.max(0)) as usize + 1;
+        if found == 0 {
+            pick.at = 0;
+        }
+        if let Some(search) = &pick.search {
+            search.looking_at((pick.page() + 1) * slot_ui::PAGE);
+        }
+    }
+
+    /// Puts the grid away without touching what was picked.
+    fn close_label_grid(&mut self) {
+        if let Some(pick) = &mut self.label_pick {
+            pick.grid = false;
+        }
+    }
+
+    /// The grid is up and should be drawn and fed input instead of the menu behind it.
+    fn label_grid_open(&self) -> bool {
+        self.label_pick.as_ref().is_some_and(|p| p.grid)
+    }
+
+    /// This page of the grid: each label's picture, where the cursor is in it, and the words
+    /// under it. None when no grid is up.
+    pub fn label_grid_page(&self) -> Option<(usize, Vec<PathBuf>, String)> {
+        let pick = self.label_pick.as_ref().filter(|p| p.grid)?;
+        let page = pick.page();
+        let paths: Vec<PathBuf> =
+            pick.choices.iter().skip(page * slot_ui::PAGE).take(slot_ui::PAGE).map(|c| c.path.clone()).collect();
+        Some((page, paths, pick.grid_caption()))
+    }
+
     fn step_label(&mut self, stem: &str, by: isize) {
         let Some(pick) = self.label_pick.as_mut().filter(|p| p.stem == stem && !p.choices.is_empty()) else {
             return;
@@ -3184,6 +3245,7 @@ impl App {
         pick.done = None;
         pick.jump = true;
         pick.query = Some(query.clone());
+        pick.grid = true;
         let mut asked = cart;
         (asked.label, asked.famicom_label) = pick.original.clone();
         pick.search = Some(crate::cart_art::LabelSearch::start(root, asked, query));
@@ -3268,10 +3330,7 @@ impl App {
                     if pick.jump {
                         pick.jump = false;
                         pick.at = 1;
-                        if let Some(search) = &pick.search {
-                            search.looking_at(pick.at);
-                        }
-                        show = true;
+                        show = !pick.grid;
                     }
                 }
                 crate::cart_art::PickNews::Done(result) => {
@@ -3283,6 +3342,12 @@ impl App {
                 }
             }
         }
+        // A page's worth is always worth having ready, whatever the search is told to run past.
+        if let Some(pick) = &self.label_pick {
+            if let Some(search) = &pick.search {
+                search.looking_at((pick.page() + 1) * slot_ui::PAGE);
+            }
+        }
         if show {
             self.show_label_pick();
         }
@@ -3291,12 +3356,11 @@ impl App {
     /// The words the label row (or the core picker's label line) should show now.
     /// With true for the picker's wider line.
     pub fn label_caption(&self) -> Option<(String, bool)> {
-        let in_menu = self.cart_menu.as_ref().is_some_and(|m| m.rows.contains(&slot_ui::CartRow::Label));
         let in_picker = self.core_picker.is_some() && self.picker_look.is_some();
-        if !in_menu && !in_picker {
+        if !in_picker {
             return None;
         }
-        let stem = self.cart_menu.as_ref().or(self.picker_look.as_ref()).map(|m| m.stem.as_str())?;
+        let stem = self.picker_look.as_ref().map(|m| m.stem.as_str())?;
         let cart = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i));
         let pick = self.label_pick.as_ref().filter(|p| p.stem == stem);
         let words = match pick {
@@ -3304,10 +3368,44 @@ impl App {
             None if cart.is_some_and(|c| slot_ui::shown_label(c).is_some()) => "Current".to_string(),
             None => "Name only".to_string(),
         };
-        Some(if in_picker && !in_menu { (format!("L1 / R1  Label: {words}   Y  Search"), true) } else { (words, false) })
+        Some((format!("L1 / R1  Label: {words}   Y  Search"), true))
     }
 
     /// The caption's faces, built by the frontend for `text`.
+    /// The page the grid's pictures were made for, so they are made again only when it turns.
+    pub fn label_grid_built(&self) -> Option<(usize, usize)> {
+        self.label_grid_faces.as_ref().map(|g| g.built)
+    }
+
+    /// The words the grid was last given, which change far more often than its pictures.
+    pub fn label_grid_caption_built(&self) -> Option<&str> {
+        self.label_grid_faces.as_ref().map(|g| g.caption_built.as_str())
+    }
+
+    pub fn set_label_grid_faces(
+        &mut self,
+        built: (usize, usize),
+        caption_built: String,
+        title: (TexId, u32, u32),
+        caption: (TexId, u32, u32),
+        cells: Vec<Option<(TexId, u32, u32)>>,
+        legend: [(TexId, u32); 3],
+    ) {
+        self.label_grid_faces = Some(LabelGridFaces { built, caption_built, title, caption, cells, legend });
+    }
+
+    /// Only the words again: the pictures on the page have not changed.
+    pub fn set_label_grid_caption(&mut self, words: String, caption: (TexId, u32, u32)) {
+        if let Some(grid) = &mut self.label_grid_faces {
+            (grid.caption_built, grid.caption) = (words, caption);
+        }
+    }
+
+    /// What was typed, for the grid's heading.
+    pub fn label_grid_query(&self) -> Option<String> {
+        self.label_pick.as_ref().filter(|p| p.grid).and_then(|p| p.query.clone())
+    }
+
     pub fn set_label_caption_faces(&mut self, text: String, faces: [(TexId, u32, u32); 2]) {
         self.label_caption_faces = Some((text, faces));
     }
@@ -3364,7 +3462,18 @@ impl App {
                 },
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
-            label: self.label_caption_faces.as_ref().map(|(_, f)| *f),
+        }
+        .draw(out);
+    }
+
+    fn draw_label_grid(&self, out: &mut Vec<Draw>) {
+        let cells = self.label_grid_faces.as_ref().map(|g| g.cells.as_slice()).unwrap_or(&[]);
+        slot_ui::LabelGridView {
+            title: self.label_grid_faces.as_ref().map(|g| g.title),
+            caption: self.label_grid_faces.as_ref().map(|g| g.caption),
+            cells,
+            at: self.label_pick.as_ref().map_or(0, |p| p.cursor() % slot_ui::PAGE),
+            legend: self.label_grid_faces.as_ref().map(|g| g.legend),
         }
         .draw(out);
     }
@@ -4278,6 +4387,18 @@ struct CartMenu {
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
 
 /// Labels found for one cart, to flip through: 0 is the label it had.
+/// What the label grid is drawn from, uploaded once a page and kept until the page turns.
+struct LabelGridFaces {
+    /// The page the pictures were made for: which page, and how many labels it holds.
+    built: (usize, usize),
+    /// The words, which change on their own as the cursor moves and labels land.
+    caption_built: String,
+    title: (TexId, u32, u32),
+    caption: (TexId, u32, u32),
+    cells: Vec<Option<(TexId, u32, u32)>>,
+    legend: [(TexId, u32); 3],
+}
+
 struct LabelPick {
     stem: String,
     /// The cart's labels when the pick began (its own, its Famicom one), put back by B.
@@ -4294,6 +4415,8 @@ struct LabelPick {
     /// What was typed to search for: the keyboard starts from it again.
     #[cfg_attr(not(feature = "brick"), allow(dead_code))]
     query: Option<String>,
+    /// The grid of what was found is up, in front of the cart menu.
+    grid: bool,
 }
 
 impl LabelPick {
@@ -4308,7 +4431,37 @@ impl LabelPick {
             offline: false,
             jump: false,
             query: None,
+            grid: false,
         }
+    }
+
+    /// The cell the cursor is on, counted from the first label found.
+    fn cursor(&self) -> usize {
+        self.at.saturating_sub(1)
+    }
+
+    /// The page of the grid it is on.
+    fn page(&self) -> usize {
+        self.cursor() / slot_ui::PAGE
+    }
+
+    /// The words under the grid: which label the cursor is on, of how many so far.
+    fn grid_caption(&self) -> String {
+        if self.offline {
+            return "Connect to Wi-Fi first".into();
+        }
+        let found = self.choices.len();
+        if found == 0 {
+            return match (self.search.is_some(), self.done) {
+                (true, _) => "Searching...".into(),
+                (false, Some(false)) => "Can't search now".into(),
+                _ => "None found".into(),
+            };
+        }
+        // "of 20+" while more are still coming: the list has no end until the search ends.
+        let more = if self.search.is_some() { "+" } else { "" };
+        let choice = &self.choices[self.cursor().min(found - 1)];
+        format!("{}   ({} of {found}{more})", choice.caption, self.cursor() + 1)
     }
 
     fn caption(&self) -> String {
@@ -4389,10 +4542,8 @@ impl CartMenu {
             _ => (colour, finish),
         };
         let rows = match cart.platform {
-            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Label, CartRow::Reset],
-            Platform::Gb | Platform::Gbc => {
-                vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Label, CartRow::Reset]
-            }
+            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
+            Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
             Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
         };
         let mut menu = CartMenu {
@@ -4427,9 +4578,9 @@ impl CartMenu {
             return;
         }
         self.rows = if self.on_famicom() {
-            vec![CartRow::Shape, CartRow::Colour, CartRow::Label, CartRow::Reset]
+            vec![CartRow::Shape, CartRow::Colour, CartRow::Reset]
         } else {
-            vec![CartRow::Shape, CartRow::Label, CartRow::Reset]
+            vec![CartRow::Shape, CartRow::Reset]
         };
         if !self.rows.contains(&self.row) {
             self.row = CartRow::Shape;
@@ -4469,8 +4620,7 @@ impl CartMenu {
                 self.shape = step(self.shape, OUTLINES.len());
                 self.fit_rows();
             }
-            // Labels are stepped by the app, which runs their search.
-            slot_ui::CartRow::Label | slot_ui::CartRow::Reset => {}
+            slot_ui::CartRow::Reset => {}
         }
     }
 

@@ -54,6 +54,8 @@ pub struct Frontend {
     faces: FaceBuilder,
     /// The label row's words, [dim, lit], rewritten as the label search goes.
     label_caption_tex: [Option<TexId>; 2],
+    /// The label grid's textures, kept and written over as its pages turn.
+    label_grid_tex: LabelGridTex,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     rebuild_faces: RebuildFaces,
@@ -146,6 +148,7 @@ impl Frontend {
             title_tex: None,
             faces: FaceBuilder::spawn(),
             label_caption_tex: [None, None],
+            label_grid_tex: LabelGridTex::default(),
             cart_faces,
             rebuild,
             rebuild_faces: RebuildFaces::default(),
@@ -515,6 +518,7 @@ impl Frontend {
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_label_caption(self.session.app_mut(), compositor, &mut self.label_caption_tex);
+        sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
         sync_core_picker(
             self.session.app_mut(),
             compositor,
@@ -861,6 +865,60 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     let id = upload(compositor, &mut state.tex, face);
     app.set_sticker_face(id);
 }
+
+#[derive(Default)]
+struct LabelGridTex {
+    title: Option<TexId>,
+    caption: Option<TexId>,
+    legend: [Option<TexId>; 3],
+    cells: Vec<Option<TexId>>,
+}
+
+/// The label grid's page: its labels as pictures, its heading and its words. The pictures are
+/// read again only when the page turns or another label lands on it; the words, which change
+/// as the cursor moves and the search runs, are drawn on their own.
+fn sync_label_grid(app: &mut App, compositor: &mut Compositor, tex: &mut LabelGridTex) {
+    let Some((page, paths, words)) = app.label_grid_page() else {
+        return;
+    };
+    let fresh = app.label_grid_built() == Some((page, paths.len()));
+    if fresh {
+        if app.label_grid_caption_built() != Some(words.as_str()) {
+            let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
+            app.set_label_grid_caption(words, caption);
+        }
+        return;
+    }
+    let query = app.label_grid_query().unwrap_or_default();
+    let title = face(compositor, &mut tex.title, slot_ui::title_face(&format!("FIND A LABEL  {query}")));
+    let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
+    let mut legend = [(caption.0, 0u32); 3];
+    for (i, hint) in slot_ui::label_grid_legend_faces().into_iter().enumerate() {
+        let (id, w, _) = face(compositor, &mut tex.legend[i], hint);
+        legend[i] = (id, w);
+    }
+    tex.cells.resize(slot_ui::PAGE, None);
+    let cells = (0..slot_ui::PAGE)
+        .map(|i| {
+            let png = std::fs::read(paths.get(i)?).ok()?;
+            let (rgba, w, h) = crate::cart_art::label_picture(&png, GRID_TEX_MAX)?;
+            Some((upload_rgba(compositor, &mut tex.cells[i], w, h, &rgba), w, h))
+        })
+        .collect();
+    app.set_label_grid_faces((page, paths.len()), words, title, caption, cells, legend);
+}
+
+/// Uploads a face and keeps its size, which is what the views are drawn from.
+fn face(compositor: &mut Compositor, slot: &mut Option<TexId>, f: slot_ui::UndoFace) -> (TexId, u32, u32) {
+    let (w, h) = (f.w.max(1), f.h.max(1));
+    // No font: a clear pixel, so there is still a texture to point at.
+    let rgba = if f.rgba.is_empty() { vec![0; 4] } else { f.rgba };
+    let (w, h) = if rgba.len() as u32 == w * h * 4 { (w, h) } else { (1, 1) };
+    (upload_rgba(compositor, slot, w, h, &rgba), w, h)
+}
+
+/// How big a label is kept for the grid: four to a row on a 640 wide screen.
+const GRID_TEX_MAX: u32 = 160;
 
 /// The label row's words, drawn again only when they change.
 fn sync_label_caption(app: &mut App, compositor: &mut Compositor, tex: &mut [Option<TexId>; 2]) {
