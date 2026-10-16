@@ -47,6 +47,7 @@ pub fn finish_name(finish: Finish) -> &'static str {
         Finish::Solid => "Solid",
         Finish::Translucent => "See-through",
         Finish::Glitter => "Glitter",
+        Finish::Sheen => "Gold",
     }
 }
 

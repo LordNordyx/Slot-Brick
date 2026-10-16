@@ -512,6 +512,11 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
         let (x, y) = (i as u32 % s.w, i as u32 / s.w);
         let c = match shell.finish {
             Finish::Solid => shell.colour,
+            // Solid, but catching the light here and there.
+            Finish::Sheen => match fleck(x, y) {
+                true => lerp(shell.colour, [0xff; 3], 120, 255),
+                false => shell.colour,
+            },
             Finish::Translucent | Finish::Glitter => {
                 let body = through(shell.colour, inside(s, x, y).unwrap_or(shell.colour));
                 let c = lerp(edge, body, (*depth as u32).min(s.rim), s.rim);
@@ -632,7 +637,8 @@ fn recess_label(s: &Spec, face: &mut CartFace, shell: &Shell) {
     // A recess may run to the cart's edge (the NES label is open to the top).
     let (x0, y0) = (lx.saturating_sub(bevel), ly.saturating_sub(bevel));
     let (x1, y1) = (lx + lw + bevel, ly + lh + bevel);
-    let clear = shell.finish != Finish::Solid;
+    // Sheen is solid plastic: only the see-through finishes light the recess from behind.
+    let clear = matches!(shell.finish, Finish::Translucent | Finish::Glitter);
     let mut put = |x: u32, y: u32, upper: bool| {
         if x >= w || y >= h {
             return;

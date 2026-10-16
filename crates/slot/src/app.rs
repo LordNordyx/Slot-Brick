@@ -4776,6 +4776,8 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
     match finish {
         slot_ui::Finish::Solid => ShellFinish::Solid,
         slot_ui::Finish::Translucent => ShellFinish::Clear,
+        // Nothing can be set to Sheen, so it is never saved as itself.
+        slot_ui::Finish::Sheen => ShellFinish::Solid,
         slot_ui::Finish::Glitter => ShellFinish::Glitter,
     }
 }

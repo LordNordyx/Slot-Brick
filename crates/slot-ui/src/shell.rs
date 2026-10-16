@@ -8,6 +8,9 @@ pub enum Finish {
     Solid,
     Translucent,
     Glitter,
+    /// Solid plastic with a sparkle through it, as the gold NES carts were moulded. Not among
+    /// FINISHES: no cart can be set to it, it only comes with the plastics that really had it.
+    Sheen,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -54,6 +57,8 @@ pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent)
 
 /// Every NES cart's grey.
 pub const NES_SHELL: Shell = shell([0x8e, 0x8d, 0x8a], Finish::Solid);
+/// The gold plastic the two Zelda carts were moulded in, sparkle and all.
+pub const NES_GOLD_SHELL: Shell = Shell { colour: [0xc2, 0xa2, 0x3c], finish: Finish::Sheen };
 
 /// The SNES cart's lighter, cooler grey.
 pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
@@ -106,7 +111,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
             Some(choice) => shell(choice.colour, Finish::Solid),
             None => famicom_shell(&cart.stem),
         },
-        Platform::Nes => NES_SHELL,
+        Platform::Nes => nes_plain_shell(&cart.stem),
         Platform::Snes => match crate::cart::snes_shell_of(cart) {
             Some(crate::SnesShell::Pal) => SNES_PAL_SHELL,
             _ => SNES_SHELL,
@@ -123,6 +128,15 @@ pub fn shell_for(cart: &Cart) -> Shell {
             None if cart.platform == Platform::Gba => gba_shell_for(&cart.code),
             None => gb_shell_for(&cart.rom),
         },
+    }
+}
+
+/// A NES cart's own plastic: grey, but gold for the two that really were. The NES library's
+/// only gold carts are the Zeldas, so the name alone tells them apart.
+pub fn nes_plain_shell(stem: &str) -> Shell {
+    match stem.to_lowercase().contains("zelda") {
+        true => NES_GOLD_SHELL,
+        false => NES_SHELL,
     }
 }
 
