@@ -3272,11 +3272,13 @@ impl App {
             }
             return;
         }
+        // Every key here moves the picture, not the frame: Up pushes the picture up, which is
+        // to say the frame takes its piece from further down.
         match dir {
-            Btn::Up => a.crop.1 -= STEP_PX,
-            Btn::Down => a.crop.1 += STEP_PX,
-            Btn::Left => a.crop.0 -= STEP_PX,
-            _ => a.crop.0 += STEP_PX,
+            Btn::Up => a.crop.1 += STEP_PX,
+            Btn::Down => a.crop.1 -= STEP_PX,
+            Btn::Left => a.crop.0 += STEP_PX,
+            _ => a.crop.0 -= STEP_PX,
         }
         a.clamp();
     }
