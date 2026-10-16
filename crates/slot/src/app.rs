@@ -4576,6 +4576,9 @@ struct CartMenu {
     rows: Vec<slot_ui::CartRow>,
     row: slot_ui::CartRow,
     colours: Vec<(&'static str, Option<slot_ui::Shell>)>,
+    /// Which of them this cart is offered, as places in `colours`. A NES cart came in three
+    /// plastics and no more; a Game Boy one came in all of them.
+    offered: Vec<usize>,
     colour: usize,
     finish: usize,
     shape: usize,
@@ -4782,6 +4785,28 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
     }
 }
 
+/// The plastics a cart is offered, as places in `colours`. A NES cart came in its system's
+/// grey, the gold the Zeldas were moulded in, and the plastics the unlicensed publishers used,
+/// and no others; every other console's carts are offered the lot. Whatever it wears is always
+/// offered, so a colour set elsewhere can still be stepped away from.
+fn offered_colours(
+    platform: Platform,
+    colours: &[(&'static str, Option<slot_ui::Shell>)],
+    worn: usize,
+) -> Vec<usize> {
+    if platform != Platform::Nes {
+        return (0..colours.len()).collect();
+    }
+    const NES_PLASTICS: [&str; 5] =
+        ["NES grey", "Zelda gold", "Tengen black", "Color Dreams blue", "Camerica silver"];
+    let mut out = vec![0];
+    out.extend(colours.iter().enumerate().filter(|(_, (n, _))| NES_PLASTICS.contains(n)).map(|(i, _)| i));
+    if !out.contains(&worn) {
+        out.push(worn);
+    }
+    out
+}
+
 impl CartMenu {
     fn open(cart: &Cart) -> Self {
         use slot_ui::CartRow;
@@ -4828,6 +4853,7 @@ impl CartMenu {
             stem: cart.stem.clone(),
             row: rows[0],
             rows,
+            offered: offered_colours(cart.platform, &colours, colour),
             colours,
             colour,
             finish,
@@ -4845,7 +4871,12 @@ impl CartMenu {
     /// The shell these values make: None while they are all the game's own.
     fn chosen(&self) -> Option<ShellChoice> {
         let picked = self.colours[self.colour].1;
-        let finish = slot_ui::FINISHES[self.finish];
+        // A plastic brings its own finish; the finish row overrules it where there is one. The
+        // gold carts have no row, and their shine is not among FINISHES to be picked anyway.
+        let finish = match self.rows.contains(&slot_ui::CartRow::Finish) {
+            true => slot_ui::FINISHES[self.finish],
+            false => picked.map_or(self.own.finish, |s| s.finish),
+        };
         let outline = OUTLINES[self.shape];
         if picked.is_none() && finish == self.own.finish && outline == Outline::Auto {
             return None;
@@ -4869,7 +4900,10 @@ impl CartMenu {
         let step = |v: usize, n: usize| (v as isize + by).rem_euclid(n as isize) as usize;
         match self.row {
             // The finish stays as it is: a colour only changes the colour.
-            slot_ui::CartRow::Colour => self.colour = step(self.colour, self.colours.len()),
+            slot_ui::CartRow::Colour => {
+                let at = self.offered.iter().position(|i| *i == self.colour).unwrap_or(0);
+                self.colour = self.offered[step(at, self.offered.len())];
+            }
             slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
             slot_ui::CartRow::Shape => {
                 self.shape = step(self.shape, OUTLINES.len());

@@ -57,6 +57,12 @@ pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent)
 
 /// Every NES cart's grey.
 pub const NES_SHELL: Shell = shell([0x8e, 0x8d, 0x8a], Finish::Solid);
+/// The blue the unlicensed Color Dreams carts were moulded in.
+pub const NES_BLUE_SHELL: Shell = shell([0x2b, 0x4f, 0xa6], Finish::Solid);
+/// The silver Camerica's carts were moulded in, which shone as their gold did.
+pub const NES_SILVER_SHELL: Shell = Shell { colour: [0xc3, 0xc7, 0xcd], finish: Finish::Sheen };
+/// The black the unlicensed Tengen carts were moulded in.
+pub const NES_BLACK_SHELL: Shell = shell([0x26, 0x26, 0x29], Finish::Solid);
 /// The gold the two Zelda carts were moulded in: a polished metal, not a yellow plastic.
 pub const NES_GOLD_SHELL: Shell = Shell { colour: [0xd0, 0xa4, 0x2c], finish: Finish::Sheen };
 
@@ -297,6 +303,9 @@ pub fn shell_presets() -> Vec<(&'static str, Shell)> {
         ("Advance charcoal", DEFAULT_SHELL),
         ("NES grey", NES_SHELL),
         ("Zelda gold", NES_GOLD_SHELL),
+        ("Tengen black", NES_BLACK_SHELL),
+        ("Color Dreams blue", NES_BLUE_SHELL),
+        ("Camerica silver", NES_SILVER_SHELL),
         ("SNES grey", SNES_SHELL),
         ("Super Famicom grey", SNES_PAL_SHELL),
         ("Advance Video grey", FAMILY[0].1),
