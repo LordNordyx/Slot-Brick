@@ -570,21 +570,25 @@ fn inside(s: &Spec, x: u32, y: u32) -> Option<[u8; 3]> {
 
 /// Polished metal: the light does not lie flat on it, it runs across in bands, bright where
 /// the plastic turns to the light and dark where it turns away. That banding is what reads as
-/// metal; a flat fill of the same colour only reads as yellow.
+/// metal; a flat fill of the same colour only reads as yellow. The bands run into one another
+/// rather than meeting at a line, or it reads as stripes instead.
 fn chrome(base: [u8; 3], y: u32, h: u32) -> [u8; 3] {
-    let t = y as f32 / h.max(1) as f32;
     // Down the face: a lit top, a dark band under it, the broad shine across the middle, then
     // dark again towards the foot. Positive turns it to the light, negative away.
-    let turn = match t {
-        t if t < 0.07 => 0.62,
-        t if t < 0.15 => 0.10,
-        t if t < 0.29 => -0.30,
-        t if t < 0.44 => 0.26,
-        t if t < 0.57 => 0.78,
-        t if t < 0.68 => 0.08,
-        t if t < 0.82 => -0.38,
-        _ => 0.22,
-    };
+    const BANDS: [(f32, f32); 7] =
+        [(0.0, 0.55), (0.18, -0.34), (0.34, 0.05), (0.50, 0.82), (0.63, 0.20), (0.80, -0.40), (1.0, 0.30)];
+    let t = y as f32 / h.max(1) as f32;
+    let turn = BANDS
+        .windows(2)
+        .find(|w| t < w[1].0 || w[1].0 >= 1.0)
+        .map(|w| {
+            let ((t0, v0), (t1, v1)) = (w[0], w[1]);
+            let k = ((t - t0) / (t1 - t0).max(f32::EPSILON)).clamp(0.0, 1.0);
+            // Eased, so the bands swell into one another the way a reflection does.
+            let k = k * k * (3.0 - 2.0 * k);
+            v0 + (v1 - v0) * k
+        })
+        .unwrap_or(0.0);
     let (to, by) = match turn >= 0.0 {
         true => (HIGHLIGHT, turn),
         false => (SHADOW, -turn),

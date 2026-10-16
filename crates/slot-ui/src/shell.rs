@@ -103,6 +103,16 @@ const GB_OVERSEAS_TITLES: &[(&str, Shell)] = &[
 const CRYSTAL: Shell = shell([0x86, 0xb9, 0xbf], Finish::Glitter);
 const KIRBY: Shell = shell([0xec, 0x94, 0xb4], Finish::Translucent);
 
+/// The plastic a stored choice asks for.
+fn finish_of(finish: ShellFinish) -> Finish {
+    match finish {
+        ShellFinish::Solid => Finish::Solid,
+        ShellFinish::Clear => Finish::Translucent,
+        ShellFinish::Glitter => Finish::Glitter,
+        ShellFinish::Gold => Finish::Sheen,
+    }
+}
+
 pub fn shell_for(cart: &Cart) -> Shell {
     match cart.platform {
         // NES and SNES carts came in their system's grey: the plastic follows the shape. Famicom
@@ -111,20 +121,16 @@ pub fn shell_for(cart: &Cart) -> Shell {
             Some(choice) => shell(choice.colour, Finish::Solid),
             None => famicom_shell(&cart.stem),
         },
-        Platform::Nes => nes_plain_shell(&cart.stem),
+        Platform::Nes => match cart.shell {
+            Some(choice) => shell(choice.colour, finish_of(choice.finish)),
+            None => nes_plain_shell(&cart.stem),
+        },
         Platform::Snes => match crate::cart::snes_shell_of(cart) {
             Some(crate::SnesShell::Pal) => SNES_PAL_SHELL,
             _ => SNES_SHELL,
         },
         Platform::Gba | Platform::Gb | Platform::Gbc => match cart.shell {
-            Some(choice) => {
-                let finish = match choice.finish {
-                    ShellFinish::Solid => Finish::Solid,
-                    ShellFinish::Clear => Finish::Translucent,
-                    ShellFinish::Glitter => Finish::Glitter,
-                };
-                shell(choice.colour, finish)
-            }
+            Some(choice) => shell(choice.colour, finish_of(choice.finish)),
             None if cart.platform == Platform::Gba => gba_shell_for(&cart.code),
             None => gb_shell_for(&cart.rom),
         },
@@ -290,6 +296,7 @@ pub fn shell_presets() -> Vec<(&'static str, Shell)> {
         ("Game Boy Color clear", GB_CLEAR_SHELL),
         ("Advance charcoal", DEFAULT_SHELL),
         ("NES grey", NES_SHELL),
+        ("Zelda gold", NES_GOLD_SHELL),
         ("SNES grey", SNES_SHELL),
         ("Super Famicom grey", SNES_PAL_SHELL),
         ("Advance Video grey", FAMILY[0].1),

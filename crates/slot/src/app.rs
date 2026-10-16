@@ -4769,6 +4769,7 @@ fn finish_of(finish: ShellFinish) -> slot_ui::Finish {
         ShellFinish::Solid => slot_ui::Finish::Solid,
         ShellFinish::Clear => slot_ui::Finish::Translucent,
         ShellFinish::Glitter => slot_ui::Finish::Glitter,
+        ShellFinish::Gold => slot_ui::Finish::Sheen,
     }
 }
 
@@ -4776,8 +4777,7 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
     match finish {
         slot_ui::Finish::Solid => ShellFinish::Solid,
         slot_ui::Finish::Translucent => ShellFinish::Clear,
-        // Nothing can be set to Sheen, so it is never saved as itself.
-        slot_ui::Finish::Sheen => ShellFinish::Solid,
+        slot_ui::Finish::Sheen => ShellFinish::Gold,
         slot_ui::Finish::Glitter => ShellFinish::Glitter,
     }
 }
@@ -4818,11 +4818,13 @@ impl CartMenu {
             _ => (colour, finish),
         };
         let rows = match cart.platform {
-            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
+            // A NES cart's plastic can be chosen: the Zeldas came in gold, the rest in grey.
+            Platform::Nes => vec![CartRow::Shape, CartRow::Colour, CartRow::Reset],
+            Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
             Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
             Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
         };
-        let mut menu = CartMenu {
+        let menu = CartMenu {
             stem: cart.stem.clone(),
             row: rows[0],
             rows,
@@ -4834,34 +4836,11 @@ impl CartMenu {
             before: cart.shell,
             famicom,
         };
-        menu.fit_rows();
         menu
     }
 
     /// A NES game on the Famicom cart: its shape as chosen, or its own.
-    fn on_famicom(&self) -> bool {
-        self.famicom.is_some_and(|(own, _)| match OUTLINES[self.shape] {
-            Outline::Auto => own,
-            Outline::Notched => false,
-            Outline::Rounded => true,
-        })
-    }
 
-    /// A NES cart offers a colour only while it is a Famicom cart, which came in many.
-    fn fit_rows(&mut self) {
-        use slot_ui::CartRow;
-        if self.famicom.is_none() {
-            return;
-        }
-        self.rows = if self.on_famicom() {
-            vec![CartRow::Shape, CartRow::Colour, CartRow::Reset]
-        } else {
-            vec![CartRow::Shape, CartRow::Reset]
-        };
-        if !self.rows.contains(&self.row) {
-            self.row = CartRow::Shape;
-        }
-    }
 
     /// The shell these values make: None while they are all the game's own.
     fn chosen(&self) -> Option<ShellChoice> {
@@ -4894,7 +4873,6 @@ impl CartMenu {
             slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
             slot_ui::CartRow::Shape => {
                 self.shape = step(self.shape, OUTLINES.len());
-                self.fit_rows();
             }
             slot_ui::CartRow::Reset => {}
         }
@@ -4904,6 +4882,5 @@ impl CartMenu {
         self.colour = 0;
         self.finish = slot_ui::FINISHES.iter().position(|f| *f == self.own.finish).unwrap_or(0);
         self.shape = 0;
-        self.fit_rows();
     }
 }
