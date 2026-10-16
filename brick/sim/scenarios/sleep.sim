@@ -1,0 +1,8 @@
+# Power sleeps the Brick and Power wakes it, back where it was.
+press a
+phase Shelf
+press power
+phase Doze
+idle
+press power
+phase Shelf

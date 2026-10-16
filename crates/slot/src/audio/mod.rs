@@ -27,7 +27,13 @@ pub fn open_sink() -> Box<dyn AudioSink> {
     Box::new(HostAudio::new())
 }
 
-#[cfg(not(feature = "host"))]
+#[cfg(all(not(feature = "host"), not(feature = "sim")))]
 pub fn open_sink() -> Box<dyn AudioSink> {
     Box::new(AlsaSink::new())
+}
+
+/// The simulator has no speaker: sound is played into nothing at the speed a speaker would.
+#[cfg(feature = "sim")]
+pub fn open_sink() -> Box<dyn AudioSink> {
+    Box::new(StubSink::draining())
 }

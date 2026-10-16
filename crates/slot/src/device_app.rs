@@ -2,8 +2,10 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use slot::frontend::Frontend;
-#[cfg(feature = "brick")]
+#[cfg(all(feature = "brick", not(feature = "sim")))]
 use slot::input::BrickInput;
+#[cfg(feature = "sim")]
+use slot::input::SimInput as BrickInput;
 #[cfg(not(feature = "brick"))]
 use slot::input::DeviceInput;
 use slot_gfx::{Compositor, FbdevSurface, Surface};
@@ -74,7 +76,7 @@ impl Pacer {
 /// script is still preparing (Wi-Fi stop, sync) cancels the suspend instead of
 /// being swallowed, which used to need a second press to wake. Once the script
 /// has announced the kernel request (/tmp/slot-suspending) the press is the wake key.
-#[cfg(feature = "brick")]
+#[cfg(all(feature = "brick", not(feature = "sim")))]
 fn run_sleep_script(root: &std::path::Path, input: &mut BrickInput, frontend: &Frontend) -> (std::io::Result<std::process::ExitStatus>, bool) {
     use slot_input::{Btn, InputSource, RawEvent};
     const SUSPENDING: &str = "/tmp/slot-suspending";
@@ -104,11 +106,41 @@ fn run_sleep_script(root: &std::path::Path, input: &mut BrickInput, frontend: &F
     }
 }
 
+/// The simulator's suspend: the screen goes dark and stays so until Power is pressed, as the
+/// kernel's would; System/sleep.sh is never run, it would act on the real machine.
+#[cfg(feature = "sim")]
+fn sim_sleep(input: &mut BrickInput, frontend: &Frontend, sim: &slot::sim::Shared, surface: &FbdevSurface) -> (std::io::Result<std::process::ExitStatus>, bool) {
+    use slot_input::{Btn, InputSource, RawEvent};
+    use std::os::unix::process::ExitStatusExt;
+    eprintln!("slot: sim: suspended; press Power to wake");
+    loop {
+        if let Some(code) = sim.quit_requested() {
+            std::process::exit(code);
+        }
+        sim.tick(format!("{:?}", frontend.app().phase()), false, true, || surface.read_rgba());
+        if input.poll(frontend.now()).into_iter().any(|e| matches!(e, RawEvent::Down(Btn::Power))) {
+            return (Ok(std::process::ExitStatus::from_raw(0)), true);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 pub fn run() {
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
-    let mut surface = match FbdevSurface::new() {
+    #[cfg(feature = "sim")]
+    if let Err(e) = slot::sim::populate() {
+        eprintln!("slot: sim: stand-in hardware: {e}");
+        std::process::exit(1);
+    }
+    #[cfg(feature = "sim")]
+    let sim = slot::sim::start();
+    #[cfg(feature = "sim")]
+    let surface = FbdevSurface::offscreen(slot::sim::PANEL);
+    #[cfg(not(feature = "sim"))]
+    let surface = FbdevSurface::new();
+    let mut surface = match surface {
         Ok(s) => s,
         Err(e) => {
             eprintln!("slot: {e}");
@@ -138,7 +170,9 @@ pub fn run() {
     frontend.upload_bezel(&mut compositor, surface.window_size());
     #[cfg(not(feature = "brick"))]
     let mut input = DeviceInput::open(&root);
-    #[cfg(feature = "brick")]
+    #[cfg(feature = "sim")]
+    let mut input = BrickInput::new(sim.clone());
+    #[cfg(all(feature = "brick", not(feature = "sim")))]
     let mut input = match BrickInput::open(&root) {
         Ok(i) => i,
         Err(e) => {
@@ -164,6 +198,11 @@ pub fn run() {
     let mut sleep_attempted = false;
     loop {
         pacer.wait();
+        #[cfg(feature = "sim")]
+        if let Some(code) = sim.quit_requested() {
+            cpu.restore();
+            std::process::exit(code);
+        }
         let began = Instant::now();
         frontend.advance(&mut input);
         #[cfg(feature = "brick")]
@@ -195,7 +234,10 @@ pub fn run() {
                     if frontend.prepare_sleep() {
                         slot::brick_link::quiesce();
                         let suspended_before=slot::brick_power::suspended_seconds();
+                        #[cfg(not(feature = "sim"))]
                         let (result, cancelled) = run_sleep_script(&root, &mut input, &frontend);
+                        #[cfg(feature = "sim")]
+                        let (result, cancelled) = sim_sleep(&mut input, &frontend, &sim, &surface);
                         let returned = Instant::now();
                         let suspended=slot::brick_power::suspended_seconds().zip(suspended_before).map(|(a,b)|(a-b).max(0.0));
                         let confirmed=suspended.is_some_and(|v|v>0.05);
@@ -218,6 +260,8 @@ pub fn run() {
                     }
                 }
                 pacer = Pacer::new();
+                #[cfg(feature = "sim")]
+                sim.tick(format!("{:?}", frontend.app().phase()), false, true, || surface.read_rgba());
                 std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
@@ -227,6 +271,8 @@ pub fn run() {
         #[cfg(feature = "brick")]
         if !frontend.needs_render() {
             pacer = Pacer::new();
+            #[cfg(feature = "sim")]
+            sim.tick(format!("{:?}", frontend.app().phase()), false, false, || surface.read_rgba());
             std::thread::sleep(Duration::from_millis(25));
             continue;
         }
@@ -245,6 +291,8 @@ pub fn run() {
             std::process::exit(1);
         }
         let swap_took = swap.elapsed();
+        #[cfg(feature = "sim")]
+        sim.tick(format!("{:?}", frontend.app().phase()), true, false, || surface.read_rgba());
         slot::latency::swapped(swap_took.as_secs_f64() * 1000.0);
         let dropped = pacer.swapped(work, swap_took > Duration::from_millis(1));
         if slot::latency::tracing() {

@@ -19,7 +19,7 @@ impl BrickPlatform {
         Self { root }
     }
     fn read(&self, name: &str) -> Option<u32> {
-        fs::read_to_string(format!("/sys/class/power_supply/{name}"))
+        fs::read_to_string(crate::hw(&format!("/sys/class/power_supply/{name}")))
             .ok()?
             .trim()
             .parse()
@@ -36,6 +36,12 @@ impl Platform for BrickPlatform {
         &self.root
     }
     fn now(&self) -> i64 {
+        // The simulator can stop the clock, so screenshots show the same time every run.
+        if cfg!(feature = "sim") {
+            if let Some(secs) = std::env::var("SLOT_SIM_TIME").ok().and_then(|v| v.parse().ok()) {
+                return secs;
+            }
+        }
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -48,6 +54,11 @@ impl Platform for BrickPlatform {
         } else {
             10 + u64::from(step.min(9)) * 245 / 9
         };
+        // The simulator has no display driver; it shows the level it would have set instead.
+        if cfg!(feature = "sim") {
+            let _ = fs::write(crate::hw("/sim/backlight"), format!("{level}\n"));
+            return;
+        }
         if let Ok(dev) = OpenOptions::new().read(true).write(true).open("/dev/disp") {
             let args = [0u64, level, 0, 0];
             if unsafe { ioctl(dev.as_raw_fd(), 0x102, args.as_ptr()) } < 0 {
@@ -89,6 +100,11 @@ impl Platform for BrickPlatform {
             Ok(value) => value,
             Err(_) => {eprintln!("slot: Brick clock: timestamp out of range"); return;}
         };
+        // Never move the clock of the machine the simulator runs on.
+        if cfg!(feature = "sim") {
+            eprintln!("slot: sim: clock would be set to {secs}");
+            return;
+        }
         let time = ClockTime { secs, nanos: 0 };
         if unsafe { clock_settime(0, &time) } != 0 {
             eprintln!("slot: Brick clock: {}",std::io::Error::last_os_error()); return;

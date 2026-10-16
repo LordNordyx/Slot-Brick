@@ -1,0 +1,15 @@
+# LED settings reach the driver: changing the colour writes it to every zone.
+press a
+phase Shelf
+led effect_rgb_hex_m FFFFFF
+press menu
+press down
+press down
+press a
+press down
+press down
+press down
+press down
+press right
+led effect_rgb_hex_m 0000FF
+led effect_rgb_hex_lr 0000FF

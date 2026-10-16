@@ -54,7 +54,7 @@ impl Control{
         c.socket.set_write_timeout(Some(Duration::from_secs(2))).map_err(|_|"Cannot set Wi-Fi timeout")?;
         c.socket.connect(remote).map_err(|_|"Wi-Fi service unavailable")?;Ok(c)
     }
-    fn open()->Result<Self>{SOCKETS.iter().find_map(|s|Self::at(Path::new(s)).ok()).ok_or("Wi-Fi service unavailable".into())}
+    fn open()->Result<Self>{SOCKETS.iter().find_map(|s|Self::at(&slot_power::hw(s)).ok()).ok_or("Wi-Fi service unavailable".into())}
 }
 impl Supplicant for Control{
     fn command(&self,s:&str)->Result<String>{
@@ -77,7 +77,7 @@ fn service(on:bool,cancel:&AtomicBool)->Result<()>{helper_run(if on{"start"}else
 /// Control sockets slot can reach a supplicant on, in its search order.
 const SOCKETS:[&str;3]=["/etc/wifi/sockets/wlan0","/var/run/wpa_supplicant/wlan0","/run/wpa_supplicant/wlan0"];
 /// A supplicant is running: what the menu reports as Wi-Fi on, known without asking it.
-fn supplicant_up()->bool{SOCKETS.iter().any(|s|Path::new(s).exists())}
+fn supplicant_up()->bool{SOCKETS.iter().any(|s|slot_power::hw(s).exists())}
 /// A supplicant that answers: the firmware's socket appears a while before it does.
 fn supplicant_answers()->bool{Control::open().and_then(|c|c.command("PING")).is_ok_and(|r|r=="PONG")}
 /// One helper at a time: the boot repair and the menu may both ask, and two helpers
@@ -104,7 +104,7 @@ fn wanted(root:&Path)->bool{
     match fs::read_to_string(root.join(CHOICE_FILE)).map(|s|s.trim().to_string()).as_deref(){
         Ok("off")=>false,
         Ok("on")=>true,
-        _=>[Path::new("/etc/wifi/wpa_supplicant.conf").to_path_buf(),root.join("Config/wpa_supplicant.conf")].iter()
+        _=>[slot_power::hw("/etc/wifi/wpa_supplicant.conf"),root.join("Config/wpa_supplicant.conf")].iter()
             .any(|p|fs::read_to_string(p).is_ok_and(|s|s.lines().any(|l|l.trim_start().starts_with("network="))))
     }
 }
@@ -139,7 +139,7 @@ const RETRY_MS:u64=3_000;
 fn helper_run(verb:&str,cancel:&AtomicBool)->Result<()>{
     let _one=HELPER.lock().unwrap_or_else(|e|e.into_inner());
     let root=card_root();
-    let Some(script)=helper(Path::new("/etc/wifi/wifi_init.sh"),&root) else {return Err("Wi-Fi helper missing: System/brick_wifi.sh".into())};
+    let Some(script)=helper(&slot_power::hw("/etc/wifi/wifi_init.sh"),&root) else {return Err("Wi-Fi helper missing: System/brick_wifi.sh".into())};
     // Only slot's own helper knows "ensure" and "dhcp"; a firmware one would just print its usage.
     if matches!(verb,"ensure"|"dhcp") && !script.ends_with("System/brick_wifi.sh"){return Ok(())}
     // Inherit slot's stdout/stderr (Logs/slot.log): brick_wifi.sh moves itself to Logs/wifi.log,
@@ -258,7 +258,7 @@ const FIXED:usize=3;
 /// Wi-Fi is usable for downloads: wlan0 is associated. Cheap enough to check every tick.
 /// Online: wlan0 has a way out (a default route, set when DHCP hands out an address). Joined
 /// to a network alone is not enough: with no address nothing can be reached.
-pub fn online()->bool{fs::read_to_string("/proc/net/route").is_ok_and(|s|routed(&s))}
+pub fn online()->bool{fs::read_to_string(slot_power::hw("/proc/net/route")).is_ok_and(|s|routed(&s))}
 fn routed(table:&str)->bool{
     table.lines().skip(1).any(|l|{let f:Vec<&str>=l.split_whitespace().collect();f.len()>1&&f[0]=="wlan0"&&f[1]=="00000000"})
 }

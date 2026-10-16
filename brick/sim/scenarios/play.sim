@@ -1,0 +1,14 @@
+# A real game under a real core: Pocket Test (brick/sim/make-rom.py) on mGBA, then eject.
+press a
+phase Shelf
+press l1     # GBA -> SNES -> NES -> GBC -> GB
+wait 1200
+press l1
+wait 1200
+press l1
+wait 1200
+press l1
+press a
+phase Playing 20000
+hold menu 1500   # save state, eject, back to the shelf
+phase Shelf 20000

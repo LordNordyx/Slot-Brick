@@ -10,6 +10,8 @@ brick = ["device", "slot-gfx/brick", "slot-power/brick", "slot-ui/brick"]
 default = ["host"]
 host = ["dep:winit", "dep:cpal", "dep:gilrs", "slot-gfx/host"]
 device = ["slot-gfx/device"]
+# The Brick build, run offscreen on a PC: see src/sim and brick/sim.sh.
+sim = ["brick", "slot-gfx/sim", "slot-power/sim"]
 
 [dependencies]
 slot-gfx = { path = "../slot-gfx", default-features = false }

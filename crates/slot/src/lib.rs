@@ -49,3 +49,6 @@ pub mod brick_wifi;
 
 #[cfg(feature = "brick")]
 pub mod brick_link;
+
+#[cfg(feature = "sim")]
+pub mod sim;

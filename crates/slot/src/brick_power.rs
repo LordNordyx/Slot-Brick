@@ -60,7 +60,7 @@ fn write(sys:&Path,name:&str,value:&str)->io::Result<()> {
     Ok(())
 }
 impl CpuPower {
-    pub fn open(root:&Path)->Self {Self::open_in(root,Path::new("/sys/devices/system/cpu/cpu0/cpufreq"))}
+    pub fn open(root:&Path)->Self {Self::open_in(root,&slot_power::hw("/sys/devices/system/cpu/cpu0/cpufreq"))}
     fn open_in(root:&Path,sys:&Path)->Self {
         let now=Instant::now();
         let mut s=Self {sys:sys.into(),log:root.join("Logs/power.log"),original:vec![],policy:None,userspace:false,written:None,written_min:None,window:now,frames:0,late:0,busy:0,underruns:0,grace:now+Duration::from_secs(3),telemetry_at:now};
@@ -109,7 +109,7 @@ impl CpuPower {
     pub fn mode(&mut self,mode:Mode,underruns:u64) {
         if self.telemetry_at.elapsed()>=Duration::from_secs(60) {
             self.telemetry_at=Instant::now();
-            let battery=Path::new("/sys/class/power_supply/axp2202-battery");
+            let battery=slot_power::hw("/sys/class/power_supply/axp2202-battery");let battery=battery.as_path();
             self.log(&format!("sample mode={mode:?} actual_khz={} capacity={} voltage_uv={} charge_counter_raw={} audio_underruns={underruns}",
                 read(&self.sys,"scaling_cur_freq").unwrap_or_default(),read(battery,"capacity").unwrap_or_default(),read(battery,"voltage_now").unwrap_or_default(),read(battery,"charge_counter").unwrap_or_default()));
         }

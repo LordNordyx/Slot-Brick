@@ -46,7 +46,7 @@ fn write_command(out: &mut impl Write, name: &str, value: &str) -> io::Result<()
 }
 pub struct BrickLeds { root: PathBuf, sys: PathBuf, settings: Settings, original: Vec<(String,String)>, sleeping: Option<Vec<(String,String)>>, previous_mode: Option<u8>, available: bool, #[cfg(test)] applied_brightness: std::cell::RefCell<Vec<(String,String)>> }
 impl BrickLeds {
-    pub fn open(root: &Path) -> Self { Self::open_in(root,Path::new("/sys/class/led_anim")) }
+    pub fn open(root: &Path) -> Self { Self::open_in(root,&slot_power::hw("/sys/class/led_anim")) }
     fn names() -> Vec<String> {
         let mut names=vec!["max_scale".into(),"max_scale_f1f2".into(),"max_scale_lr".into()];
         for zone in ["m","f1","f2","lr"] {

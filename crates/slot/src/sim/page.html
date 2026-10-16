@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brick Sim</title>
+<style>
+  :root { --bg: #16171b; --panel: #23252b; --text: #e8e8ea; --muted: #9a9ca3; --accent: #e0b84c; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  main { display: flex; gap: 16px; padding: 16px; flex-wrap: wrap; }
+  #screen { width: 1024px; height: 768px; max-width: 100%; height: auto; aspect-ratio: 4 / 3;
+            background: #000; image-rendering: pixelated; border-radius: 6px; display: block; }
+  aside { min-width: 260px; flex: 1; }
+  .pad { display: grid; grid-template-columns: repeat(4, 56px); gap: 6px; margin-bottom: 12px; }
+  button { background: var(--panel); color: var(--text); border: 1px solid #3a3d45; border-radius: 6px;
+           padding: 8px 0; cursor: pointer; font: inherit; }
+  button:active, button.held { background: var(--accent); color: #000; }
+  pre { background: var(--panel); padding: 8px; border-radius: 6px; white-space: pre-wrap; font-size: 12px;
+        max-height: 320px; overflow: auto; }
+  kbd { color: var(--accent); }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <img id="screen" alt="Brick screen" src="/frame.png">
+  <aside>
+    <div class="pad" id="pad"></div>
+    <p class="muted">Keys: arrows, <kbd>X</kbd>=A <kbd>Z</kbd>=B <kbd>S</kbd>=X <kbd>A</kbd>=Y <kbd>Q</kbd>/<kbd>W</kbd>=L1/R1
+      <kbd>1</kbd>/<kbd>2</kbd>=L2/R2 <kbd>Enter</kbd>=Start <kbd>Shift</kbd>=Select <kbd>M</kbd>=Menu
+      <kbd>P</kbd>=Power <kbd>-</kbd>/<kbd>=</kbd>=Volume</p>
+    <pre id="state">…</pre>
+  </aside>
+</main>
+<script>
+const HEADERS = { 'X-Slot-Sim': '1' };
+const post = (path) => fetch(path, { method: 'POST', headers: HEADERS }).then(r => r.json()).catch(() => null);
+const BUTTONS = ['l2','l1','r1','r2','select','up','start','menu','left','down','right','power','y','x','b','a','voldown','volup'];
+const KEYS = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', x:'a', z:'b', s:'x', a:'y',
+  q:'l1', w:'r1', '1':'l2', '2':'r2', Enter:'start', Shift:'select', m:'menu', p:'power', '-':'voldown', '=':'volup' };
+const pad = document.getElementById('pad');
+for (const b of BUTTONS) {
+  const el = document.createElement('button');
+  el.textContent = b.toUpperCase(); el.dataset.btn = b;
+  el.addEventListener('pointerdown', () => { el.classList.add('held'); post('/down?btn=' + b); });
+  for (const ev of ['pointerup', 'pointerleave']) el.addEventListener(ev, () => {
+    if (el.classList.contains('held')) { el.classList.remove('held'); post('/up?btn=' + b); }
+  });
+  pad.appendChild(el);
+}
+const held = new Set();
+addEventListener('keydown', (e) => {
+  const b = KEYS[e.key] || KEYS[e.key.toLowerCase()];
+  if (!b) return;
+  e.preventDefault();
+  if (held.has(b)) return;
+  held.add(b); post('/down?btn=' + b);
+});
+addEventListener('keyup', (e) => {
+  const b = KEYS[e.key] || KEYS[e.key.toLowerCase()];
+  if (!b || !held.has(b)) return;
+  held.delete(b); post('/up?btn=' + b);
+});
+// Refresh the screen as fast as frames come back, without piling up requests.
+const screen = document.getElementById('screen');
+let busy = false;
+setInterval(() => {
+  if (busy) return;
+  busy = true;
+  const next = new Image();
+  next.onload = () => { screen.src = next.src; busy = false; };
+  next.onerror = () => { busy = false; };
+  next.src = '/frame.png?t=' + Date.now();
+}, 100);
+setInterval(() => fetch('/state').then(r => r.json())
+  .then(s => document.getElementById('state').textContent = JSON.stringify(s, null, 1))
+  .catch(() => document.getElementById('state').textContent = 'simulator not running'), 500);
+</script>
+</body>
+</html>

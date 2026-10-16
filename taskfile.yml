@@ -63,6 +63,8 @@ tasks:
       - task: lint:device
       - task: test
       - task: test:card
+      - task: sim:unit
+      - task: sim:test
 
   test:card:
     desc: Test the scripts slot ships on the card, off-device
@@ -178,6 +180,35 @@ tasks:
       SLOT_ROOT: '{{.SLOT_ROOT | default "./sdcard"}}'
     cmds:
       - cargo run -p slot
+
+  sim:
+    desc: >-
+      Run the Brick simulator (the real Brick build, offscreen, in Docker) with its screen and
+      buttons at http://127.0.0.1:PORT/, PORT defaults to 8765. FRESH=1 starts from a new card
+    cmds:
+      - sh brick/sim.sh serve {{.PORT | default "8765"}}
+
+  sim:stop:
+    desc: Stop a running simulator
+    cmds:
+      - sh brick/sim.sh stop
+
+  sim:test:
+    desc: >-
+      Run the simulator scenarios in brick/sim/scenarios and compare their screenshots with
+      brick/sim/golden; screenshots and diffs land in target-sim/out. NAMES picks some
+    cmds:
+      - sh brick/sim.sh test {{.NAMES}}
+
+  sim:update:
+    desc: Rerun the simulator scenarios and keep their screenshots as the new goldens. NAMES picks some
+    cmds:
+      - sh brick/sim.sh update {{.NAMES}}
+
+  sim:unit:
+    desc: Unit tests of the simulator build
+    cmds:
+      - sh brick/sim.sh unit
 
   dist:
     desc: Build the copy-to-SD2 tree, OUT defaults to ./dist
