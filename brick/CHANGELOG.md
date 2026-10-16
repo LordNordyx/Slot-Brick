@@ -1,6 +1,9 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- A simulator: the real Brick build runs on a PC in Docker, with its screen and buttons in a
+  browser, so a change to the frontend can be seen without writing a card. See
+  `brick/sim/README.md`.
 - Choose a game's label yourself: Y on the cart menu's Label row (or in the GBA core picker)
   searches by the game's name, or anything you type, and Left/Right (L1/R1) flips through every
   label found, each shown on the cart to pick from.

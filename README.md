@@ -198,6 +198,7 @@ Slot/Logs/slot.log
 Brick-specific code is gated behind the `brick` Cargo feature.
 
 - **Device scripts and apps:** [`brick/`](brick/)
+- **Simulator:** [`brick/sim/README.md`](brick/sim/README.md) — the real Brick build running on a PC in Docker, with its screen and buttons in a browser. Needs no device, and is how a frontend change is checked before a card is written.
 - **Change history:** [`brick/CHANGELOG.md`](brick/CHANGELOG.md)
 - **Dev builds:** every change to `main` is built automatically and published as the [Dev build](../../releases/tag/dev) release, replacing the previous one.
 
