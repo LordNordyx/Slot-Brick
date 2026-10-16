@@ -4697,10 +4697,9 @@ impl Adjust {
         self.crop.1 = self.crop.1.clamp(lo, hi);
     }
 
-    /// Grows or shrinks about the middle, so the frame stays where it is looking.
+    /// Grows or shrinks away from the top left corner, which stays where it is: line the
+    /// artwork up with the rim there and it keeps flush with it while the rest moves.
     fn resize(&mut self, dw: f32, dh: f32) {
-        self.crop.0 -= dw / 2.0;
-        self.crop.1 -= dh / 2.0;
         self.crop.2 += dw;
         self.crop.3 += dh;
         self.clamp();
