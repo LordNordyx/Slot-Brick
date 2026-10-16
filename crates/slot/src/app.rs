@@ -3130,8 +3130,6 @@ impl App {
         self.shelf().carts.iter().position(|c| c.stem == stem)
     }
 
-    /// Left/Right on the label row (L1/R1 in the core picker): flips through the labels a
-    /// search (Y) found, each worn by the cart at once. Before one, there is nothing to flip.
     /// The grid of labels a search found. The cursor walks it; A wears the one under it and
     /// goes back to the cart menu, B goes back leaving the cart as it was, Y searches again.
     fn label_grid_input(&mut self, action: Action) {
@@ -3293,20 +3291,6 @@ impl App {
         let paths: Vec<PathBuf> =
             pick.choices.iter().skip(page * slot_ui::PAGE).take(slot_ui::PAGE).map(|c| c.path.clone()).collect();
         Some((page, paths, pick.grid_caption()))
-    }
-
-    fn step_label(&mut self, stem: &str, by: isize) {
-        let Some(pick) = self.label_pick.as_mut().filter(|p| p.stem == stem && !p.choices.is_empty()) else {
-            return;
-        };
-        let n = pick.choices.len() as isize + 1;
-        pick.at = (pick.at as isize + by).rem_euclid(n) as usize;
-        pick.jump = false;
-        // The search only runs a few ahead of here, so flipping on is what fetches the rest.
-        if let Some(search) = &pick.search {
-            search.looking_at(pick.at);
-        }
-        self.show_label_pick();
     }
 
     /// Wi-Fi has an address: only the Brick has Wi-Fi to ask.
@@ -3481,7 +3465,7 @@ impl App {
             None if cart.is_some_and(|c| slot_ui::shown_label(c).is_some()) => "Current".to_string(),
             None => "Name only".to_string(),
         };
-        Some((format!("L1 / R1  Label: {words}   Y  Search"), true))
+        Some((format!("Label: {words}   Y  Search"), true))
     }
 
     /// The caption's faces, built by the frontend for `text`.
@@ -3682,14 +3666,6 @@ impl App {
             let open = self.core_picker.is_some_and(|p| !p.closing());
             if let (true, Some(stem)) = (open, self.picker_look.as_ref().map(|l| l.stem.clone())) {
                 self.type_label_search(&stem);
-            }
-            return;
-        }
-        // L1/R1: labels found for the cart, previewed on the lid.
-        if let Action::GbaDown(dir @ (Btn::L1 | Btn::R1)) = action {
-            let open = self.core_picker.is_some_and(|p| !p.closing());
-            if let (true, Some(stem)) = (open, self.picker_look.as_ref().map(|l| l.stem.clone())) {
-                self.step_label(&stem, if dir == Btn::L1 { -1 } else { 1 });
             }
             return;
         }
