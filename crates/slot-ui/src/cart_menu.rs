@@ -115,6 +115,8 @@ pub struct CartMenuView<'a> {
     pub shape: usize,
     pub cart: Option<(TexId, u32, u32)>,
     pub faces: Option<&'a CartMenuFaces>,
+    /// Whether a label can be searched for at all: Y is greyed out without Wi-Fi.
+    pub online: bool,
 }
 
 const PANEL_X: f32 = 300.0;
@@ -126,6 +128,8 @@ const TEXT_MIN_PX: f32 = 14.0;
 const CARET_GAP: f32 = 8.0;
 const LEGEND_Y: f32 = 427.0;
 const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
+/// A key that cannot be pressed just now: there but plainly not for the taking.
+pub const GREYED: f32 = 0.35;
 /// Where the cart stands: left of the rows, above the legend.
 const CART_BOX: [f32; 4] = [20.0, 40.0, PANEL_X - 40.0, LEGEND_Y - 60.0];
 
@@ -186,12 +190,28 @@ impl CartMenuView<'_> {
             push(out, left, vx - CARET_GAP - lw as f32, y, lw, lh);
         }
         let [cancel, change, save, reset, search] = faces.legend;
-        let hints: &[(TexId, u32)] = match self.row {
-            CartRow::Reset => &[cancel, search, reset],
-            _ => &[cancel, change, search, save],
+        // Y is on every row, so it keeps its place in the line whether it can be used or not.
+        let mut hints = [cancel; 4];
+        let (shown, y_at) = match self.row {
+            CartRow::Reset => {
+                (hints[1], hints[2]) = (search, reset);
+                (3, 1)
+            }
+            _ => {
+                (hints[1], hints[2], hints[3]) = (change, search, save);
+                (4, 2)
+            }
         };
-        for (tex, w, x) in centred_hints(hints, LEGEND_GAP) {
-            push(out, tex, x, LEGEND_Y, w, HINT_H);
+        for (i, (tex, w, x)) in centred_hints(&hints[..shown], LEGEND_GAP).into_iter().enumerate() {
+            let greyed = i == y_at && !self.online;
+            out.push(Draw::Tex {
+                x: x.round(),
+                y: LEGEND_Y,
+                w: w as f32,
+                h: HINT_H as f32,
+                tex,
+                alpha: if greyed { GREYED } else { 1.0 },
+            });
         }
     }
 }

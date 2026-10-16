@@ -2775,7 +2775,7 @@ impl App {
                     w: w as f32,
                     h: HINT_H as f32,
                     tex,
-                    alpha: lift,
+                    alpha: lift * if self.online() { 1.0 } else { slot_ui::GREYED },
                 });
             }
         }
@@ -3380,12 +3380,11 @@ impl App {
         let Some(cart) = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
             return;
         };
-        let online = self.online();
-        let pick = self.label_pick.get_or_insert_with(|| LabelPick::new(&cart));
-        if !online {
-            pick.offline = true;
+        // Y is greyed out without Wi-Fi, so there is nothing to say here: it simply does not go.
+        if !self.online() {
             return;
         }
+        let pick = self.label_pick.get_or_insert_with(|| LabelPick::new(&cart));
         #[cfg(feature = "brick")]
         {
             let start = pick.query.clone().unwrap_or_else(|| slot_ui::label_text(&cart));
@@ -3605,6 +3604,7 @@ impl App {
                 },
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
+            online: self.online(),
         }
         .draw(out);
     }
