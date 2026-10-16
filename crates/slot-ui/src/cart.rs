@@ -512,11 +512,7 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
         let (x, y) = (i as u32 % s.w, i as u32 / s.w);
         let c = match shell.finish {
             Finish::Solid => shell.colour,
-            // Solid, but catching the light here and there.
-            Finish::Sheen => match fleck(x, y) {
-                true => lerp(shell.colour, [0xff; 3], 120, 255),
-                false => shell.colour,
-            },
+            Finish::Sheen => chrome(shell.colour, y, s.h),
             Finish::Translucent | Finish::Glitter => {
                 let body = through(shell.colour, inside(s, x, y).unwrap_or(shell.colour));
                 let c = lerp(edge, body, (*depth as u32).min(s.rim), s.rim);
@@ -571,6 +567,34 @@ fn inside(s: &Spec, x: u32, y: u32) -> Option<[u8; 3]> {
         Some(BOARD)
     }
 }
+
+/// Polished metal: the light does not lie flat on it, it runs across in bands, bright where
+/// the plastic turns to the light and dark where it turns away. That banding is what reads as
+/// metal; a flat fill of the same colour only reads as yellow.
+fn chrome(base: [u8; 3], y: u32, h: u32) -> [u8; 3] {
+    let t = y as f32 / h.max(1) as f32;
+    // Down the face: a lit top, a dark band under it, the broad shine across the middle, then
+    // dark again towards the foot. Positive turns it to the light, negative away.
+    let turn = match t {
+        t if t < 0.07 => 0.62,
+        t if t < 0.15 => 0.10,
+        t if t < 0.29 => -0.30,
+        t if t < 0.44 => 0.26,
+        t if t < 0.57 => 0.78,
+        t if t < 0.68 => 0.08,
+        t if t < 0.82 => -0.38,
+        _ => 0.22,
+    };
+    let (to, by) = match turn >= 0.0 {
+        true => (HIGHLIGHT, turn),
+        false => (SHADOW, -turn),
+    };
+    lerp(base, to, (by * 255.0) as u32, 255)
+}
+
+/// Where the light comes back off polished metal, and where it does not.
+const HIGHLIGHT: [u8; 3] = [0xff, 0xf6, 0xd8];
+const SHADOW: [u8; 3] = [0x4a, 0x33, 0x09];
 
 fn fleck(x: u32, y: u32) -> bool {
     let mut h = x.wrapping_mul(0x9e37_79b9) ^ y.wrapping_mul(0x85eb_ca6b);

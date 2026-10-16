@@ -8,8 +8,8 @@ pub enum Finish {
     Solid,
     Translucent,
     Glitter,
-    /// Solid plastic with a sparkle through it, as the gold NES carts were moulded. Not among
-    /// FINISHES: no cart can be set to it, it only comes with the plastics that really had it.
+    /// Polished metal, as the gold NES carts were moulded. Not among FINISHES: no cart can be
+    /// set to it, it only comes with the plastics that really had it.
     Sheen,
 }
 
@@ -57,8 +57,8 @@ pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent)
 
 /// Every NES cart's grey.
 pub const NES_SHELL: Shell = shell([0x8e, 0x8d, 0x8a], Finish::Solid);
-/// The gold plastic the two Zelda carts were moulded in, sparkle and all.
-pub const NES_GOLD_SHELL: Shell = Shell { colour: [0xc2, 0xa2, 0x3c], finish: Finish::Sheen };
+/// The gold the two Zelda carts were moulded in: a polished metal, not a yellow plastic.
+pub const NES_GOLD_SHELL: Shell = Shell { colour: [0xd0, 0xa4, 0x2c], finish: Finish::Sheen };
 
 /// The SNES cart's lighter, cooler grey.
 pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
