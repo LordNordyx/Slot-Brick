@@ -4679,13 +4679,19 @@ struct Adjust {
 }
 
 impl Adjust {
-    /// Keeps the frame on the picture, no smaller than a label can usefully be.
+    /// Keeps the picture and the frame on each other, no closer in than a label can usefully
+    /// be and no further out than MOST_OF_IT. The frame may be larger than the picture: a
+    /// picture shrunk below the label's size leaves its edges empty, which is allowed.
     fn clamp(&mut self) {
         let (pw, ph) = (self.size.0 as f32, self.size.1 as f32);
-        self.crop.2 = self.crop.2.clamp(MIN_FRAME_PX.min(pw), pw);
-        self.crop.3 = self.crop.3.clamp(MIN_FRAME_PX.min(ph), ph);
-        self.crop.0 = self.crop.0.clamp(0.0, pw - self.crop.2);
-        self.crop.1 = self.crop.1.clamp(0.0, ph - self.crop.3);
+        self.crop.2 = self.crop.2.clamp(MIN_FRAME_PX.min(pw), pw * MOST_OF_IT);
+        self.crop.3 = self.crop.3.clamp(MIN_FRAME_PX.min(ph), ph * MOST_OF_IT);
+        // Whichever of the two is larger holds the other, so the ends swap over as it passes.
+        let span = |picture: f32, frame: f32| (0.0f32.min(picture - frame), 0.0f32.max(picture - frame));
+        let (lo, hi) = span(pw, self.crop.2);
+        self.crop.0 = self.crop.0.clamp(lo, hi);
+        let (lo, hi) = span(ph, self.crop.3);
+        self.crop.1 = self.crop.1.clamp(lo, hi);
     }
 
     /// Grows or shrinks about the middle, so the frame stays where it is looking.
@@ -4708,16 +4714,19 @@ impl Adjust {
     /// What would be cut if it were kept now.
     fn frame(&self) -> crate::cart_art::Frame {
         crate::cart_art::Frame {
-            x: self.crop.0.round().max(0.0) as u32,
-            y: self.crop.1.round().max(0.0) as u32,
-            w: (self.crop.2.round() as u32).clamp(1, self.size.0),
-            h: (self.crop.3.round() as u32).clamp(1, self.size.1),
+            x: self.crop.0.round() as i32,
+            y: self.crop.1.round() as i32,
+            w: (self.crop.2.round().max(1.0)) as u32,
+            h: (self.crop.3.round().max(1.0)) as u32,
         }
     }
 }
 
 /// The frame never shrinks below this many of the picture's own pixels: past that it is mush.
 const MIN_FRAME_PX: f32 = 48.0;
+/// Nor does it open wider than this many times the picture, which leaves the picture a third
+/// of the label at its smallest: enough for one that wants shrinking well past its own size.
+const MOST_OF_IT: f32 = 3.0;
 /// What one press is worth, in the picture's own pixels. Small enough to place a label exactly;
 /// holding the key is what covers ground.
 const STEP_PX: f32 = 2.0;

@@ -484,31 +484,46 @@ fn label_frame(png: &[u8], spec: &CartPhoto, cut: Cut) -> Result<Frame, &'static
     let [fx0, fy0, fx1, fy1] = spec.label;
     let (lx, ly) = (x0 + (cw * fx0).ceil() as u32, y0 + (ch * fy0).ceil() as u32);
     let (lw, lh) = (x0 + (cw * fx1) as u32 - lx, y0 + (ch * fy1) as u32 - ly);
-    Ok(Frame { x: lx, y: ly, w: lw, h: lh })
+    Ok(Frame { x: lx as i32, y: ly as i32, w: lw, h: lh })
 }
 
 /// Where on a picture a label sits. Kept beside a search's pictures so the frame can be moved
 /// by hand later: nothing is cut until someone says so.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Frame {
-    pub x: u32,
-    pub y: u32,
+    /// Where the frame's top left corner sits on the picture. Can be off it: a picture shrunk
+    /// smaller than the label leaves the label's edges empty, which is allowed.
+    pub x: i32,
+    pub y: i32,
     pub w: u32,
     pub h: u32,
 }
 
-/// The piece of `png` inside `frame`, as a label: no bigger than a label needs to be.
+/// The piece of `png` inside `frame`, as a label. Where the frame reaches past the picture,
+/// which it does once the picture has been shrunk smaller than the label, what is out there is
+/// left clear, so the cart's recess shows through at the edges.
 pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
     let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
-    let (lx, ly) = (frame.x.min(w.saturating_sub(1)), frame.y.min(h.saturating_sub(1)));
-    let (lw, lh) = (frame.w.min(w - lx), frame.h.min(h - ly));
+    let (lw, lh) = (frame.w, frame.h);
     if lw == 0 || lh == 0 {
         return Err("an empty picture");
     }
-    let mut out = Vec::with_capacity((lw * lh * 4) as usize);
-    for y in ly..ly + lh {
-        let i = ((y * w + lx) * 4) as usize;
-        out.extend_from_slice(&rgba[i..i + (lw * 4) as usize]);
+    let mut out = vec![0u8; (lw as usize) * (lh as usize) * 4];
+    for row in 0..lh {
+        let sy = frame.y + row as i32;
+        if sy < 0 || sy >= h as i32 {
+            continue;
+        }
+        // Where this row of the frame overlaps the picture, in both of their own columns.
+        let from = frame.x.max(0);
+        let to = (frame.x + lw as i32).min(w as i32);
+        if to <= from {
+            continue;
+        }
+        let run = (to - from) as usize * 4;
+        let src = ((sy as usize) * w as usize + from as usize) * 4;
+        let dst = (row as usize * lw as usize + (from - frame.x) as usize) * 4;
+        out[dst..dst + run].copy_from_slice(&rgba[src..src + run]);
     }
     let (out, lw, lh) = shrink(out, lw, lh, LABEL_MAX);
     let mut bytes = Vec::new();
@@ -1541,14 +1556,29 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_reaching_past_the_picture_is_brought_back_inside_it() {
+    fn a_frame_reaching_past_the_picture_leaves_what_is_out_there_clear() {
         let png = quartered(200, 100);
-        // Past the right and bottom edges: what is there is cut, and nothing beyond.
+        // Past the right and bottom edges: the frame keeps its own size, and what hangs over
+        // the edge is clear rather than clipped away.
         let cut = cut_out(&png, Frame { x: 150, y: 60, w: 400, h: 400 }).unwrap();
-        let (_, w, h) = decode_rgba(&cut).unwrap();
-        assert_eq!((w, h), (50, 40));
-        // Starting beyond the far corner still leaves a pixel to cut rather than nothing.
+        let (over, w, h) = decode_rgba(&cut).unwrap();
+        assert_eq!((w, h), (400, 400));
+        let px = |rgba: &[u8], w: u32, x: u32, y: u32| -> [u8; 4] {
+            let i = ((y * w + x) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        };
+        assert_eq!(px(&over, w, 10, 10), [0xff, 0xff, 0, 0xff], "the overlap was not cut");
+        assert_eq!(px(&over, w, 399, 399), [0, 0, 0, 0], "past the picture was not left clear");
+        // Wholly beyond the picture: a label's worth of nothing, rather than an error.
         assert!(cut_out(&png, Frame { x: 900, y: 900, w: 10, h: 10 }).is_ok());
+        // A frame larger than the picture keeps it whole, with the rest left clear.
+        let cut = cut_out(&png, Frame { x: -100, y: -50, w: 400, h: 200 }).unwrap();
+        let (rgba, w, h) = decode_rgba(&cut).unwrap();
+        assert_eq!((w, h), (400, 200));
+        assert_eq!(px(&rgba, w, 0, 0), [0, 0, 0, 0], "outside the picture was not left clear");
+        assert_eq!(px(&rgba, w, 399, 199), [0, 0, 0, 0]);
+        // The picture itself sits at (100, 50) of the frame: its top left is the red quarter.
+        assert_eq!(px(&rgba, w, 101, 51), [0xff, 0, 0, 0xff]);
         assert_eq!(cut_out(&png, Frame { x: 0, y: 0, w: 0, h: 10 }), Err("an empty picture"));
         assert_eq!(png_size(b"<html>"), None);
     }
