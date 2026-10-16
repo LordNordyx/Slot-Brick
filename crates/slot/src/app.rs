@@ -3668,12 +3668,15 @@ impl App {
         let adjust = pick.adjust.as_ref()?;
         let choice = pick.choices.get(pick.cursor())?;
         let cart = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i))?.clone();
-        let frame = adjust.frame();
-        // Says when the shape has drifted from the one it started as, which R puts back.
-        let shape = adjust.original.2 / adjust.original.3.max(1.0);
-        let now = frame.w as f32 / (frame.h as f32).max(1.0);
-        let warped = if (now / shape - 1.0).abs() > 0.02 { "  stretched" } else { "" };
-        Some((adjust.source.clone(), format!("{}   ({} x {}){warped}", choice.caption, frame.w, frame.h), cart))
+        // How large the picture is against the size it came in at, which is what moves as it
+        // is stretched: the frame's own measurements run the other way and read as nonsense.
+        let across = adjust.original.2 / adjust.crop.2.max(1.0) * 100.0;
+        let down = adjust.original.3 / adjust.crop.3.max(1.0) * 100.0;
+        let size = match (across - down).abs() < 1.0 {
+            true => format!("{across:.0}%"),
+            false => format!("{across:.0}% x {down:.0}%  stretched"),
+        };
+        Some((adjust.source.clone(), format!("{}   {size}", choice.caption), cart))
     }
 
     /// The hints already uploaded, so moving the frame does not draw them again.

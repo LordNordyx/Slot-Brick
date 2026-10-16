@@ -499,10 +499,10 @@ pub struct Frame {
     pub h: u32,
 }
 
-/// The piece of `png` inside `frame`, as a label. Where the frame reaches past the picture,
-/// which it does once the picture has been shrunk smaller than the label, what is out there is
-/// left clear, so the cart's recess shows through at the edges.
-pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
+/// The piece of `png` inside `frame`. Where the frame reaches past the picture, which it does
+/// once the picture has been shrunk smaller than the label, what is out there is left clear,
+/// so the cart's recess shows through at the edges.
+fn cut_rgba(png: &[u8], frame: Frame) -> Result<(Vec<u8>, u32, u32), &'static str> {
     let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
     let (lw, lh) = (frame.w, frame.h);
     if lw == 0 || lh == 0 {
@@ -525,15 +525,71 @@ pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
         let dst = (row as usize * lw as usize + (from - frame.x) as usize) * 4;
         out[dst..dst + run].copy_from_slice(&rgba[src..src + run]);
     }
+    Ok((out, lw, lh))
+}
+
+/// The piece of `png` inside `frame`, as a label of its own shape.
+pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
+    let (out, lw, lh) = cut_rgba(png, frame)?;
     let (out, lw, lh) = shrink(out, lw, lh, LABEL_MAX);
+    encode(&out, lw, lh)
+}
+
+/// The piece of `png` inside `frame`, in the shape `into` wants. A frame can be sized a side
+/// at a time, so it need not be the shape of the slot it is bound for; the cart fills its slot
+/// by cropping, so a label handed over in another shape would be cropped rather than stretched
+/// and would not be what was framed. Stretching it here is what makes the two agree.
+pub fn cut_to(png: &[u8], frame: Frame, into: (u32, u32)) -> Result<Vec<u8>, &'static str> {
+    let (out, lw, lh) = cut_rgba(png, frame)?;
+    let (iw, ih) = (into.0.max(1), into.1.max(1));
+    let long = lw.max(lh).min(LABEL_MAX).max(1);
+    // Rounded, not floored: a whole number of pixels can only come so close to a given shape,
+    // and rounding keeps it to within a pixel rather than always falling short.
+    let other = |want: u32, of: u32| ((long as u64 * want as u64 + of as u64 / 2) / of as u64).max(1) as u32;
+    let (nw, nh) = match iw >= ih {
+        true => (long, other(ih, iw)),
+        false => (other(iw, ih), long),
+    };
+    let out = resample(&out, lw, lh, nw, nh);
+    encode(&out, nw, nh)
+}
+
+fn encode(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>, &'static str> {
     let mut bytes = Vec::new();
-    let mut e = png::Encoder::new(&mut bytes, lw, lh);
+    let mut e = png::Encoder::new(&mut bytes, w, h);
     e.set_color(png::ColorType::Rgba);
     e.set_depth(png::BitDepth::Eight);
     e.write_header()
-        .and_then(|mut w| w.write_image_data(&out))
+        .and_then(|mut w| w.write_image_data(rgba))
         .map_err(|_| "cannot encode the label")?;
     Ok(bytes)
+}
+
+/// To any size, each way on its own: the average of what each new pixel covers when there is
+/// more than one, and the nearest when the picture is being stretched rather than squeezed.
+fn resample(rgba: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
+    if (w, h) == (nw, nh) {
+        return rgba.to_vec();
+    }
+    let mut out = Vec::with_capacity((nw * nh * 4) as usize);
+    for y in 0..nh {
+        let (sy0, sy1) = (y * h / nh, ((y + 1) * h / nh).max(y * h / nh + 1));
+        for x in 0..nw {
+            let (sx0, sx1) = (x * w / nw, ((x + 1) * w / nw).max(x * w / nw + 1));
+            let mut sum = [0u64; 4];
+            for sy in sy0..sy1.min(h) {
+                for sx in sx0..sx1.min(w) {
+                    let i = ((sy * w + sx) * 4) as usize;
+                    for c in 0..4 {
+                        sum[c] += rgba[i + c] as u64;
+                    }
+                }
+            }
+            let n = ((sy1.min(h) - sy0) * (sx1.min(w) - sx0)).max(1) as u64;
+            out.extend(sum.map(|v| (v / n) as u8));
+        }
+    }
+    out
 }
 
 /// A picture's size, without decoding it: the width and height in its IHDR.
@@ -1176,7 +1232,8 @@ pub fn forget_choices(root: &Path) {
 /// whoever picked it has said where the frame goes.
 pub fn keep_framed(root: &Path, cart: &Cart, source: &Path, frame: Frame) -> std::io::Result<PathBuf> {
     let png = std::fs::read(source)?;
-    let cut = cut_out(&png, frame).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let cut = cut_to(&png, frame, slot_ui::label_size(cart))
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let target = label_target(root, cart);
     if let Some(dir) = target.parent() {
         std::fs::create_dir_all(dir)?;
@@ -1581,6 +1638,32 @@ mod tests {
         assert_eq!(px(&rgba, w, 101, 51), [0xff, 0, 0, 0xff]);
         assert_eq!(cut_out(&png, Frame { x: 0, y: 0, w: 0, h: 10 }), Err("an empty picture"));
         assert_eq!(png_size(b"<html>"), None);
+    }
+
+    #[test]
+    fn a_label_is_cut_in_the_shape_its_slot_wants() {
+        let png = quartered(200, 100);
+        // A frame of one shape, a slot of another: the label comes out in the slot's shape, so
+        // the cart stretches it the way it was framed instead of cropping it to fit.
+        let frame = Frame { x: 0, y: 0, w: 200, h: 100 };
+        // A whole number of pixels only comes so close to a given shape, so near enough is the
+        // contract: within a pixel of the slot's own.
+        let shape_of = |w: u32, h: u32| w as f32 / h as f32;
+        let near = |got: f32, want: f32| (got / want - 1.0).abs() < 0.02;
+        let (_, w, h) = decode_rgba(&cut_to(&png, frame, (216, 99)).unwrap()).unwrap();
+        assert!(near(shape_of(w, h), shape_of(216, 99)), "{w} x {h} is not the slot's shape");
+        // A tall slot gets a tall label from the very same frame.
+        let (_, w, h) = decode_rgba(&cut_to(&png, frame, (99, 216)).unwrap()).unwrap();
+        assert!(near(shape_of(w, h), shape_of(99, 216)), "{w} x {h} is not the slot's shape");
+        // What it holds is still the picture: the top left stays the red quarter.
+        let cut = cut_to(&png, frame, (216, 99)).unwrap();
+        let (rgba, w, _) = decode_rgba(&cut).unwrap();
+        let at = |x: u32, y: u32| rgba[(((y * w + x) * 4) as usize)..][..4].to_vec();
+        assert_eq!(at(2, 2), vec![0xff, 0, 0, 0xff]);
+        // And no label is written larger than a label needs to be.
+        let big = Frame { x: 0, y: 0, w: 4000, h: 2000 };
+        let (_, w, h) = decode_rgba(&cut_to(&png, big, (216, 99)).unwrap()).unwrap();
+        assert!(w.max(h) <= LABEL_MAX, "{w} x {h}");
     }
 
     #[test]
