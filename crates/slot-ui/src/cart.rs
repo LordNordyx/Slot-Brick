@@ -409,6 +409,25 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     face
 }
 
+/// The cart with nothing in its label slot: the slot is clear through to whatever lies behind
+/// it. Framing a label draws the picture behind this, so it is seen through the very window it
+/// will be worn in. Gives the slot's place on the face as well, to line the picture up with.
+pub fn cart_cutout_face(cart: &Cart) -> (CartFace, (u32, u32, u32, u32)) {
+    let s = spec(shape_of(cart));
+    let shell = shell_for(cart);
+    let mut face = shell_face(&s, &shell);
+    mould_detail(&s, &mut face);
+    recess_label(&s, &mut face, &shell);
+    clip_to_silhouette(&s, &mut face);
+    let (lx, ly, lw, lh) = s.label;
+    for y in ly..(ly + lh).min(face.h) {
+        for x in lx..(lx + lw).min(face.w) {
+            face.rgba[((y * face.w + x) * 4 + 3) as usize] = 0;
+        }
+    }
+    (face, (lx, ly, lw, lh))
+}
+
 fn clip_to_silhouette(s: &Spec, face: &mut CartFace) {
     for (px, cover) in face.rgba.chunks_exact_mut(4).zip(s.mask) {
         px[3] = ((px[3] as u32 * *cover as u32 + 127) / 255) as u8;
@@ -493,6 +512,7 @@ fn shell_face(s: &Spec, shell: &Shell) -> CartFace {
         let (x, y) = (i as u32 % s.w, i as u32 / s.w);
         let c = match shell.finish {
             Finish::Solid => shell.colour,
+            Finish::Sheen => chrome(shell.colour, y, s.h),
             Finish::Translucent | Finish::Glitter => {
                 let body = through(shell.colour, inside(s, x, y).unwrap_or(shell.colour));
                 let c = lerp(edge, body, (*depth as u32).min(s.rim), s.rim);
@@ -547,6 +567,38 @@ fn inside(s: &Spec, x: u32, y: u32) -> Option<[u8; 3]> {
         Some(BOARD)
     }
 }
+
+/// Polished metal: the light does not lie flat on it, it runs across in bands, bright where
+/// the plastic turns to the light and dark where it turns away. That banding is what reads as
+/// metal; a flat fill of the same colour only reads as yellow. The bands run into one another
+/// rather than meeting at a line, or it reads as stripes instead.
+fn chrome(base: [u8; 3], y: u32, h: u32) -> [u8; 3] {
+    // Down the face: a lit top, a dark band under it, the broad shine across the middle, then
+    // dark again towards the foot. Positive turns it to the light, negative away.
+    const BANDS: [(f32, f32); 7] =
+        [(0.0, 0.55), (0.18, -0.34), (0.34, 0.05), (0.50, 0.82), (0.63, 0.20), (0.80, -0.40), (1.0, 0.30)];
+    let t = y as f32 / h.max(1) as f32;
+    let turn = BANDS
+        .windows(2)
+        .find(|w| t < w[1].0 || w[1].0 >= 1.0)
+        .map(|w| {
+            let ((t0, v0), (t1, v1)) = (w[0], w[1]);
+            let k = ((t - t0) / (t1 - t0).max(f32::EPSILON)).clamp(0.0, 1.0);
+            // Eased, so the bands swell into one another the way a reflection does.
+            let k = k * k * (3.0 - 2.0 * k);
+            v0 + (v1 - v0) * k
+        })
+        .unwrap_or(0.0);
+    let (to, by) = match turn >= 0.0 {
+        true => (HIGHLIGHT, turn),
+        false => (SHADOW, -turn),
+    };
+    lerp(base, to, (by * 255.0) as u32, 255)
+}
+
+/// Where the light comes back off polished metal, and where it does not.
+const HIGHLIGHT: [u8; 3] = [0xff, 0xf6, 0xd8];
+const SHADOW: [u8; 3] = [0x4a, 0x33, 0x09];
 
 fn fleck(x: u32, y: u32) -> bool {
     let mut h = x.wrapping_mul(0x9e37_79b9) ^ y.wrapping_mul(0x85eb_ca6b);
@@ -613,7 +665,8 @@ fn recess_label(s: &Spec, face: &mut CartFace, shell: &Shell) {
     // A recess may run to the cart's edge (the NES label is open to the top).
     let (x0, y0) = (lx.saturating_sub(bevel), ly.saturating_sub(bevel));
     let (x1, y1) = (lx + lw + bevel, ly + lh + bevel);
-    let clear = shell.finish != Finish::Solid;
+    // Sheen is solid plastic: only the see-through finishes light the recess from behind.
+    let clear = matches!(shell.finish, Finish::Translucent | Finish::Glitter);
     let mut put = |x: u32, y: u32, upper: bool| {
         if x >= w || y >= h {
             return;

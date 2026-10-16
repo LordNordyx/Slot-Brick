@@ -8,6 +8,9 @@ pub enum Finish {
     Solid,
     Translucent,
     Glitter,
+    /// Polished metal, as the gold NES carts were moulded. Not among FINISHES: no cart can be
+    /// set to it, it only comes with the plastics that really had it.
+    Sheen,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -54,12 +57,32 @@ pub const GB_CLEAR_SHELL: Shell = shell([0x7c, 0x7a, 0x8a], Finish::Translucent)
 
 /// Every NES cart's grey.
 pub const NES_SHELL: Shell = shell([0x8e, 0x8d, 0x8a], Finish::Solid);
+/// The blue the unlicensed Color Dreams carts were moulded in.
+pub const NES_BLUE_SHELL: Shell = shell([0x2b, 0x4f, 0xa6], Finish::Solid);
+/// The silver Camerica's carts were moulded in, which shone as their gold did.
+pub const NES_SILVER_SHELL: Shell = Shell { colour: [0xc3, 0xc7, 0xcd], finish: Finish::Sheen };
+/// The black the unlicensed Tengen carts were moulded in.
+pub const NES_BLACK_SHELL: Shell = shell([0x26, 0x26, 0x29], Finish::Solid);
+/// The gold the two Zelda carts were moulded in: a polished metal, not a yellow plastic.
+pub const NES_GOLD_SHELL: Shell = Shell { colour: [0xd0, 0xa4, 0x2c], finish: Finish::Sheen };
 
 /// The SNES cart's lighter, cooler grey.
 pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
 
 /// The PAL and Super Famicom cart's lighter, warmer grey.
 pub const SNES_PAL_SHELL: Shell = shell([0xab, 0xab, 0xa7], Finish::Solid);
+
+/// What each of FAMICOM_SHELLS is called, in the same order.
+pub const FAMICOM_NAMES: [&str; 8] = [
+    "Famicom yellow",
+    "Famicom red",
+    "Famicom blue",
+    "Famicom green",
+    "Famicom black",
+    "Famicom cream",
+    "Famicom orange",
+    "Famicom pink",
+];
 
 /// Famicom carts came in many plastics. A Japanese release wears one of them, picked
 /// steadily from its name: a colour in the spirit of the Famicom, not its real one.
@@ -98,6 +121,16 @@ const GB_OVERSEAS_TITLES: &[(&str, Shell)] = &[
 const CRYSTAL: Shell = shell([0x86, 0xb9, 0xbf], Finish::Glitter);
 const KIRBY: Shell = shell([0xec, 0x94, 0xb4], Finish::Translucent);
 
+/// The plastic a stored choice asks for.
+fn finish_of(finish: ShellFinish) -> Finish {
+    match finish {
+        ShellFinish::Solid => Finish::Solid,
+        ShellFinish::Clear => Finish::Translucent,
+        ShellFinish::Glitter => Finish::Glitter,
+        ShellFinish::Gold => Finish::Sheen,
+    }
+}
+
 pub fn shell_for(cart: &Cart) -> Shell {
     match cart.platform {
         // NES and SNES carts came in their system's grey: the plastic follows the shape. Famicom
@@ -106,23 +139,28 @@ pub fn shell_for(cart: &Cart) -> Shell {
             Some(choice) => shell(choice.colour, Finish::Solid),
             None => famicom_shell(&cart.stem),
         },
-        Platform::Nes => NES_SHELL,
+        Platform::Nes => match cart.shell {
+            Some(choice) => shell(choice.colour, finish_of(choice.finish)),
+            None => nes_plain_shell(&cart.stem),
+        },
         Platform::Snes => match crate::cart::snes_shell_of(cart) {
             Some(crate::SnesShell::Pal) => SNES_PAL_SHELL,
             _ => SNES_SHELL,
         },
         Platform::Gba | Platform::Gb | Platform::Gbc => match cart.shell {
-            Some(choice) => {
-                let finish = match choice.finish {
-                    ShellFinish::Solid => Finish::Solid,
-                    ShellFinish::Clear => Finish::Translucent,
-                    ShellFinish::Glitter => Finish::Glitter,
-                };
-                shell(choice.colour, finish)
-            }
+            Some(choice) => shell(choice.colour, finish_of(choice.finish)),
             None if cart.platform == Platform::Gba => gba_shell_for(&cart.code),
             None => gb_shell_for(&cart.rom),
         },
+    }
+}
+
+/// A NES cart's own plastic: grey, but gold for the two that really were. The NES library's
+/// only gold carts are the Zeldas, so the name alone tells them apart.
+pub fn nes_plain_shell(stem: &str) -> Shell {
+    match stem.to_lowercase().contains("zelda") {
+        true => NES_GOLD_SHELL,
+        false => NES_SHELL,
     }
 }
 
@@ -276,6 +314,10 @@ pub fn shell_presets() -> Vec<(&'static str, Shell)> {
         ("Game Boy Color clear", GB_CLEAR_SHELL),
         ("Advance charcoal", DEFAULT_SHELL),
         ("NES grey", NES_SHELL),
+        ("Zelda gold", NES_GOLD_SHELL),
+        ("Tengen black", NES_BLACK_SHELL),
+        ("Color Dreams blue", NES_BLUE_SHELL),
+        ("Camerica silver", NES_SILVER_SHELL),
         ("SNES grey", SNES_SHELL),
         ("Super Famicom grey", SNES_PAL_SHELL),
         ("Advance Video grey", FAMILY[0].1),

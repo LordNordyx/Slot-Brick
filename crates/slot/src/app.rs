@@ -296,6 +296,13 @@ pub struct App {
     /// The cart's plastic while the core picker is open: Up/Down change it there.
     picker_look: Option<CartMenu>,
     cart_menu_faces: Option<slot_ui::CartMenuFaces>,
+    /// Labels found for the cart open in the cart menu or the core picker, to choose from.
+    label_pick: Option<LabelPick>,
+    /// The label row's words as last drawn, [dim, lit]: rebuilt by the frontend when they change.
+    /// The label grid's pictures and words, drawn and uploaded by the frontend.
+    label_grid_faces: Option<LabelGridFaces>,
+    /// The picture being framed by hand, and the words under it.
+    label_adjust_faces: Option<LabelAdjustFaces>,
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
     core_faces_stem: Option<String>,
@@ -304,6 +311,8 @@ pub struct App {
     core_blank_chip_face: Option<TexId>,
     core_chip_shadow_face: Option<TexId>,
     core_legend_faces: Vec<(TexId, u32)>,
+    /// Y, which searches for the cart's label: above the legend, off to one side.
+    core_search_face: Option<(TexId, u32)>,
     game_menu: Option<GameMenu>,
     link_sprites: Option<LinkSprites>,
     link_hardware: LinkKind,
@@ -451,6 +460,9 @@ impl App {
             cart_menu: None,
             picker_look: None,
             cart_menu_faces: None,
+            label_pick: None,
+            label_grid_faces: None,
+            label_adjust_faces: None,
             core_board_face: None,
             core_lid_face: None,
             core_faces_stem: None,
@@ -459,6 +471,7 @@ impl App {
             core_blank_chip_face: None,
             core_chip_shadow_face: None,
             core_legend_faces: Vec::new(),
+            core_search_face: None,
             game_menu: None,
             link_sprites: None,
             link_hardware: LinkKind::Cable,
@@ -1390,7 +1403,13 @@ impl App {
         }
         #[cfg(feature = "brick")]
         if let Some(wifi)=&mut self.wifi {
-            if wifi.input(action) {self.wifi=None;}
+            if wifi.input(action) {
+                // The label keyboard closed: with what was typed, the search for it begins.
+                let typed = wifi.take_label_query();
+                self.wifi=None;
+                let stem = self.cart_menu.as_ref().or(self.picker_look.as_ref()).map(|m| m.stem.clone());
+                if let (Some(query), Some(stem)) = (typed, stem) {self.search_labels(&stem, query);}
+            }
             return;
         }
         if let Phase::SetClock {
@@ -1426,6 +1445,8 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                _ if self.label_adjust_open() => self.label_adjust_input(action),
+                _ if self.label_grid_open() => self.label_grid_input(action),
                 _ if self.cart_menu.is_some() => self.cart_menu_input(action),
                 Action::GbaDown(Btn::Start) if self.core_picker.is_none() => {
                     if self.shelf().carts.get(self.shelf().index).is_some_and(|c| c.platform == Platform::Gba) {
@@ -1861,6 +1882,8 @@ impl App {
         if self.core_picker.is_some_and(|p| p.finished(now)) {
             self.core_picker = None;
         }
+        self.poll_label_pick();
+        self.tick_label_adjust();
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -2431,6 +2454,12 @@ impl App {
         if let Some(menu) = &self.cart_menu {
             self.draw_cart_menu(menu, out);
         }
+        if self.label_grid_open() {
+            self.draw_label_grid(out);
+        }
+        if self.label_adjust_open() {
+            self.draw_label_adjust(out);
+        }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
         }
@@ -2541,6 +2570,10 @@ impl App {
         self.core_chip_faces = chips;
         self.core_blank_chip_face = Some(blank);
         self.core_chip_shadow_face = Some(shadow);
+    }
+
+    pub fn set_core_search_face(&mut self, face: (TexId, u32)) {
+        self.core_search_face = Some(face);
     }
 
     pub fn set_core_legend_faces(&mut self, faces: Vec<(TexId, u32)>) {
@@ -2722,6 +2755,7 @@ impl App {
             let gaps = (hints.len() - 1) as f32;
             let gap = ((room - inked) / gaps).clamp(8.0, slot_ui::LEGEND_GAP);
             let mut x = (OUT_W as f32 - inked - gap * gaps) / 2.0;
+            let first = x;
             for &(tex, w) in hints {
                 out.push(Draw::Tex {
                     x: x.round(),
@@ -2732,6 +2766,17 @@ impl App {
                     alpha: lift,
                 });
                 x += w.saturating_sub(HINT_EDGE) as f32 + gap;
+            }
+            // Above the leftmost of them, standing apart from the core's own keys.
+            if let Some((tex, w)) = self.core_search_face {
+                out.push(Draw::Tex {
+                    x: first.round(),
+                    y: CORE_LEGEND_Y - HINT_H as f32 - 6.0,
+                    w: w as f32,
+                    h: HINT_H as f32,
+                    tex,
+                    alpha: lift * if self.online() { 1.0 } else { slot_ui::GREYED },
+                });
             }
         }
     }
@@ -2923,7 +2968,8 @@ impl App {
         }
         self.close_game_menu();
         self.core_picker = None;
-        // A cart left mid-change goes back to the plastic it had.
+        // A cart left mid-change goes back to the plastic and label it had.
+        self.end_label_pick(false);
         if let Some(look) = self.picker_look.take() {
             self.preview_shell(&look.stem, look.before);
         }
@@ -3056,21 +3102,29 @@ impl App {
         match action {
             Action::GbaDown(Btn::Up) => menu.step_row(-1),
             Action::GbaDown(Btn::Down) => menu.step_row(1),
+            Action::GbaDown(Btn::Y) => self.type_label_search(&menu.stem),
             Action::GbaDown(Btn::Left) | Action::ShelfLeft => menu.step_value(-1),
             Action::GbaDown(Btn::Right) | Action::ShelfRight => menu.step_value(1),
             Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => {
+                self.end_label_pick(false);
                 return self.preview_shell(&menu.stem, menu.before);
             }
             Action::GbaDown(Btn::A) => {
                 if menu.row == slot_ui::CartRow::Reset {
                     menu.reset();
+                    self.end_label_pick(false);
                     self.preview_shell(&menu.stem, None);
                 }
+                self.end_label_pick(true);
                 return self.save_shell(&menu);
             }
             _ => {}
         }
         if menu.chosen() != before {
+            // A label found for one shape is not one for another: the search starts over.
+            if menu.chosen().map(|c| c.outline) != before.map(|c| c.outline) {
+                self.end_label_pick(false);
+            }
             self.preview_shell(&menu.stem, menu.chosen());
         }
         self.cart_menu = Some(menu);
@@ -3080,6 +3134,427 @@ impl App {
     /// remembered when a menu opened, which a rescan could have moved.
     fn shelf_index_of(&self, stem: &str) -> Option<usize> {
         self.shelf().carts.iter().position(|c| c.stem == stem)
+    }
+
+    /// The grid of labels a search found. The cursor walks it; A wears the one under it and
+    /// goes back to the cart menu, B goes back leaving the cart as it was, Y searches again.
+    fn label_grid_input(&mut self, action: Action) {
+        let Some(pick) = &self.label_pick else {
+            return;
+        };
+        let (found, stem) = (pick.choices.len(), pick.stem.clone());
+        let by: isize = match action {
+            Action::GbaDown(Btn::B) | Action::GbaDown(Btn::Start) => return self.end_label_pick(false),
+            // Nothing found yet means nothing to frame: A then just goes back.
+            Action::GbaDown(Btn::A) | Action::Insert => {
+                return if found > 0 { self.open_label_adjust() } else { self.end_label_pick(false) }
+            }
+            Action::GbaDown(Btn::Y) => {
+                self.close_label_grid();
+                return self.type_label_search(&stem);
+            }
+            Action::GbaDown(Btn::Left) | Action::ShelfLeft => -1,
+            Action::GbaDown(Btn::Right) | Action::ShelfRight => 1,
+            Action::GbaDown(Btn::Up) => -(slot_ui::GRID_COLS as isize),
+            Action::GbaDown(Btn::Down) => slot_ui::GRID_COLS as isize,
+            _ => return,
+        };
+        let Some(pick) = &mut self.label_pick else {
+            return;
+        };
+        // Never past the last one found: the rest are still on their way.
+        let last = found.saturating_sub(1) as isize;
+        pick.at = (pick.cursor() as isize + by).clamp(0, last.max(0)) as usize + 1;
+        if found == 0 {
+            pick.at = 0;
+        }
+        if let Some(search) = &pick.search {
+            search.looking_at((pick.page() + 1) * slot_ui::PAGE);
+        }
+    }
+
+    /// A on the grid: the label picked goes under a frame to be set by hand, starting as the
+    /// piece it was cut from. Nothing is written until it is kept.
+    fn open_label_adjust(&mut self) {
+        let Some(pick) = &self.label_pick else {
+            return;
+        };
+        let Some(choice) = pick.choices.get(pick.cursor()) else {
+            return;
+        };
+        let (source, cut) = (choice.source.clone(), choice.frame);
+        // The picture has to be readable to be framed; if it is not, keep the cut as it is.
+        let Some(size) = std::fs::read(&source).ok().and_then(|png| crate::cart_art::png_size(&png)) else {
+            return self.end_label_pick(true);
+        };
+        let Some(cart) = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i)) else {
+            return;
+        };
+        let (face, slot) = slot_ui::cart_cutout_face(cart);
+        let crop = (cut.x as f32, cut.y as f32, cut.w as f32, cut.h as f32);
+        let mut adjust =
+            Adjust { source, size, crop, original: crop, face: (face.w, face.h), slot, sizing: false, held: None };
+        adjust.clamp();
+        if let Some(pick) = &mut self.label_pick {
+            pick.adjust = Some(adjust);
+        }
+    }
+
+    /// Framing a picked label. The d-pad moves the frame; holding L, Up and Right grow it and
+    /// Down and Left shrink it. R evens its shape back up, Y puts it back as it was, A keeps
+    /// what is inside it and B goes back to the grid.
+    fn label_adjust_input(&mut self, action: Action) {
+        match action {
+            Action::GbaDown(Btn::L1) => {
+                if let Some(a) = self.adjust_mut() {
+                    (a.sizing, a.held) = (true, None);
+                }
+                return;
+            }
+            Action::GbaUp(Btn::L1) => {
+                if let Some(a) = self.adjust_mut() {
+                    (a.sizing, a.held) = (false, None);
+                }
+                return;
+            }
+            Action::GbaUp(_) => {
+                if let Some(a) = self.adjust_mut() {
+                    a.held = None;
+                }
+                return;
+            }
+            Action::GbaDown(Btn::B) => {
+                if let Some(pick) = &mut self.label_pick {
+                    pick.adjust = None;
+                }
+                return;
+            }
+            Action::GbaDown(Btn::A) | Action::Insert => {
+                let Some(a) = self.label_pick.as_ref().and_then(|p| p.adjust.as_ref()) else {
+                    return;
+                };
+                let (source, frame) = (a.source.clone(), a.frame());
+                return self.keep_framed_label(&source, frame);
+            }
+            Action::GbaDown(Btn::R1) => {
+                if let Some(a) = self.adjust_mut() {
+                    a.even_up();
+                }
+                return;
+            }
+            Action::GbaDown(Btn::Y) => {
+                if let Some(a) = self.adjust_mut() {
+                    a.crop = a.original;
+                    a.clamp();
+                }
+                return;
+            }
+            _ => {}
+        }
+        let dir = match action {
+            Action::GbaDown(b @ (Btn::Up | Btn::Down | Btn::Left | Btn::Right)) => b,
+            _ => return,
+        };
+        let now = self.now();
+        if let Some(a) = self.adjust_mut() {
+            a.held = Some((dir, now, now));
+        }
+        self.step_label_frame(dir);
+    }
+
+    fn adjust_mut(&mut self) -> Option<&mut Adjust> {
+        self.label_pick.as_mut()?.adjust.as_mut()
+    }
+
+    /// One step of the held direction: moving the frame, or sizing it while L is down.
+    fn step_label_frame(&mut self, dir: Btn) {
+        let Some(a) = self.adjust_mut() else {
+            return;
+        };
+        if a.sizing {
+            // The bottom left corner is pinned, so the edges that move are the right one and
+            // the top one: each key moves the edge it points at. A bigger picture is less of
+            // it inside the frame, so its piece shrinks as it grows.
+            match dir {
+                Btn::Up => a.resize(0.0, -STEP_PX),
+                Btn::Down => a.resize(0.0, STEP_PX),
+                Btn::Right => a.resize(-STEP_PX, 0.0),
+                _ => a.resize(STEP_PX, 0.0),
+            }
+            return;
+        }
+        // Every key here moves the picture, not the frame: Up pushes the picture up, which is
+        // to say the frame takes its piece from further down.
+        match dir {
+            Btn::Up => a.crop.1 += STEP_PX,
+            Btn::Down => a.crop.1 -= STEP_PX,
+            Btn::Left => a.crop.0 += STEP_PX,
+            _ => a.crop.0 -= STEP_PX,
+        }
+        a.clamp();
+    }
+
+    /// A held direction keeps stepping, quickening the longer it is held, so a tap can be worth
+    /// a pixel or two without it taking all day to cross the picture.
+    fn tick_label_adjust(&mut self) {
+        let now = self.now();
+        let Some(a) = self.adjust_mut() else {
+            return;
+        };
+        let Some((dir, since, last)) = a.held else {
+            return;
+        };
+        let held = now.saturating_sub(since);
+        if held < REPEAT_DELAY_MS {
+            return;
+        }
+        let run = held - REPEAT_DELAY_MS;
+        let every = REPEAT_MS - (REPEAT_MS - REPEAT_FAST_MS) * run.min(REPEAT_RAMP_MS) / REPEAT_RAMP_MS;
+        if now.saturating_sub(last) < every {
+            return;
+        }
+        a.held = Some((dir, since, now));
+        self.step_label_frame(dir);
+    }
+
+    /// Cuts the frame out of the picture and wears it, then goes back to the cart menu.
+    fn keep_framed_label(&mut self, source: &Path, frame: crate::cart_art::Frame) {
+        let Some(pick) = self.label_pick.take() else {
+            return;
+        };
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let Some(mut cart) = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+            return;
+        };
+        (cart.label, cart.famicom_label) = pick.original.clone();
+        match crate::cart_art::keep_framed(&root, &cart, source, frame) {
+            Ok(kept) => eprintln!("slot: label: kept {} for {}", kept.display(), cart.stem),
+            Err(e) => {
+                eprintln!("slot: label: {e}");
+                self.card_failing.store(true, Ordering::Relaxed);
+            }
+        }
+        self.adopt_label(cart.platform, &cart.stem, None);
+        crate::cart_art::forget_choices(&root);
+    }
+
+    /// The label being framed is in front of the grid.
+    fn label_adjust_open(&self) -> bool {
+        self.label_pick.as_ref().is_some_and(|p| p.adjust.is_some())
+    }
+
+    /// Puts the grid away without touching what was picked.
+    fn close_label_grid(&mut self) {
+        if let Some(pick) = &mut self.label_pick {
+            pick.grid = false;
+        }
+    }
+
+    /// The grid is up and should be drawn and fed input instead of the menu behind it.
+    fn label_grid_open(&self) -> bool {
+        self.label_pick.as_ref().is_some_and(|p| p.grid)
+    }
+
+    /// This page of the grid: each label's picture, where the cursor is in it, and the words
+    /// under it. None when no grid is up.
+    pub fn label_grid_page(&self) -> Option<(usize, Vec<PathBuf>, String)> {
+        let pick = self.label_pick.as_ref().filter(|p| p.grid)?;
+        let page = pick.page();
+        let paths: Vec<PathBuf> =
+            pick.choices.iter().skip(page * slot_ui::PAGE).take(slot_ui::PAGE).map(|c| c.path.clone()).collect();
+        Some((page, paths, pick.grid_caption()))
+    }
+
+    /// Wi-Fi has an address: only the Brick has Wi-Fi to ask.
+    fn online(&self) -> bool {
+        #[cfg(feature = "brick")]
+        return self.net_up;
+        #[cfg(not(feature = "brick"))]
+        false
+    }
+
+    /// Y on the label row (or in the core picker): the keyboard, starting from the game's name.
+    fn type_label_search(&mut self, stem: &str) {
+        let Some(cart) = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+            return;
+        };
+        // Y is greyed out without Wi-Fi, so there is nothing to say here: it simply does not go.
+        if !self.online() {
+            return;
+        }
+        let pick = self.label_pick.get_or_insert_with(|| LabelPick::new(&cart));
+        #[cfg(feature = "brick")]
+        {
+            let start = pick.query.clone().unwrap_or_else(|| slot_ui::label_text(&cart));
+            self.wifi = Some(crate::brick_wifi::WifiMenu::label_query(&start));
+        }
+    }
+
+    /// A search for the open cart's labels by what was typed: what an earlier one found is put
+    /// aside, the cart showing its own label until the first arrives.
+    // Searches are typed, on the Brick's keyboard only.
+    #[cfg_attr(not(feature = "brick"), allow(dead_code))]
+    fn search_labels(&mut self, stem: &str, query: String) {
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let Some(cart) = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+            return;
+        };
+        let net_up = self.online();
+        let pick = self.label_pick.get_or_insert_with(|| LabelPick::new(&cart));
+        pick.offline = !net_up;
+        if !net_up {
+            return;
+        }
+        pick.search = None;
+        pick.choices.clear();
+        pick.at = 0;
+        pick.done = None;
+        pick.jump = true;
+        pick.query = Some(query.clone());
+        pick.grid = true;
+        let mut asked = cart;
+        (asked.label, asked.famicom_label) = pick.original.clone();
+        pick.search = Some(crate::cart_art::LabelSearch::start(root, asked, query));
+        self.show_label_pick();
+    }
+
+    /// The cart wears the label picked (or its own, at 0) for the shape it is on now.
+    fn show_label_pick(&mut self) {
+        let Some(pick) = &self.label_pick else {
+            return;
+        };
+        let (own, famicom) = pick.original.clone();
+        let chosen = pick.at.checked_sub(1).and_then(|i| pick.choices.get(i)).map(|c| c.path.clone());
+        let stem = pick.stem.clone();
+        let Some(index) = self.shelf_index_of(&stem) else {
+            return;
+        };
+        let shelf = self.shelf_mut();
+        let Some(cart) = shelf.carts.get_mut(index) else {
+            return;
+        };
+        let on_famicom = cart.platform == Platform::Nes && slot_ui::nes_famicom_of(cart);
+        (cart.label, cart.famicom_label) = (own, famicom);
+        if let Some(path) = chosen {
+            if on_famicom {
+                cart.famicom_label = Some(path);
+            } else {
+                cart.label = Some(path);
+            }
+        }
+        let stale = shelf.take_face(index);
+        self.stale_faces.extend(stale);
+    }
+
+    /// The menu closed: with `keep`, the label picked is written to the card as the cart's;
+    /// otherwise the cart wears its own again. The search, if still running, stops.
+    fn end_label_pick(&mut self, keep: bool) {
+        let Some(mut pick) = self.label_pick.take() else {
+            return;
+        };
+        pick.search = None;
+        let chosen = pick.at.checked_sub(1).and_then(|i| pick.choices.get(i)).map(|c| c.path.clone());
+        let (Some(root), Some(path), true) = (self.root.clone(), chosen, keep) else {
+            pick.at = 0;
+            self.label_pick = Some(pick);
+            self.show_label_pick();
+            self.label_pick = None;
+            if let Some(root) = &self.root {
+                crate::cart_art::forget_choices(root);
+            }
+            return;
+        };
+        let Some(mut cart) = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i)).cloned() else {
+            return;
+        };
+        (cart.label, cart.famicom_label) = pick.original.clone();
+        match crate::cart_art::keep_choice(&root, &cart, &path) {
+            Ok(kept) => eprintln!("slot: label: kept {} for {}", kept.display(), cart.stem),
+            Err(e) => {
+                eprintln!("slot: label: {e}");
+                self.card_failing.store(true, Ordering::Relaxed);
+            }
+        }
+        // Read back from the card: the label kept, or the one it had if writing failed. The
+        // labels not kept are not kept on the card either.
+        self.adopt_label(cart.platform, &cart.stem, None);
+        crate::cart_art::forget_choices(&root);
+    }
+
+    /// Labels arriving from the search: the first one is shown at once if the press that
+    /// started it is still the last.
+    fn poll_label_pick(&mut self) {
+        let Some(pick) = &mut self.label_pick else {
+            return;
+        };
+        let news = pick.search.as_ref().map(|s| s.poll()).unwrap_or_default();
+        let mut show = false;
+        for n in news {
+            match n {
+                crate::cart_art::PickNews::Found(choice) => {
+                    pick.choices.push(choice);
+                    if pick.jump {
+                        pick.jump = false;
+                        pick.at = 1;
+                        show = !pick.grid;
+                    }
+                }
+                crate::cart_art::PickNews::Done(result) => {
+                    if let Err(e) = &result {
+                        eprintln!("slot: label search: {e}");
+                    }
+                    pick.done = Some(result.is_ok());
+                    pick.search = None;
+                }
+            }
+        }
+        // A page's worth is always worth having ready, whatever the search is told to run past.
+        if let Some(pick) = &self.label_pick {
+            if let Some(search) = &pick.search {
+                search.looking_at((pick.page() + 1) * slot_ui::PAGE);
+            }
+        }
+        if show {
+            self.show_label_pick();
+        }
+    }
+
+    /// The page the grid's pictures were made for, so they are made again only when it turns.
+    pub fn label_grid_built(&self) -> Option<(usize, usize)> {
+        self.label_grid_faces.as_ref().map(|g| g.built)
+    }
+
+    /// The words the grid was last given, which change far more often than its pictures.
+    pub fn label_grid_caption_built(&self) -> Option<&str> {
+        self.label_grid_faces.as_ref().map(|g| g.caption_built.as_str())
+    }
+
+    pub fn set_label_grid_faces(
+        &mut self,
+        built: (usize, usize),
+        caption_built: String,
+        title: (TexId, u32, u32),
+        caption: (TexId, u32, u32),
+        cells: Vec<Option<(TexId, u32, u32)>>,
+        legend: [(TexId, u32); 3],
+    ) {
+        self.label_grid_faces = Some(LabelGridFaces { built, caption_built, title, caption, cells, legend });
+    }
+
+    /// Only the words again: the pictures on the page have not changed.
+    pub fn set_label_grid_caption(&mut self, words: String, caption: (TexId, u32, u32)) {
+        if let Some(grid) = &mut self.label_grid_faces {
+            (grid.caption_built, grid.caption) = (words, caption);
+        }
+    }
+
+    /// What was typed, for the grid's heading.
+    pub fn label_grid_query(&self) -> Option<String> {
+        self.label_pick.as_ref().filter(|p| p.grid).and_then(|p| p.query.clone())
     }
 
     /// The cart on the shelf wears `shell`; its face is rebuilt for the next frame.
@@ -3129,6 +3604,87 @@ impl App {
                 },
             cart: face,
             faces: self.cart_menu_faces.as_ref(),
+            online: self.online(),
+        }
+        .draw(out);
+    }
+
+    fn draw_label_adjust(&self, out: &mut Vec<Draw>) {
+        let Some((stand, frame, picture)) = self.label_adjust_layout() else {
+            return;
+        };
+        let faces = self.label_adjust_faces.as_ref();
+        slot_ui::LabelAdjustView {
+            picture: faces.map(|f| (f.picture, picture.0, picture.1, picture.2, picture.3)),
+            cart: faces.map(|f| (f.cart, stand.0, stand.1, stand.2, stand.3)),
+            frame,
+            caption: faces.map(|f| f.caption),
+            legend: faces.map(|f| f.legend),
+        }
+        .draw(out);
+    }
+
+    /// Where the cart stands, where its slot is, and where the picture lies behind it.
+    fn label_adjust_layout(&self) -> Option<(slot_ui::Rect, slot_ui::Rect, slot_ui::Rect)> {
+        let adjust = self.label_pick.as_ref()?.adjust.as_ref()?;
+        let (stand, frame) = slot_ui::slot_stand(adjust.face, adjust.slot);
+        let (cx, cy, cw, ch) = stand;
+        // The picture behind, stretched so the piece inside the slot fills it exactly.
+        let (sx, sy) = (frame.2 / adjust.crop.2.max(1.0), frame.3 / adjust.crop.3.max(1.0));
+        let picture = (
+            frame.0 - adjust.crop.0 * sx,
+            frame.1 - adjust.crop.1 * sy,
+            adjust.size.0 as f32 * sx,
+            adjust.size.1 as f32 * sy,
+        );
+        Some(((cx, cy, cw, ch), frame, picture))
+    }
+
+    /// The picture being framed and the words under it, for the frontend to draw.
+    pub fn label_adjust_view(&self) -> Option<(PathBuf, String, Cart)> {
+        let pick = self.label_pick.as_ref()?;
+        let adjust = pick.adjust.as_ref()?;
+        let choice = pick.choices.get(pick.cursor())?;
+        let cart = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i))?.clone();
+        // How large the picture is against the size it came in at, which is what moves as it
+        // is stretched: the frame's own measurements run the other way and read as nonsense.
+        let across = adjust.original.2 / adjust.crop.2.max(1.0) * 100.0;
+        let down = adjust.original.3 / adjust.crop.3.max(1.0) * 100.0;
+        let size = match (across - down).abs() < 1.0 {
+            true => format!("{across:.0}%"),
+            false => format!("{across:.0}% x {down:.0}%  stretched"),
+        };
+        Some((adjust.source.clone(), format!("{}   {size}", choice.caption), cart))
+    }
+
+    /// The hints already uploaded, so moving the frame does not draw them again.
+    pub fn label_adjust_legend(&self) -> Option<([(TexId, u32); 5], TexId)> {
+        self.label_adjust_faces.as_ref().map(|f| (f.legend, f.cart))
+    }
+
+    pub fn label_adjust_built(&self) -> Option<(&Path, &str)> {
+        self.label_adjust_faces.as_ref().map(|f| (f.built.0.as_path(), f.built.1.as_str()))
+    }
+
+    pub fn set_label_adjust_faces(
+        &mut self,
+        built: (PathBuf, String),
+        picture: TexId,
+        cart: TexId,
+        caption: (TexId, u32, u32),
+        legend: [(TexId, u32); 5],
+    ) {
+        self.label_adjust_faces = Some(LabelAdjustFaces { built, picture, cart, caption, legend });
+    }
+
+    fn draw_label_grid(&self, out: &mut Vec<Draw>) {
+        let cells = self.label_grid_faces.as_ref().map(|g| g.cells.as_slice()).unwrap_or(&[]);
+        slot_ui::LabelGridView {
+            title: self.label_grid_faces.as_ref().map(|g| g.title),
+            caption: self.label_grid_faces.as_ref().map(|g| g.caption),
+            cells,
+            at: self.label_pick.as_ref().map_or(0, |p| p.cursor() % slot_ui::PAGE),
+            legend: self.label_grid_faces.as_ref().map(|g| g.legend),
         }
         .draw(out);
     }
@@ -3161,6 +3717,14 @@ impl App {
     }
 
     fn core_picker_input(&mut self, action: Action) {
+        // Y: type what to search labels for.
+        if let Action::GbaDown(Btn::Y) = action {
+            let open = self.core_picker.is_some_and(|p| !p.closing());
+            if let (true, Some(stem)) = (open, self.picker_look.as_ref().map(|l| l.stem.clone())) {
+                self.type_label_search(&stem);
+            }
+            return;
+        }
         // Up/Down: the cart's colour and finish, previewed on the lid.
         if let Action::GbaDown(dir @ (Btn::Up | Btn::Down)) = action {
             let open = self.core_picker.is_some_and(|p| !p.closing());
@@ -3194,6 +3758,7 @@ impl App {
         if !closing && picker.closing() {
             if let Some(look) = self.picker_look.take() {
                 let kept = if press == Press::Keep { look.chosen() } else { look.before };
+                self.end_label_pick(press == Press::Keep);
                 self.preview_shell(&look.stem, kept);
                 if press == Press::Keep {
                     self.save_shell(&look);
@@ -4011,6 +4576,9 @@ struct CartMenu {
     rows: Vec<slot_ui::CartRow>,
     row: slot_ui::CartRow,
     colours: Vec<(&'static str, Option<slot_ui::Shell>)>,
+    /// Which of them this cart is offered, as places in `colours`. A NES cart came in three
+    /// plastics and no more; a Game Boy one came in all of them.
+    offered: Vec<usize>,
     colour: usize,
     finish: usize,
     shape: usize,
@@ -4024,11 +4592,187 @@ struct CartMenu {
 
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
 
+/// Labels found for one cart, to flip through: 0 is the label it had.
+/// What the framing screen is drawn from: the whole picture, uploaded once.
+struct LabelAdjustFaces {
+    /// The picture and words these were made for.
+    built: (PathBuf, String),
+    picture: TexId,
+    /// The cart with its label slot clear, laid over the picture.
+    cart: TexId,
+    caption: (TexId, u32, u32),
+    legend: [(TexId, u32); 5],
+}
+
+/// What the label grid is drawn from, uploaded once a page and kept until the page turns.
+struct LabelGridFaces {
+    /// The page the pictures were made for: which page, and how many labels it holds.
+    built: (usize, usize),
+    /// The words, which change on their own as the cursor moves and labels land.
+    caption_built: String,
+    title: (TexId, u32, u32),
+    caption: (TexId, u32, u32),
+    cells: Vec<Option<(TexId, u32, u32)>>,
+    legend: [(TexId, u32); 3],
+}
+
+struct LabelPick {
+    stem: String,
+    /// The cart's labels when the pick began (its own, its Famicom one), put back by B.
+    original: (Option<PathBuf>, Option<PathBuf>),
+    search: Option<crate::cart_art::LabelSearch>,
+    choices: Vec<crate::cart_art::Choice>,
+    at: usize,
+    /// The search ended: whether it could be made at all.
+    done: Option<bool>,
+    /// Asked with Wi-Fi off.
+    offline: bool,
+    /// The press that started the search wants the first label found.
+    jump: bool,
+    /// What was typed to search for: the keyboard starts from it again.
+    #[cfg_attr(not(feature = "brick"), allow(dead_code))]
+    query: Option<String>,
+    /// The grid of what was found is up, in front of the cart menu.
+    grid: bool,
+    /// The label picked is being framed by hand, in front of the grid.
+    adjust: Option<Adjust>,
+}
+
+/// Framing a picked label. What is held is the piece of the picture the frame covers, in the
+/// picture's own pixels, so a press moves it the same distance however far it is zoomed in.
+struct Adjust {
+    /// The whole picture being framed, and its size.
+    source: PathBuf,
+    size: (u32, u32),
+    /// The piece of it inside the frame: left, top, width, height.
+    crop: (f32, f32, f32, f32),
+    /// The piece it started as, which Y goes back to and R takes its shape from.
+    original: (f32, f32, f32, f32),
+    /// The face of the cart the label is for, and where its label slot sits on it. Both are
+    /// settled when the framing starts: the cart cannot change shape while it is going on.
+    face: (u32, u32),
+    slot: (u32, u32, u32, u32),
+    /// L is down, so the d-pad stretches the picture rather than moving it.
+    sizing: bool,
+    /// The direction being held, when it began and when it last stepped, so holding a key
+    /// keeps going. A tap alone is only a pixel or two, which would be unusable otherwise.
+    held: Option<(Btn, Millis, Millis)>,
+}
+
+impl Adjust {
+    /// Keeps the picture and the frame on each other, no closer in than a label can usefully
+    /// be and no further out than MOST_OF_IT. The frame may be larger than the picture: a
+    /// picture shrunk below the label's size leaves its edges empty, which is allowed.
+    fn clamp(&mut self) {
+        let (pw, ph) = (self.size.0 as f32, self.size.1 as f32);
+        self.crop.2 = self.crop.2.clamp(MIN_FRAME_PX.min(pw), pw * MOST_OF_IT);
+        self.crop.3 = self.crop.3.clamp(MIN_FRAME_PX.min(ph), ph * MOST_OF_IT);
+        // Whichever of the two is larger holds the other, so the ends swap over as it passes.
+        let span = |picture: f32, frame: f32| (0.0f32.min(picture - frame), 0.0f32.max(picture - frame));
+        let (lo, hi) = span(pw, self.crop.2);
+        self.crop.0 = self.crop.0.clamp(lo, hi);
+        let (lo, hi) = span(ph, self.crop.3);
+        self.crop.1 = self.crop.1.clamp(lo, hi);
+    }
+
+    /// Grows or shrinks away from the bottom left corner, which stays where it is: line the
+    /// artwork up with the rim there and it keeps flush with it while the rest moves.
+    fn resize(&mut self, dw: f32, dh: f32) {
+        // Taking off the top whatever is added to the height leaves the bottom where it is.
+        self.crop.1 -= dh;
+        self.crop.2 += dw;
+        self.crop.3 += dh;
+        self.clamp();
+    }
+
+    /// R: back to the shape it started as, keeping the middle and the longer side.
+    fn even_up(&mut self) {
+        let shape = self.original.2 / self.original.3.max(1.0);
+        let (w, h) = (self.crop.2, self.crop.3);
+        let (want_w, want_h) = if w / h.max(1.0) > shape { (h * shape, h) } else { (w, w / shape) };
+        self.resize(want_w - w, want_h - h);
+    }
+
+    /// What would be cut if it were kept now.
+    fn frame(&self) -> crate::cart_art::Frame {
+        crate::cart_art::Frame {
+            x: self.crop.0.round() as i32,
+            y: self.crop.1.round() as i32,
+            w: (self.crop.2.round().max(1.0)) as u32,
+            h: (self.crop.3.round().max(1.0)) as u32,
+        }
+    }
+}
+
+/// The frame never shrinks below this many of the picture's own pixels: past that it is mush.
+const MIN_FRAME_PX: f32 = 48.0;
+/// Nor does it open wider than this many times the picture, which leaves the picture a third
+/// of the label at its smallest: enough for one that wants shrinking well past its own size.
+const MOST_OF_IT: f32 = 3.0;
+/// What one press is worth, in the picture's own pixels. Small enough to place a label exactly;
+/// holding the key is what covers ground.
+const STEP_PX: f32 = 2.0;
+/// A held key waits this long, then steps this often, quickening to REPEAT_FAST_MS as it goes.
+const REPEAT_DELAY_MS: Millis = 320;
+const REPEAT_MS: Millis = 70;
+const REPEAT_FAST_MS: Millis = 16;
+/// How long a key must be held before it is stepping as fast as it will go.
+const REPEAT_RAMP_MS: Millis = 1_200;
+
+impl LabelPick {
+    fn new(cart: &Cart) -> Self {
+        LabelPick {
+            stem: cart.stem.clone(),
+            original: (cart.label.clone(), cart.famicom_label.clone()),
+            search: None,
+            choices: Vec::new(),
+            at: 0,
+            done: None,
+            offline: false,
+            jump: false,
+            query: None,
+            grid: false,
+            adjust: None,
+        }
+    }
+
+    /// The cell the cursor is on, counted from the first label found.
+    fn cursor(&self) -> usize {
+        self.at.saturating_sub(1)
+    }
+
+    /// The page of the grid it is on.
+    fn page(&self) -> usize {
+        self.cursor() / slot_ui::PAGE
+    }
+
+    /// The words under the grid: which label the cursor is on, of how many so far.
+    fn grid_caption(&self) -> String {
+        if self.offline {
+            return "Connect to Wi-Fi first".into();
+        }
+        let found = self.choices.len();
+        if found == 0 {
+            return match (self.search.is_some(), self.done) {
+                (true, _) => "Searching...".into(),
+                (false, Some(false)) => "Can't search now".into(),
+                _ => "None found".into(),
+            };
+        }
+        // "of 20+" while more are still coming: the list has no end until the search ends.
+        let more = if self.search.is_some() { "+" } else { "" };
+        let choice = &self.choices[self.cursor().min(found - 1)];
+        format!("{}   ({} of {found}{more})", choice.caption, self.cursor() + 1)
+    }
+
+}
+
 fn finish_of(finish: ShellFinish) -> slot_ui::Finish {
     match finish {
         ShellFinish::Solid => slot_ui::Finish::Solid,
         ShellFinish::Clear => slot_ui::Finish::Translucent,
         ShellFinish::Glitter => slot_ui::Finish::Glitter,
+        ShellFinish::Gold => slot_ui::Finish::Sheen,
     }
 }
 
@@ -4036,8 +4780,35 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
     match finish {
         slot_ui::Finish::Solid => ShellFinish::Solid,
         slot_ui::Finish::Translucent => ShellFinish::Clear,
+        slot_ui::Finish::Sheen => ShellFinish::Gold,
         slot_ui::Finish::Glitter => ShellFinish::Glitter,
     }
+}
+
+/// The plastics a cart is offered, as places in `colours`. A NES cart came in its system's
+/// grey, the gold the two Zeldas were moulded in, and the black, blue and silver the
+/// unlicensed publishers used; the Famicom cart came in its own eight, which are not the same
+/// plastics at all. Every other console's carts are offered the lot. Whatever it wears is
+/// always offered, so a colour set elsewhere can still be stepped away from.
+fn offered_colours(
+    nes: bool,
+    famicom: bool,
+    colours: &[(&'static str, Option<slot_ui::Shell>)],
+) -> Vec<usize> {
+    if !nes {
+        return (0..colours.len()).collect();
+    }
+    const NES_PLASTICS: [&str; 5] =
+        ["NES grey", "Zelda gold", "Tengen black", "Color Dreams blue", "Camerica silver"];
+    let wanted = |name: &str| match famicom {
+        true => slot_ui::FAMICOM_NAMES.contains(&name),
+        // A colour set in Cart Studio belongs to no console's list, but has to stay reachable
+        // or there would be no stepping away from it.
+        false => NES_PLASTICS.contains(&name),
+    } || name == "Custom";
+    let mut out = vec![0];
+    out.extend(colours.iter().enumerate().filter(|(_, (n, _))| wanted(n)).map(|(i, _)| i));
+    out
 }
 
 impl CartMenu {
@@ -4076,7 +4847,9 @@ impl CartMenu {
             _ => (colour, finish),
         };
         let rows = match cart.platform {
-            Platform::Nes | Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
+            // A NES cart's plastic can be chosen: the Zeldas came in gold, the rest in grey.
+            Platform::Nes => vec![CartRow::Shape, CartRow::Colour, CartRow::Reset],
+            Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
             Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
             Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
         };
@@ -4084,6 +4857,7 @@ impl CartMenu {
             stem: cart.stem.clone(),
             row: rows[0],
             rows,
+            offered: Vec::new(),
             colours,
             colour,
             finish,
@@ -4092,39 +4866,38 @@ impl CartMenu {
             before: cart.shell,
             famicom,
         };
-        menu.fit_rows();
+        menu.fit_colours();
         menu
     }
 
     /// A NES game on the Famicom cart: its shape as chosen, or its own.
-    fn on_famicom(&self) -> bool {
-        self.famicom.is_some_and(|(own, _)| match OUTLINES[self.shape] {
+
+
+    /// The shell these values make: None while they are all the game's own.
+    /// On the Famicom shape a cart is offered the Famicom plastics, on the NES shape the NES
+    /// ones. Stepping the shape moves it from one set to the other, so it keeps the plastic it
+    /// is wearing if that is in both and falls back to its own if it is not.
+    fn fit_colours(&mut self) {
+        let famicom = self.famicom.is_some_and(|(own, _)| match OUTLINES[self.shape] {
             Outline::Auto => own,
             Outline::Notched => false,
             Outline::Rounded => true,
-        })
-    }
-
-    /// A NES cart offers a colour only while it is a Famicom cart, which came in many.
-    fn fit_rows(&mut self) {
-        use slot_ui::CartRow;
-        if self.famicom.is_none() {
-            return;
-        }
-        self.rows = if self.on_famicom() {
-            vec![CartRow::Shape, CartRow::Colour, CartRow::Reset]
-        } else {
-            vec![CartRow::Shape, CartRow::Reset]
-        };
-        if !self.rows.contains(&self.row) {
-            self.row = CartRow::Shape;
+        });
+        self.offered = offered_colours(self.famicom.is_some(), famicom, &self.colours);
+        // A plastic the other shape came in is not one this shape came in: back to its own.
+        if !self.offered.contains(&self.colour) {
+            self.colour = 0;
         }
     }
 
-    /// The shell these values make: None while they are all the game's own.
     fn chosen(&self) -> Option<ShellChoice> {
         let picked = self.colours[self.colour].1;
-        let finish = slot_ui::FINISHES[self.finish];
+        // A plastic brings its own finish; the finish row overrules it where there is one. The
+        // gold carts have no row, and their shine is not among FINISHES to be picked anyway.
+        let finish = match self.rows.contains(&slot_ui::CartRow::Finish) {
+            true => slot_ui::FINISHES[self.finish],
+            false => picked.map_or(self.own.finish, |s| s.finish),
+        };
         let outline = OUTLINES[self.shape];
         if picked.is_none() && finish == self.own.finish && outline == Outline::Auto {
             return None;
@@ -4148,11 +4921,14 @@ impl CartMenu {
         let step = |v: usize, n: usize| (v as isize + by).rem_euclid(n as isize) as usize;
         match self.row {
             // The finish stays as it is: a colour only changes the colour.
-            slot_ui::CartRow::Colour => self.colour = step(self.colour, self.colours.len()),
+            slot_ui::CartRow::Colour => {
+                let at = self.offered.iter().position(|i| *i == self.colour).unwrap_or(0);
+                self.colour = self.offered[step(at, self.offered.len())];
+            }
             slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
             slot_ui::CartRow::Shape => {
                 self.shape = step(self.shape, OUTLINES.len());
-                self.fit_rows();
+                self.fit_colours();
             }
             slot_ui::CartRow::Reset => {}
         }
@@ -4162,6 +4938,5 @@ impl CartMenu {
         self.colour = 0;
         self.finish = slot_ui::FINISHES.iter().position(|f| *f == self.own.finish).unwrap_or(0);
         self.shape = 0;
-        self.fit_rows();
     }
 }

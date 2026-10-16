@@ -81,6 +81,15 @@ can have any colour, as Famicom carts came in many. On a GBA cart `START` opens 
 and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
 in `Slot/Labels/cart_shell.ini`.
 
+**Choosing a label:** with Wi-Fi on, press `Y` on the cart menu's Label row (or in the GBA core
+picker) to search: the keyboard opens with the game's name filled in, so `START` searches right
+away, or change it first (each word only has to begin a word of the name, so `yoshi island`
+finds *Super Mario World 2: Yoshi's Island*). It looks through every game of that console in the
+places Cart Art uses. `Left` / `Right` (`L1` / `R1` in the picker) then flips through the labels
+found, each shown on the cart; `A` keeps the one showing, in place of the label the game had,
+and `B` keeps the old one. The labels not picked are deleted when the menu closes. NES games keep
+the NES and the Famicom cart's label apart: a label picked goes to the cart shape showing.
+
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run
 on FCEUmm. No BIOS is needed. NES carts are grey; a ROM named as a Japanese release, such as
 `Rockman (Japan).nes`, or on a chip only Famicom carts used, gets the small, landscape Famicom
@@ -109,8 +118,10 @@ pictures of the cartridges: Slot finds the game by its ROM's file name (No-Intro
 for example `Mega Man 2 (USA).nes`) and cuts the label out of a picture of the standard US cart.
 Games on the Famicom cart get a Famicom cart's label (from the Japanese release), kept apart in
 `Slot/Labels/NES/Famicom` so a NES game can have both: swapping its shape swaps the label. While
-a game has only one, both carts show it. Carts of another shape (Tengen, gold Zelda, PAL SNES, unlicensed)
-keep their file-name label, as do games LaunchBox has no cart picture of (many SNES games).
+a game has only one, both carts show it. SNES games on the rounder Super Famicom / PAL cart get
+that cart's label (from the Japanese or European release), and either kind of SNES cart falls
+back to the other's label when its own has none. Carts of another shape (Tengen, gold Zelda,
+unlicensed) keep their file-name label, as do games LaunchBox has no cart picture of.
 
 `Slot/Logs/cart-art.txt` lists each game and what it got. Below GET CART ART, every game with a
 label is listed: press A twice on one to delete its label, then GET CART ART fetches a new one.
