@@ -4791,25 +4791,23 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
 /// plastics at all. Every other console's carts are offered the lot. Whatever it wears is
 /// always offered, so a colour set elsewhere can still be stepped away from.
 fn offered_colours(
-    platform: Platform,
+    nes: bool,
     famicom: bool,
     colours: &[(&'static str, Option<slot_ui::Shell>)],
-    worn: usize,
 ) -> Vec<usize> {
-    if platform != Platform::Nes {
+    if !nes {
         return (0..colours.len()).collect();
     }
     const NES_PLASTICS: [&str; 5] =
         ["NES grey", "Zelda gold", "Tengen black", "Color Dreams blue", "Camerica silver"];
     let wanted = |name: &str| match famicom {
         true => slot_ui::FAMICOM_NAMES.contains(&name),
+        // A colour set in Cart Studio belongs to no console's list, but has to stay reachable
+        // or there would be no stepping away from it.
         false => NES_PLASTICS.contains(&name),
-    };
+    } || name == "Custom";
     let mut out = vec![0];
     out.extend(colours.iter().enumerate().filter(|(_, (n, _))| wanted(n)).map(|(i, _)| i));
-    if !out.contains(&worn) {
-        out.push(worn);
-    }
     out
 }
 
@@ -4855,11 +4853,11 @@ impl CartMenu {
             Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
             Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
         };
-        let menu = CartMenu {
+        let mut menu = CartMenu {
             stem: cart.stem.clone(),
             row: rows[0],
             rows,
-            offered: offered_colours(cart.platform, famicom.is_some_and(|(own, _)| own), &colours, colour),
+            offered: Vec::new(),
             colours,
             colour,
             finish,
@@ -4868,6 +4866,7 @@ impl CartMenu {
             before: cart.shell,
             famicom,
         };
+        menu.fit_colours();
         menu
     }
 
@@ -4884,7 +4883,8 @@ impl CartMenu {
             Outline::Notched => false,
             Outline::Rounded => true,
         });
-        self.offered = offered_colours(Platform::Nes, famicom, &self.colours, self.colour);
+        self.offered = offered_colours(self.famicom.is_some(), famicom, &self.colours);
+        // A plastic the other shape came in is not one this shape came in: back to its own.
         if !self.offered.contains(&self.colour) {
             self.colour = 0;
         }
