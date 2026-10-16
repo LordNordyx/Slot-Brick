@@ -17,7 +17,11 @@ const LEGEND_Y: f32 = 427.0;
 const TEXT_PX: f32 = 20.0;
 const TEXT_MIN_PX: f32 = 13.0;
 /// What is outside the slot is still shown, but darkened, so the slot reads at a glance.
-const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.62];
+const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.22];
+/// The cart is laid over the picture not quite solid, so what is outside the slot still shows
+/// faintly through the plastic: enough to see what the next press will bring into the slot,
+/// not enough to be mistaken for what will be worn.
+const CART_ALPHA: f32 = 0.72;
 
 /// Where a cart `w` x `h` across stands on screen: as big as it goes without changing shape.
 pub fn cart_stand(w: u32, h: u32) -> (f32, f32, f32, f32) {
@@ -56,9 +60,10 @@ impl LabelAdjustView {
                 out.push(Draw::Rect { x, y, w, h, colour: SHADE });
             }
         }
-        // The cart last, so the picture shows through its slot and nowhere else.
+        // The cart last: solid in the slot, where nothing covers the picture, and near enough
+        // solid elsewhere that the rest of it only ghosts through.
         if let Some((tex, x, y, w, h)) = self.cart {
-            out.push(Draw::Tex { x, y, w, h, tex, alpha: 1.0 });
+            out.push(Draw::Tex { x, y, w, h, tex, alpha: CART_ALPHA });
         }
         if let Some((tex, w, h)) = self.caption {
             let x = ((OUT_W as f32 - w as f32) / 2.0).round();
