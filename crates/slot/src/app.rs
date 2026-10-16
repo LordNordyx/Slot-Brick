@@ -3615,7 +3615,7 @@ impl App {
         let choice = pick.choices.get(pick.cursor())?;
         let shape = slot_ui::frame_box(choice.frame.w, choice.frame.h);
         let frame = adjust.frame((shape.2, shape.3));
-        Some((adjust.source.clone(), format!("{}   {} x {}", choice.caption, frame.w, frame.h)))
+        Some((adjust.source.clone(), format!("{}   ({} x {})", choice.caption, frame.w, frame.h)))
     }
 
     /// The hints already uploaded, so moving the frame does not draw them again.

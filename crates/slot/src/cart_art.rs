@@ -1503,6 +1503,56 @@ mod tests {
         (found, done)
     }
 
+    /// A picture in four coloured quarters, so where a cut landed can be read off its colour.
+    fn quartered(w: u32, h: u32) -> Vec<u8> {
+        let corner = |x: u32, y: u32| match (x < w / 2, y < h / 2) {
+            (true, true) => [0xff, 0, 0, 0xff],
+            (false, true) => [0, 0xff, 0, 0xff],
+            (true, false) => [0, 0, 0xff, 0xff],
+            (false, false) => [0xff, 0xff, 0, 0xff],
+        };
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                rgba.extend_from_slice(&corner(x, y));
+            }
+        }
+        let mut out = Vec::new();
+        let mut e = png::Encoder::new(&mut out, w, h);
+        e.set_color(png::ColorType::Rgba);
+        e.set_depth(png::BitDepth::Eight);
+        e.write_header().unwrap().write_image_data(&rgba).unwrap();
+        out
+    }
+
+    #[test]
+    fn a_frame_cuts_the_piece_it_covers_and_nothing_else() {
+        let png = quartered(200, 100);
+        assert_eq!(png_size(&png), Some((200, 100)));
+        // The top right quarter is the green one, whole.
+        let cut = cut_out(&png, Frame { x: 100, y: 0, w: 100, h: 50 }).unwrap();
+        let (rgba, w, h) = decode_rgba(&cut).unwrap();
+        assert_eq!((w, h), (100, 50));
+        assert!(rgba.chunks_exact(4).all(|p| p == [0, 0xff, 0, 0xff]), "the cut took in another quarter");
+        // And the bottom left is the blue one.
+        let cut = cut_out(&png, Frame { x: 0, y: 50, w: 100, h: 50 }).unwrap();
+        let (rgba, _, _) = decode_rgba(&cut).unwrap();
+        assert!(rgba.chunks_exact(4).all(|p| p == [0, 0, 0xff, 0xff]));
+    }
+
+    #[test]
+    fn a_frame_reaching_past_the_picture_is_brought_back_inside_it() {
+        let png = quartered(200, 100);
+        // Past the right and bottom edges: what is there is cut, and nothing beyond.
+        let cut = cut_out(&png, Frame { x: 150, y: 60, w: 400, h: 400 }).unwrap();
+        let (_, w, h) = decode_rgba(&cut).unwrap();
+        assert_eq!((w, h), (50, 40));
+        // Starting beyond the far corner still leaves a pixel to cut rather than nothing.
+        assert!(cut_out(&png, Frame { x: 900, y: 900, w: 10, h: 10 }).is_ok());
+        assert_eq!(cut_out(&png, Frame { x: 0, y: 0, w: 0, h: 10 }), Err("an empty picture"));
+        assert_eq!(png_size(b"<html>"), None);
+    }
+
     #[test]
     fn a_search_stays_a_few_labels_ahead_until_the_picker_flips_on() {
         let d = tempfile::tempdir().unwrap();
