@@ -8,10 +8,7 @@ wait 1200
 press l1
 wait 1200
 press l1
-snap gb-shelf
 press a
 phase Playing 20000
-snap game
 hold menu 1500   # save state, eject, back to the shelf
 phase Shelf 20000
-snap ejected

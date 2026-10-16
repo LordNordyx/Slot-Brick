@@ -4,4 +4,3 @@ phase Shelf
 press a
 wait 3000
 phase Shelf
-snap refused

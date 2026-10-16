@@ -70,3 +70,8 @@ every pull request (`.github/workflows/sim.yml`) and keeps the screenshots as an
 
 When a change is meant to alter the screen, run `task sim:update`, look at the new goldens, and
 commit them with the change.
+
+Only `boot` and `quick-menu` keep goldens. The rest drive the Brick and check what it did
+rather than what it looked like: the phase it reached, the LED files it wrote, how it answered
+a flat battery. A screen still being designed changes every few hours, and a golden that is
+only ever accepted without being read asserts nothing while looking like it does.

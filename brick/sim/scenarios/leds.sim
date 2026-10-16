@@ -6,12 +6,10 @@ press menu
 press down
 press down
 press a
-snap leds
 press down
 press down
 press down
 press down
 press right
-snap leds-colour
 led effect_rgb_hex_m 0000FF
 led effect_rgb_hex_lr 0000FF
