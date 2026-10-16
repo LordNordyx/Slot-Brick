@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Regenerate card/Slot/System/{nes,famicom,snes}-cart-labels.txt from the LaunchBox Games Database.
+"""Regenerate card/Slot/System/{nes,famicom,snes,snes-pal}-cart-labels.txt from the LaunchBox Games Database.
 
 The slot art set behind Cart Studio has no NES or SNES label scans, so Cart Art takes those
 labels from LaunchBox's "Cart - Front" pictures: whole-cart photos it crops the label out of
 (cart_art.rs). This keeps the ones of the console's standard US cart (PNG cut-outs, from the
 regions that cart was sold in; Famicom, Super Famicom and PAL SNES carts are other shapes)
 with the game's name and region, so the Brick never downloads the 100 MB metadata itself.
-"famicom" keeps the NES games' Japanese pictures instead: the Famicom cart.
+"famicom" keeps the NES games' Japanese pictures instead: the Famicom cart; "snes-pal" the SNES
+games' Japanese and European ones: the rounder Super Famicom / PAL cart.
 
 The download is untrusted input: it is parsed with the standard library's expat (2.4+
 guards against entity expansion), and only names without control characters and file names
 of plain characters make it into the list, which the Brick checks again before any request.
 
-Usage: python3 brick/make-cart-labels.py nes|famicom|snes [Metadata.zip]
+Usage: python3 brick/make-cart-labels.py nes|famicom|snes|snes-pal [Metadata.zip]
 """
 import pathlib, sys, tempfile, urllib.request, zipfile
 import xml.etree.ElementTree as ET
@@ -28,6 +29,7 @@ CONSOLES = {
     'nes': ('Nintendo Entertainment System', {**AMERICAS, **EUROPE}),
     'famicom': ('Nintendo Entertainment System', {'Japan': 'Japan'}),
     'snes': ('Super Nintendo Entertainment System', AMERICAS),
+    'snes-pal': ('Super Nintendo Entertainment System', {'Japan': 'Japan', **EUROPE}),
 }
 if len(sys.argv) < 2 or sys.argv[1] not in CONSOLES:
     sys.exit(__doc__)

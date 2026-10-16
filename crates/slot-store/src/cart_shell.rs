@@ -17,6 +17,8 @@ pub enum ShellFinish {
     Solid,
     Clear,
     Glitter,
+    /// Polished metal, as the gold NES carts were moulded.
+    Gold,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -44,6 +46,7 @@ impl ShellChoice {
             "solid" => ShellFinish::Solid,
             "clear" => ShellFinish::Clear,
             "glitter" => ShellFinish::Glitter,
+            "gold" => ShellFinish::Gold,
             _ => return None,
         };
         words.next().is_none().then_some(ShellChoice {
@@ -63,6 +66,7 @@ impl ShellChoice {
             ShellFinish::Solid => "solid",
             ShellFinish::Clear => "clear",
             ShellFinish::Glitter => "glitter",
+            ShellFinish::Gold => "gold",
         };
         let [r, g, b] = self.colour;
         format!("{outline} {r:02x}{g:02x}{b:02x} {finish}")

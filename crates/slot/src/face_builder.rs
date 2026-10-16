@@ -17,6 +17,12 @@ pub struct FaceBuilder {
     built: Receiver<BuiltFaces>,
 }
 
+/// What a cart's faces are built from: its name, plastic and labels, so a change to any (in
+/// the picker or the cart menu) rebuilds them.
+pub fn face_key(cart: &Cart) -> String {
+    format!("{}\n{:?}\n{:?}\n{:?}", cart.stem, cart.shell, cart.label, cart.famicom_label)
+}
+
 impl FaceBuilder {
     pub fn spawn() -> Self {
         let (requests, inbox) = mpsc::channel::<Cart>();
@@ -32,7 +38,7 @@ impl FaceBuilder {
                     cart.read_header();
                     let faces = BuiltFaces {
                         stem: cart.stem.clone(),
-                        key: format!("{}\n{:?}", cart.stem, cart.shell),
+                        key: face_key(&cart),
                         board: board_face(&cart),
                         lid: padded(&cart_face(&cart), TURN_PAD),
                     };

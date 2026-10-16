@@ -52,6 +52,10 @@ pub struct Frontend {
     polaroid_texes: Vec<TexId>,
     title_tex: Option<TexId>,
     faces: FaceBuilder,
+    /// The label row's words, [dim, lit], rewritten as the label search goes.
+    /// The label grid's textures, kept and written over as its pages turn.
+    label_grid_tex: LabelGridTex,
+    label_adjust_tex: LabelAdjustTex,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     rebuild_faces: RebuildFaces,
@@ -143,6 +147,8 @@ impl Frontend {
             polaroid_texes: Vec::new(),
             title_tex: None,
             faces: FaceBuilder::spawn(),
+            label_grid_tex: LabelGridTex::default(),
+            label_adjust_tex: LabelAdjustTex::default(),
             cart_faces,
             rebuild,
             rebuild_faces: RebuildFaces::default(),
@@ -301,6 +307,11 @@ impl Frontend {
         .map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w))
         .collect();
         self.session.app_mut().set_core_legend_faces(legend);
+        // Y sits on its own, above the legend rather than in it: it is about the cart's label
+        // and not about the core being picked.
+        let search = hint_face("Y", "Search");
+        let face = (compositor.create_texture(search.w, search.h, &search.rgba), search.w);
+        self.session.app_mut().set_core_search_face(face);
         let roles = menu_faces(compositor, LinkRow::ALL.iter().map(|r| r.text()));
         self.session.app_mut().set_link_menu_faces(roles);
         if let Some(linked) = menu_faces(compositor, ["Linked"].into_iter()).pop() {
@@ -511,6 +522,8 @@ impl Frontend {
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
+        sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
+        sync_label_adjust(self.session.app_mut(), compositor, &mut self.label_adjust_tex);
         sync_core_picker(
             self.session.app_mut(),
             compositor,
@@ -858,6 +871,107 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     app.set_sticker_face(id);
 }
 
+#[derive(Default)]
+struct LabelAdjustTex {
+    picture: Option<TexId>,
+    cart: Option<TexId>,
+    caption: Option<TexId>,
+    legend: [Option<TexId>; 5],
+}
+
+/// The picture being framed by hand, and the cart it is being framed for. Both are read and
+/// uploaded once, when the framing screen opens; after that only the words change.
+fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut LabelAdjustTex) {
+    let Some((source, words, cart)) = app.label_adjust_view() else {
+        return;
+    };
+    if app.label_adjust_built() == Some((source.as_path(), words.as_str())) {
+        return;
+    }
+    let same_picture = app.label_adjust_built().is_some_and(|(built, _)| built == source);
+    let caption = face(compositor, &mut tex.caption, slot_ui::label_adjust_caption_face(&words));
+    if same_picture {
+        // Only the frame moved: the picture and the cart are the ones already uploaded.
+        if let (Some(picture), Some((legend, cart))) = (tex.picture, app.label_adjust_legend()) {
+            app.set_label_adjust_faces((source, words), picture, cart, caption, legend);
+        }
+        return;
+    }
+    let Some((rgba, w, h)) =
+        std::fs::read(&source).ok().and_then(|png| crate::cart_art::label_picture(&png, ADJUST_TEX_MAX))
+    else {
+        return;
+    };
+    let picture = upload_rgba(compositor, &mut tex.picture, w, h, &rgba);
+    let (face_rgba, _) = slot_ui::cart_cutout_face(&cart);
+    let cart_tex = upload_rgba(compositor, &mut tex.cart, face_rgba.w, face_rgba.h, &face_rgba.rgba);
+    let mut legend = [(picture, 0u32); 5];
+    for (i, hint) in slot_ui::label_adjust_legend_faces().into_iter().enumerate() {
+        let (id, lw, _) = face(compositor, &mut tex.legend[i], hint);
+        legend[i] = (id, lw);
+    }
+    app.set_label_adjust_faces((source, words), picture, cart_tex, caption, legend);
+}
+
+/// How large the picture being framed is kept: enough to zoom into, and no larger.
+const ADJUST_TEX_MAX: u32 = 1024;
+
+#[derive(Default)]
+struct LabelGridTex {
+    title: Option<TexId>,
+    caption: Option<TexId>,
+    legend: [Option<TexId>; 3],
+    cells: Vec<Option<TexId>>,
+}
+
+/// The label grid's page: its labels as pictures, its heading and its words. The pictures are
+/// read again only when the page turns or another label lands on it; the words, which change
+/// as the cursor moves and the search runs, are drawn on their own.
+fn sync_label_grid(app: &mut App, compositor: &mut Compositor, tex: &mut LabelGridTex) {
+    let Some((page, paths, words)) = app.label_grid_page() else {
+        return;
+    };
+    let fresh = app.label_grid_built() == Some((page, paths.len()));
+    if fresh {
+        if app.label_grid_caption_built() != Some(words.as_str()) {
+            let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
+            app.set_label_grid_caption(words, caption);
+        }
+        return;
+    }
+    let query = app.label_grid_query().unwrap_or_default();
+    let heading =
+        if query.is_empty() { "FIND A LABEL".to_string() } else { format!("FIND A LABEL \u{b7} {query}") };
+    let title = face(compositor, &mut tex.title, slot_ui::title_face(&heading));
+    let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
+    let mut legend = [(caption.0, 0u32); 3];
+    for (i, hint) in slot_ui::label_grid_legend_faces().into_iter().enumerate() {
+        let (id, w, _) = face(compositor, &mut tex.legend[i], hint);
+        legend[i] = (id, w);
+    }
+    tex.cells.resize(slot_ui::PAGE, None);
+    let cells = (0..slot_ui::PAGE)
+        .map(|i| {
+            let png = std::fs::read(paths.get(i)?).ok()?;
+            let (rgba, w, h) = crate::cart_art::label_picture(&png, GRID_TEX_MAX)?;
+            Some((upload_rgba(compositor, &mut tex.cells[i], w, h, &rgba), w, h))
+        })
+        .collect();
+    app.set_label_grid_faces((page, paths.len()), words, title, caption, cells, legend);
+}
+
+/// Uploads a face and keeps its size, which is what the views are drawn from.
+fn face(compositor: &mut Compositor, slot: &mut Option<TexId>, f: slot_ui::UndoFace) -> (TexId, u32, u32) {
+    let (w, h) = (f.w.max(1), f.h.max(1));
+    // No font: a clear pixel, so there is still a texture to point at.
+    let rgba = if f.rgba.is_empty() { vec![0; 4] } else { f.rgba };
+    let (w, h) = if rgba.len() as u32 == w * h * 4 { (w, h) } else { (1, 1) };
+    (upload_rgba(compositor, slot, w, h, &rgba), w, h)
+}
+
+/// How big a label is kept for the grid: four to a row on a 640 wide screen.
+const GRID_TEX_MAX: u32 = 160;
+
 fn sync_core_picker(
     app: &mut App,
     compositor: &mut Compositor,
@@ -870,7 +984,7 @@ fn sync_core_picker(
     // Keyed by the cart and the plastic it wears, so a colour or finish changed in the picker
     // (or the cart menu) rebuilds the lid it shows.
     let cart = app.selected_stem().and_then(|stem| app.carts().find(|c| c.stem == stem)).cloned();
-    let highlighted = cart.as_ref().map(|c| format!("{}\n{:?}", c.stem, c.shell));
+    let highlighted = cart.as_ref().map(crate::face_builder::face_key);
     if let Some(cart) = cart {
         if *asked != highlighted {
             builder.request(cart);

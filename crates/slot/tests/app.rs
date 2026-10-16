@@ -2346,7 +2346,7 @@ fn start_opens_the_cart_menu_on_a_game_boy_cart_and_the_picker_on_a_gba_one() {
     let (_d, mut gb) = on_shelf_gb(&["Tetris", "Zzz"]);
     press(&mut gb, Btn::Start);
     assert_eq!(gb.core_picker(), None);
-    assert_eq!(rows_of(&mut gb), vec![Colour, Finish, Shape, Reset]);
+    assert_eq!(rows_of(&mut gb), vec![Colour, Finish, Shape, Label, Reset]);
     assert_eq!(gb.cart_menu().unwrap().1, None, "a cart nobody changed wears its own plastic");
     let (_d, mut gba) = on_shelf(&["Emerald", "Zzz"]);
     press(&mut gba, Btn::Start);
@@ -2467,7 +2467,7 @@ fn a_snes_cart_can_swap_to_the_pal_shape_and_it_is_saved() {
     let (d, mut app) = booted_on_shelf(d);
     assert_eq!(app.selected_stem(), Some("Mario Kart (USA)"));
     press(&mut app, Btn::Start);
-    assert_eq!(rows_of(&mut app), vec![Shape, Reset], "a SNES cart offered a colour");
+    assert_eq!(rows_of(&mut app), vec![Shape, Label, Reset], "a SNES cart offered a colour");
     press(&mut app, Btn::Left);
     let pal = app.cart_menu().unwrap().1.expect("a shape is a change");
     assert_eq!(pal.outline, slot_store::Outline::Rounded);
@@ -2486,7 +2486,7 @@ fn a_nes_cart_offers_only_its_shape_and_can_be_made_a_famicom_cart() {
     let (d, mut app) = booted_on_shelf(d);
     assert_eq!(app.selected_stem(), Some("Mario (USA)"));
     press(&mut app, Btn::Start);
-    assert_eq!(rows_of(&mut app), vec![Shape, Reset], "a NES cart offered a colour");
+    assert_eq!(rows_of(&mut app), vec![Shape, Label, Reset], "a NES cart offered a colour");
     press(&mut app, Btn::Left);
     assert_eq!(app.cart_menu().unwrap().1.map(|c| c.outline), Some(slot_store::Outline::Rounded));
     press(&mut app, Btn::A);
@@ -2504,7 +2504,7 @@ fn a_famicom_cart_offers_a_colour_and_a_nes_cart_does_not() {
     let (d, mut app) = booted_on_shelf(d);
     press(&mut app, Btn::Start);
     press(&mut app, Btn::Left);
-    assert_eq!(rows_of(&mut app), vec![Shape, Colour, Reset], "the Famicom cart offered no colour");
+    assert_eq!(rows_of(&mut app), vec![Shape, Colour, Label, Reset], "the Famicom cart offered no colour");
     let own = app.cart_menu().unwrap().1.unwrap().colour;
     assert_eq!(own, slot_ui::famicom_shell("Mario (USA)").colour, "the Famicom cart started grey");
     press(&mut app, Btn::Down);
@@ -2513,10 +2513,29 @@ fn a_famicom_cart_offers_a_colour_and_a_nes_cart_does_not() {
     assert_ne!(red.colour, own);
     press(&mut app, Btn::Up);
     press(&mut app, Btn::Right);
-    assert_eq!(rows_of(&mut app), vec![Shape, Reset], "the NES cart kept the colour row");
+    assert_eq!(rows_of(&mut app), vec![Shape, Label, Reset], "the NES cart kept the colour row");
     press(&mut app, Btn::Left);
     press(&mut app, Btn::A);
     let saved = saved_shell(&d, "Mario (USA)").expect("A saved nothing");
     let red_hex = format!("{:02x}{:02x}{:02x}", red.colour[0], red.colour[1], red.colour[2]);
     assert!(saved.starts_with(&format!("rounded {red_hex}")), "{saved}");
+}
+
+#[test]
+fn the_label_row_searches_only_with_y_and_online_and_b_leaves_the_label_as_it_was() {
+    use slot_ui::CartRow::*;
+    let (d, mut app) = on_shelf_gb(&["Tetris", "Zzz"]);
+    press(&mut app, Btn::Start);
+    assert_eq!(app.label_caption(), Some(("Name only".to_string(), false)));
+    while app.cart_menu().unwrap().0 != Label {
+        press(&mut app, Btn::Down);
+    }
+    press(&mut app, Btn::Right);
+    assert_eq!(app.label_caption(), Some(("Name only".to_string(), false)), "Right searched: only Y does");
+    press(&mut app, Btn::Y);
+    assert_eq!(app.label_caption(), Some(("Connect to Wi-Fi first".to_string(), false)), "typed a search with no network");
+    press(&mut app, Btn::B);
+    assert!(app.cart_menu().is_none());
+    assert_eq!(app.label_caption(), None);
+    assert!(!d.path().join("Labels/GB/Tetris.png").exists(), "a label was written");
 }

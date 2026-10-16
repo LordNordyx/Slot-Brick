@@ -1,6 +1,11 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Choose a game's label yourself: Y on the cart menu's Label row (or in the GBA core picker)
+  searches by the game's name, or anything you type, and Left/Right (L1/R1) flips through every
+  label found, each shown on the cart to pick from.
+- SNES labels from Super Famicom and PAL carts too: over three times as many SNES games find a
+  label, and the rounder cart gets one that fits it.
 - Wi-Fi comes back on at startup as it was left: Slot remembers whether Wi-Fi was on, and
   starts it itself when the firmware does not (it may not, with Slot in place of its menu).
 - Wi-Fi only counts as online once it has an address, and at startup Slot waits for the
