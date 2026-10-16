@@ -3267,8 +3267,9 @@ impl App {
             return;
         };
         if a.sizing {
-            // Up and Right stretch the picture out, Down and Left pull it back in. A bigger
-            // picture is less of it inside the frame, so its piece shrinks as it grows.
+            // The bottom left corner is pinned, so the edges that move are the right one and
+            // the top one: each key moves the edge it points at. A bigger picture is less of
+            // it inside the frame, so its piece shrinks as it grows.
             match dir {
                 Btn::Up => a.resize(0.0, -STEP_PX),
                 Btn::Down => a.resize(0.0, STEP_PX),
@@ -4697,9 +4698,11 @@ impl Adjust {
         self.crop.1 = self.crop.1.clamp(lo, hi);
     }
 
-    /// Grows or shrinks away from the top left corner, which stays where it is: line the
+    /// Grows or shrinks away from the bottom left corner, which stays where it is: line the
     /// artwork up with the rim there and it keeps flush with it while the rest moves.
     fn resize(&mut self, dw: f32, dh: f32) {
+        // Taking off the top whatever is added to the height leaves the bottom where it is.
+        self.crop.1 -= dh;
         self.crop.2 += dw;
         self.crop.3 += dh;
         self.clamp();
