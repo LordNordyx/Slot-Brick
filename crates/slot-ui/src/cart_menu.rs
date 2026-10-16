@@ -86,6 +86,9 @@ const PLAIN: [(&str, Shell); 12] = [
 pub fn colour_choices() -> Vec<(&'static str, Option<Shell>)> {
     let mut out = vec![("Original", None)];
     out.extend(PLAIN.iter().map(|(n, s)| (*n, Some(*s))));
+    out.extend(
+        crate::shell::FAMICOM_NAMES.iter().zip(crate::shell::FAMICOM_SHELLS).map(|(n, s)| (*n, Some(s))),
+    );
     for (name, shell) in shell_presets() {
         if !out.iter().any(|(_, s)| *s == Some(shell)) {
             out.push((name, Some(shell)));

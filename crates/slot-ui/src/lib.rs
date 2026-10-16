@@ -87,7 +87,7 @@ pub use shelf::{foot_y, rest_y, set_shelf_slack, Shelf};
 pub use shell::{
     gb_table_shells, gba_shell_for, lookup_order_is_exact_then_family_then_default, shell_for,
     famicom_shell, nes_shell_for, shell_presets, snes_pal, table_keys, Finish, Shell, DEFAULT_SHELL, DMG_SHELL,
-    DUAL_MODE_SHELL, FAMICOM_SHELLS, GB_CLEAR_SHELL, NES_SHELL, SNES_PAL_SHELL, SNES_SHELL,
+    DUAL_MODE_SHELL, FAMICOM_NAMES, FAMICOM_SHELLS, GB_CLEAR_SHELL, NES_SHELL, SNES_PAL_SHELL, SNES_SHELL,
 };
 pub use silhouette::{gb_silhouette, silhouette, GbShell, NesShell, SnesShell};
 pub use slot_chrome::{

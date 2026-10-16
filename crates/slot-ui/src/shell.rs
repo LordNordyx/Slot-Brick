@@ -72,6 +72,18 @@ pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
 /// The PAL and Super Famicom cart's lighter, warmer grey.
 pub const SNES_PAL_SHELL: Shell = shell([0xab, 0xab, 0xa7], Finish::Solid);
 
+/// What each of FAMICOM_SHELLS is called, in the same order.
+pub const FAMICOM_NAMES: [&str; 8] = [
+    "Famicom yellow",
+    "Famicom red",
+    "Famicom blue",
+    "Famicom green",
+    "Famicom black",
+    "Famicom cream",
+    "Famicom orange",
+    "Famicom pink",
+];
+
 /// Famicom carts came in many plastics. A Japanese release wears one of them, picked
 /// steadily from its name: a colour in the spirit of the Famicom, not its real one.
 pub const FAMICOM_SHELLS: [Shell; 8] = [

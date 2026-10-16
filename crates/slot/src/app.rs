@@ -4786,11 +4786,13 @@ fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
 }
 
 /// The plastics a cart is offered, as places in `colours`. A NES cart came in its system's
-/// grey, the gold the Zeldas were moulded in, and the plastics the unlicensed publishers used,
-/// and no others; every other console's carts are offered the lot. Whatever it wears is always
-/// offered, so a colour set elsewhere can still be stepped away from.
+/// grey, the gold the two Zeldas were moulded in, and the black, blue and silver the
+/// unlicensed publishers used; the Famicom cart came in its own eight, which are not the same
+/// plastics at all. Every other console's carts are offered the lot. Whatever it wears is
+/// always offered, so a colour set elsewhere can still be stepped away from.
 fn offered_colours(
     platform: Platform,
+    famicom: bool,
     colours: &[(&'static str, Option<slot_ui::Shell>)],
     worn: usize,
 ) -> Vec<usize> {
@@ -4799,8 +4801,12 @@ fn offered_colours(
     }
     const NES_PLASTICS: [&str; 5] =
         ["NES grey", "Zelda gold", "Tengen black", "Color Dreams blue", "Camerica silver"];
+    let wanted = |name: &str| match famicom {
+        true => slot_ui::FAMICOM_NAMES.contains(&name),
+        false => NES_PLASTICS.contains(&name),
+    };
     let mut out = vec![0];
-    out.extend(colours.iter().enumerate().filter(|(_, (n, _))| NES_PLASTICS.contains(n)).map(|(i, _)| i));
+    out.extend(colours.iter().enumerate().filter(|(_, (n, _))| wanted(n)).map(|(i, _)| i));
     if !out.contains(&worn) {
         out.push(worn);
     }
@@ -4853,7 +4859,7 @@ impl CartMenu {
             stem: cart.stem.clone(),
             row: rows[0],
             rows,
-            offered: offered_colours(cart.platform, &colours, colour),
+            offered: offered_colours(cart.platform, famicom.is_some_and(|(own, _)| own), &colours, colour),
             colours,
             colour,
             finish,
@@ -4869,6 +4875,21 @@ impl CartMenu {
 
 
     /// The shell these values make: None while they are all the game's own.
+    /// On the Famicom shape a cart is offered the Famicom plastics, on the NES shape the NES
+    /// ones. Stepping the shape moves it from one set to the other, so it keeps the plastic it
+    /// is wearing if that is in both and falls back to its own if it is not.
+    fn fit_colours(&mut self) {
+        let famicom = self.famicom.is_some_and(|(own, _)| match OUTLINES[self.shape] {
+            Outline::Auto => own,
+            Outline::Notched => false,
+            Outline::Rounded => true,
+        });
+        self.offered = offered_colours(Platform::Nes, famicom, &self.colours, self.colour);
+        if !self.offered.contains(&self.colour) {
+            self.colour = 0;
+        }
+    }
+
     fn chosen(&self) -> Option<ShellChoice> {
         let picked = self.colours[self.colour].1;
         // A plastic brings its own finish; the finish row overrules it where there is one. The
@@ -4907,6 +4928,7 @@ impl CartMenu {
             slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
             slot_ui::CartRow::Shape => {
                 self.shape = step(self.shape, OUTLINES.len());
+                self.fit_colours();
             }
             slot_ui::CartRow::Reset => {}
         }
