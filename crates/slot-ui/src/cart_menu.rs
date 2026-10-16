@@ -214,11 +214,6 @@ pub fn cart_menu_value_face(value: &str, lit: bool) -> UndoFace {
     text_face(value, if lit { MENU_INK } else { DIM_INK }, VALUE_W)
 }
 
-/// The label row's value, or with `wide` the core picker's label line: the words change as
-/// labels are found, so they get more room than the fixed values.
-pub fn label_caption_face(value: &str, lit: bool, wide: bool) -> UndoFace {
-    text_face(value, if lit { MENU_INK } else { DIM_INK }, if wide { 440.0 } else { 200.0 })
-}
 
 pub fn cart_menu_legend_faces() -> [UndoFace; 5] {
     [

@@ -299,7 +299,6 @@ pub struct App {
     /// Labels found for the cart open in the cart menu or the core picker, to choose from.
     label_pick: Option<LabelPick>,
     /// The label row's words as last drawn, [dim, lit]: rebuilt by the frontend when they change.
-    label_caption_faces: Option<(String, [(TexId, u32, u32); 2])>,
     /// The label grid's pictures and words, drawn and uploaded by the frontend.
     label_grid_faces: Option<LabelGridFaces>,
     /// The picture being framed by hand, and the words under it.
@@ -462,7 +461,6 @@ impl App {
             picker_look: None,
             cart_menu_faces: None,
             label_pick: None,
-            label_caption_faces: None,
             label_grid_faces: None,
             label_adjust_faces: None,
             core_board_face: None,
@@ -2769,7 +2767,7 @@ impl App {
                 });
                 x += w.saturating_sub(HINT_EDGE) as f32 + gap;
             }
-            // Above the leftmost of them, out of the way of the label line in the middle.
+            // Above the leftmost of them, standing apart from the core's own keys.
             if let Some((tex, w)) = self.core_search_face {
                 out.push(Draw::Tex {
                     x: first.round(),
@@ -2780,18 +2778,6 @@ impl App {
                     alpha: lift,
                 });
             }
-        }
-        // Above the legend: the label line, L1/R1 flipping through labels found for the cart.
-        if let Some((_, [_, (tex, w, h)])) = self.label_caption_faces {
-            out.push(Draw::Tex {
-                x: ((OUT_W as f32 - w as f32) / 2.0).round(),
-                // In the gap between the board's foot and the legend.
-                y: ((slot_ui::BOARD_Y + slot_ui::BOARD_H as f32 + CORE_LEGEND_Y) / 2.0 - h as f32 / 2.0).round(),
-                w: w as f32,
-                h: h as f32,
-                tex,
-                alpha: lift,
-            });
         }
     }
 
@@ -3538,25 +3524,6 @@ impl App {
         }
     }
 
-    /// The words the label row (or the core picker's label line) should show now.
-    /// With true for the picker's wider line.
-    pub fn label_caption(&self) -> Option<(String, bool)> {
-        let in_picker = self.core_picker.is_some() && self.picker_look.is_some();
-        if !in_picker {
-            return None;
-        }
-        let stem = self.picker_look.as_ref().map(|m| m.stem.as_str())?;
-        let cart = self.shelf_index_of(stem).and_then(|i| self.shelf().carts.get(i));
-        let pick = self.label_pick.as_ref().filter(|p| p.stem == stem);
-        let words = match pick {
-            Some(p) => p.caption(),
-            None if cart.is_some_and(|c| slot_ui::shown_label(c).is_some()) => "Current".to_string(),
-            None => "Name only".to_string(),
-        };
-        Some((format!("Label: {words}"), true))
-    }
-
-    /// The caption's faces, built by the frontend for `text`.
     /// The page the grid's pictures were made for, so they are made again only when it turns.
     pub fn label_grid_built(&self) -> Option<(usize, usize)> {
         self.label_grid_faces.as_ref().map(|g| g.built)
@@ -3589,15 +3556,6 @@ impl App {
     /// What was typed, for the grid's heading.
     pub fn label_grid_query(&self) -> Option<String> {
         self.label_pick.as_ref().filter(|p| p.grid).and_then(|p| p.query.clone())
-    }
-
-    pub fn set_label_caption_faces(&mut self, text: String, faces: [(TexId, u32, u32); 2]) {
-        self.label_caption_faces = Some((text, faces));
-    }
-
-    /// The text the label caption faces show now, so the frontend knows when to rebuild them.
-    pub fn label_caption_built(&self) -> Option<&str> {
-        self.label_caption_faces.as_ref().map(|(t, _)| t.as_str())
     }
 
     /// The cart on the shelf wears `shell`; its face is rebuilt for the next frame.
@@ -4807,30 +4765,6 @@ impl LabelPick {
         format!("{}   ({} of {found}{more})", choice.caption, self.cursor() + 1)
     }
 
-    fn caption(&self) -> String {
-        let searching = self.search.is_some();
-        if self.offline {
-            return "Connect to Wi-Fi first".into();
-        }
-        if self.at == 0 {
-            return match (searching, self.done, self.choices.len()) {
-                (true, _, 0) => "Searching...".into(),
-                (false, Some(false), 0) => "Can't search now".into(),
-                (false, Some(true), 0) => "None found".into(),
-                (_, _, n) if n > 0 => format!("Current (of {})", n + 1),
-                _ => "Current".into(),
-            };
-        }
-        let choice = &self.choices[self.at - 1];
-        let more = if searching { "+" } else { "" };
-        let n = self.choices.len();
-        // A search can find other games: their names show, with the region.
-        let what = choice.caption.as_str();
-        match what {
-            "" => format!("{} of {n}{more}", self.at),
-            w => format!("{w}  {} of {n}{more}", self.at),
-        }
-    }
 }
 
 fn finish_of(finish: ShellFinish) -> slot_ui::Finish {

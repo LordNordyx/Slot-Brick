@@ -53,7 +53,6 @@ pub struct Frontend {
     title_tex: Option<TexId>,
     faces: FaceBuilder,
     /// The label row's words, [dim, lit], rewritten as the label search goes.
-    label_caption_tex: [Option<TexId>; 2],
     /// The label grid's textures, kept and written over as its pages turn.
     label_grid_tex: LabelGridTex,
     label_adjust_tex: LabelAdjustTex,
@@ -148,7 +147,6 @@ impl Frontend {
             polaroid_texes: Vec::new(),
             title_tex: None,
             faces: FaceBuilder::spawn(),
-            label_caption_tex: [None, None],
             label_grid_tex: LabelGridTex::default(),
             label_adjust_tex: LabelAdjustTex::default(),
             cart_faces,
@@ -524,7 +522,6 @@ impl Frontend {
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
-        sync_label_caption(self.session.app_mut(), compositor, &mut self.label_caption_tex);
         sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
         sync_label_adjust(self.session.app_mut(), compositor, &mut self.label_adjust_tex);
         sync_core_picker(
@@ -974,24 +971,6 @@ fn face(compositor: &mut Compositor, slot: &mut Option<TexId>, f: slot_ui::UndoF
 
 /// How big a label is kept for the grid: four to a row on a 640 wide screen.
 const GRID_TEX_MAX: u32 = 160;
-
-/// The label row's words, drawn again only when they change.
-fn sync_label_caption(app: &mut App, compositor: &mut Compositor, tex: &mut [Option<TexId>; 2]) {
-    let Some((text, wide)) = app.label_caption() else {
-        return;
-    };
-    if app.label_caption_built() == Some(text.as_str()) {
-        return;
-    }
-    let faces = [false, true].map(|lit| slot_ui::label_caption_face(&text, lit, wide));
-    let [dim, lit] = [0, 1].map(|i| {
-        let f = &faces[i];
-        // No font: a clear pixel, so there is still a texture to point at.
-        let (w, h, rgba) = if f.rgba.is_empty() { (1, 1, vec![0; 4]) } else { (f.w, f.h, f.rgba.clone()) };
-        (upload_rgba(compositor, &mut tex[i], w, h, &rgba), w, h)
-    });
-    app.set_label_caption_faces(text, [dim, lit]);
-}
 
 fn sync_core_picker(
     app: &mut App,
