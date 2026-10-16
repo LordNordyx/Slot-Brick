@@ -873,7 +873,7 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
 struct LabelAdjustTex {
     picture: Option<TexId>,
     caption: Option<TexId>,
-    legend: [Option<TexId>; 4],
+    legend: [Option<TexId>; 5],
 }
 
 /// The picture being framed by hand. It is read and uploaded once, when the framing screen
@@ -890,7 +890,7 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
     if same_picture {
         // Only the frame moved: the picture on screen is the one already uploaded.
         if let Some(picture) = tex.picture {
-            let legend = app.label_adjust_legend().unwrap_or([(picture, 0); 4]);
+            let legend = app.label_adjust_legend().unwrap_or([(picture, 0); 5]);
             app.set_label_adjust_faces((source, words), picture, caption, legend);
         }
         return;
@@ -901,7 +901,7 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
         return;
     };
     let picture = upload_rgba(compositor, &mut tex.picture, w, h, &rgba);
-    let mut legend = [(picture, 0u32); 4];
+    let mut legend = [(picture, 0u32); 5];
     for (i, hint) in slot_ui::label_adjust_legend_faces().into_iter().enumerate() {
         let (id, lw, _) = face(compositor, &mut tex.legend[i], hint);
         legend[i] = (id, lw);

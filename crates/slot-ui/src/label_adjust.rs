@@ -34,8 +34,8 @@ pub struct LabelAdjustView {
     /// The frame it is being moved under: x, y, width, height.
     pub frame: (f32, f32, f32, f32),
     pub caption: Option<(TexId, u32, u32)>,
-    /// Back, move, zoom, keep.
-    pub legend: Option<[(TexId, u32); 4]>,
+    /// Back, move, size, even up, keep.
+    pub legend: Option<[(TexId, u32); 5]>,
 }
 
 impl LabelAdjustView {
@@ -90,6 +90,12 @@ pub fn label_adjust_caption_face(words: &str) -> UndoFace {
     UndoFace { rgba, w, h: MENU_H }
 }
 
-pub fn label_adjust_legend_faces() -> [UndoFace; 4] {
-    [hint_face("B", "Back"), hint_face("+", "Move"), hint_face("L / R", "Zoom"), hint_face("A", "Keep")]
+pub fn label_adjust_legend_faces() -> [UndoFace; 5] {
+    [
+        hint_face("B", "Back"),
+        hint_face("+", "Move"),
+        hint_face("L +", "Size"),
+        hint_face("R", "Even"),
+        hint_face("A", "Keep"),
+    ]
 }

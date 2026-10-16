@@ -1882,6 +1882,7 @@ impl App {
             self.core_picker = None;
         }
         self.poll_label_pick();
+        self.tick_label_adjust();
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -3167,8 +3168,8 @@ impl App {
         }
     }
 
-    /// A on the grid: the label picked goes under a frame to be set by hand, starting where it
-    /// was cut from. Nothing is written until it is kept.
+    /// A on the grid: the label picked goes under a frame to be set by hand, starting as the
+    /// piece it was cut from. Nothing is written until it is kept.
     fn open_label_adjust(&mut self) {
         let Some(pick) = &self.label_pick else {
             return;
@@ -3181,30 +3182,37 @@ impl App {
         let Some(size) = std::fs::read(&source).ok().and_then(|png| crate::cart_art::png_size(&png)) else {
             return self.end_label_pick(true);
         };
-        let frame = slot_ui::frame_box(cut.w, cut.h);
-        let mut adjust = Adjust { source, size, at: (cut.x as f32, cut.y as f32), scale: frame.2 / cut.w.max(1) as f32 };
-        adjust.clamp((frame.2, frame.3));
+        let crop = (cut.x as f32, cut.y as f32, cut.w as f32, cut.h as f32);
+        let mut adjust = Adjust { source, size, crop, original: crop, sizing: false, held: None };
+        adjust.clamp();
         if let Some(pick) = &mut self.label_pick {
             pick.adjust = Some(adjust);
         }
     }
 
-    /// Framing a picked label: the d-pad moves the picture under the frame, L1/R1 zoom, A keeps
+    /// Framing a picked label. The d-pad moves the frame; holding L, Up and Right grow it and
+    /// Down and Left shrink it. R evens its shape back up, Y puts it back as it was, A keeps
     /// what is inside it and B goes back to the grid.
     fn label_adjust_input(&mut self, action: Action) {
-        let Some(pick) = &self.label_pick else {
-            return;
-        };
-        let Some(adjust) = &pick.adjust else {
-            return;
-        };
-        let cut = match pick.choices.get(pick.cursor()) {
-            Some(choice) => choice.frame,
-            None => return,
-        };
-        let box_of = slot_ui::frame_box(cut.w, cut.h);
-        let span = (box_of.2, box_of.3);
         match action {
+            Action::GbaDown(Btn::L1) => {
+                if let Some(a) = self.adjust_mut() {
+                    (a.sizing, a.held) = (true, None);
+                }
+                return;
+            }
+            Action::GbaUp(Btn::L1) => {
+                if let Some(a) = self.adjust_mut() {
+                    (a.sizing, a.held) = (false, None);
+                }
+                return;
+            }
+            Action::GbaUp(_) => {
+                if let Some(a) = self.adjust_mut() {
+                    a.held = None;
+                }
+                return;
+            }
             Action::GbaDown(Btn::B) => {
                 if let Some(pick) = &mut self.label_pick {
                     pick.adjust = None;
@@ -3212,35 +3220,87 @@ impl App {
                 return;
             }
             Action::GbaDown(Btn::A) | Action::Insert => {
-                let (source, frame) = (adjust.source.clone(), adjust.frame(span));
+                let Some(a) = self.label_pick.as_ref().and_then(|p| p.adjust.as_ref()) else {
+                    return;
+                };
+                let (source, frame) = (a.source.clone(), a.frame());
                 return self.keep_framed_label(&source, frame);
+            }
+            Action::GbaDown(Btn::R1) => {
+                if let Some(a) = self.adjust_mut() {
+                    a.even_up();
+                }
+                return;
+            }
+            Action::GbaDown(Btn::Y) => {
+                if let Some(a) = self.adjust_mut() {
+                    a.crop = a.original;
+                    a.clamp();
+                }
+                return;
             }
             _ => {}
         }
-        let Some(pick) = &mut self.label_pick else {
-            return;
-        };
-        let Some(adjust) = &mut pick.adjust else {
-            return;
-        };
-        // A press moves the picture the same distance on screen whatever the zoom.
-        let step = PAN_STEP / adjust.scale;
-        match action {
-            Action::GbaDown(Btn::Left) | Action::ShelfLeft => adjust.at.0 -= step,
-            Action::GbaDown(Btn::Right) | Action::ShelfRight => adjust.at.0 += step,
-            Action::GbaDown(Btn::Up) => adjust.at.1 -= step,
-            Action::GbaDown(Btn::Down) => adjust.at.1 += step,
-            // Zoom about the middle of the frame, so what is being looked at stays there.
-            Action::GbaDown(dir @ (Btn::L1 | Btn::R1)) => {
-                let middle = (adjust.at.0 + span.0 / adjust.scale / 2.0, adjust.at.1 + span.1 / adjust.scale / 2.0);
-                adjust.scale *= if dir == Btn::R1 { ZOOM_STEP } else { 1.0 / ZOOM_STEP };
-                let (low, high) = adjust.scale_limits(span);
-                adjust.scale = adjust.scale.clamp(low, high);
-                adjust.at = (middle.0 - span.0 / adjust.scale / 2.0, middle.1 - span.1 / adjust.scale / 2.0);
-            }
+        let dir = match action {
+            Action::GbaDown(b @ (Btn::Up | Btn::Down | Btn::Left | Btn::Right)) => b,
             _ => return,
+        };
+        let now = self.now();
+        if let Some(a) = self.adjust_mut() {
+            a.held = Some((dir, now, now));
         }
-        adjust.clamp(span);
+        self.step_label_frame(dir);
+    }
+
+    fn adjust_mut(&mut self) -> Option<&mut Adjust> {
+        self.label_pick.as_mut()?.adjust.as_mut()
+    }
+
+    /// One step of the held direction: moving the frame, or sizing it while L is down.
+    fn step_label_frame(&mut self, dir: Btn) {
+        let Some(a) = self.adjust_mut() else {
+            return;
+        };
+        if a.sizing {
+            // Up and Right let more of the picture in, Down and Left take it back out.
+            match dir {
+                Btn::Up => a.resize(0.0, STEP_PX),
+                Btn::Down => a.resize(0.0, -STEP_PX),
+                Btn::Right => a.resize(STEP_PX, 0.0),
+                _ => a.resize(-STEP_PX, 0.0),
+            }
+            return;
+        }
+        match dir {
+            Btn::Up => a.crop.1 -= STEP_PX,
+            Btn::Down => a.crop.1 += STEP_PX,
+            Btn::Left => a.crop.0 -= STEP_PX,
+            _ => a.crop.0 += STEP_PX,
+        }
+        a.clamp();
+    }
+
+    /// A held direction keeps stepping, quickening the longer it is held, so a tap can be worth
+    /// a pixel or two without it taking all day to cross the picture.
+    fn tick_label_adjust(&mut self) {
+        let now = self.now();
+        let Some(a) = self.adjust_mut() else {
+            return;
+        };
+        let Some((dir, since, last)) = a.held else {
+            return;
+        };
+        let held = now.saturating_sub(since);
+        if held < REPEAT_DELAY_MS {
+            return;
+        }
+        let run = held - REPEAT_DELAY_MS;
+        let every = REPEAT_MS - (REPEAT_MS - REPEAT_FAST_MS) * run.min(REPEAT_RAMP_MS) / REPEAT_RAMP_MS;
+        if now.saturating_sub(last) < every {
+            return;
+        }
+        a.held = Some((dir, since, now));
+        self.step_label_frame(dir);
     }
 
     /// Cuts the frame out of the picture and wears it, then goes back to the cart menu.
@@ -3579,15 +3639,16 @@ impl App {
 
     /// Where the frame sits and where the picture sits under it, in screen units.
     fn label_adjust_layout(&self) -> Option<((f32, f32, f32, f32), Option<(f32, f32, f32, f32)>)> {
-        let pick = self.label_pick.as_ref()?;
-        let adjust = pick.adjust.as_ref()?;
-        let cut = pick.choices.get(pick.cursor())?.frame;
-        let (fx, fy, fw, fh) = slot_ui::frame_box(cut.w, cut.h);
+        let adjust = self.label_pick.as_ref()?.adjust.as_ref()?;
+        let (fx, fy, fw, fh) = slot_ui::frame_box(adjust.crop.2 as u32, adjust.crop.3 as u32);
+        // The frame is where it is; the picture is laid under it at whatever scale makes the
+        // piece inside the frame fill it.
+        let scale = fw / adjust.crop.2.max(1.0);
         let picture = (
-            fx - adjust.at.0 * adjust.scale,
-            fy - adjust.at.1 * adjust.scale,
-            adjust.size.0 as f32 * adjust.scale,
-            adjust.size.1 as f32 * adjust.scale,
+            fx - adjust.crop.0 * scale,
+            fy - adjust.crop.1 * scale,
+            adjust.size.0 as f32 * scale,
+            adjust.size.1 as f32 * scale,
         );
         Some(((fx, fy, fw, fh), Some(picture)))
     }
@@ -3597,13 +3658,16 @@ impl App {
         let pick = self.label_pick.as_ref()?;
         let adjust = pick.adjust.as_ref()?;
         let choice = pick.choices.get(pick.cursor())?;
-        let shape = slot_ui::frame_box(choice.frame.w, choice.frame.h);
-        let frame = adjust.frame((shape.2, shape.3));
-        Some((adjust.source.clone(), format!("{}   ({} x {})", choice.caption, frame.w, frame.h)))
+        let frame = adjust.frame();
+        // Says when the shape has drifted from the one it started as, which R puts back.
+        let shape = adjust.original.2 / adjust.original.3.max(1.0);
+        let now = frame.w as f32 / (frame.h as f32).max(1.0);
+        let warped = if (now / shape - 1.0).abs() > 0.02 { "  stretched" } else { "" };
+        Some((adjust.source.clone(), format!("{}   ({} x {}){warped}", choice.caption, frame.w, frame.h)))
     }
 
     /// The hints already uploaded, so moving the frame does not draw them again.
-    pub fn label_adjust_legend(&self) -> Option<[(TexId, u32); 4]> {
+    pub fn label_adjust_legend(&self) -> Option<[(TexId, u32); 5]> {
         self.label_adjust_faces.as_ref().map(|f| f.legend)
     }
 
@@ -3616,7 +3680,7 @@ impl App {
         built: (PathBuf, String),
         picture: TexId,
         caption: (TexId, u32, u32),
-        legend: [(TexId, u32); 4],
+        legend: [(TexId, u32); 5],
     ) {
         self.label_adjust_faces = Some(LabelAdjustFaces { built, picture, caption, legend });
     }
@@ -4540,7 +4604,7 @@ struct LabelAdjustFaces {
     built: (PathBuf, String),
     picture: TexId,
     caption: (TexId, u32, u32),
-    legend: [(TexId, u32); 4],
+    legend: [(TexId, u32); 5],
 }
 
 /// What the label grid is drawn from, uploaded once a page and kept until the page turns.
@@ -4577,52 +4641,72 @@ struct LabelPick {
     adjust: Option<Adjust>,
 }
 
-/// Framing a picked label: the frame stands still and the picture moves under it, so what is
-/// held here is which pixel of the picture the frame's top left corner sits on, and how far the
-/// picture is blown up. Nothing is cut until it is kept.
+/// Framing a picked label. What is held is the piece of the picture the frame covers, in the
+/// picture's own pixels, so a press moves it the same distance however far it is zoomed in.
 struct Adjust {
     /// The whole picture being framed, and its size.
     source: PathBuf,
     size: (u32, u32),
-    /// The picture pixel under the frame's top left corner.
-    at: (f32, f32),
-    /// Screen units per picture pixel.
-    scale: f32,
+    /// The piece of it inside the frame: left, top, width, height.
+    crop: (f32, f32, f32, f32),
+    /// The piece it started as, which Y goes back to and R takes its shape from.
+    original: (f32, f32, f32, f32),
+    /// L is down, so the d-pad changes the frame's size rather than moving it.
+    sizing: bool,
+    /// The direction being held, when it began and when it last stepped, so holding a key
+    /// keeps going. A tap alone is only a pixel or two, which would be unusable otherwise.
+    held: Option<(Btn, Millis, Millis)>,
 }
 
 impl Adjust {
-    /// Zoomed out no further than the picture itself, and in no further than its own pixels.
-    fn scale_limits(&self, frame: (f32, f32)) -> (f32, f32) {
-        let fit = (frame.0 / self.size.0 as f32).max(frame.1 / self.size.1 as f32);
-        (fit, (frame.0 / MIN_FRAME_PX).max(fit))
+    /// Keeps the frame on the picture, no smaller than a label can usefully be.
+    fn clamp(&mut self) {
+        let (pw, ph) = (self.size.0 as f32, self.size.1 as f32);
+        self.crop.2 = self.crop.2.clamp(MIN_FRAME_PX.min(pw), pw);
+        self.crop.3 = self.crop.3.clamp(MIN_FRAME_PX.min(ph), ph);
+        self.crop.0 = self.crop.0.clamp(0.0, pw - self.crop.2);
+        self.crop.1 = self.crop.1.clamp(0.0, ph - self.crop.3);
     }
 
-    /// Keeps the frame on the picture at the scale it is now.
-    fn clamp(&mut self, frame: (f32, f32)) {
-        let (low, high) = self.scale_limits(frame);
-        self.scale = self.scale.clamp(low, high);
-        let span = (frame.0 / self.scale, frame.1 / self.scale);
-        self.at.0 = self.at.0.clamp(0.0, (self.size.0 as f32 - span.0).max(0.0));
-        self.at.1 = self.at.1.clamp(0.0, (self.size.1 as f32 - span.1).max(0.0));
+    /// Grows or shrinks about the middle, so the frame stays where it is looking.
+    fn resize(&mut self, dw: f32, dh: f32) {
+        self.crop.0 -= dw / 2.0;
+        self.crop.1 -= dh / 2.0;
+        self.crop.2 += dw;
+        self.crop.3 += dh;
+        self.clamp();
+    }
+
+    /// R: back to the shape it started as, keeping the middle and the longer side.
+    fn even_up(&mut self) {
+        let shape = self.original.2 / self.original.3.max(1.0);
+        let (w, h) = (self.crop.2, self.crop.3);
+        let (want_w, want_h) = if w / h.max(1.0) > shape { (h * shape, h) } else { (w, w / shape) };
+        self.resize(want_w - w, want_h - h);
     }
 
     /// What would be cut if it were kept now.
-    fn frame(&self, frame: (f32, f32)) -> crate::cart_art::Frame {
-        let span = (frame.0 / self.scale, frame.1 / self.scale);
+    fn frame(&self) -> crate::cart_art::Frame {
         crate::cart_art::Frame {
-            x: self.at.0.round().max(0.0) as u32,
-            y: self.at.1.round().max(0.0) as u32,
-            w: (span.0.round() as u32).clamp(1, self.size.0),
-            h: (span.1.round() as u32).clamp(1, self.size.1),
+            x: self.crop.0.round().max(0.0) as u32,
+            y: self.crop.1.round().max(0.0) as u32,
+            w: (self.crop.2.round() as u32).clamp(1, self.size.0),
+            h: (self.crop.3.round() as u32).clamp(1, self.size.1),
         }
     }
 }
 
 /// The frame never shrinks below this many of the picture's own pixels: past that it is mush.
 const MIN_FRAME_PX: f32 = 48.0;
-/// How far one press moves the picture, in screen units, and how much one press zooms.
-const PAN_STEP: f32 = 12.0;
-const ZOOM_STEP: f32 = 1.12;
+/// What one press is worth, in the picture's own pixels. Small enough to place a label exactly;
+/// holding the key is what covers ground.
+const STEP_PX: f32 = 2.0;
+/// A held key waits this long, then steps this often, quickening to REPEAT_FAST_MS as it goes.
+const REPEAT_DELAY_MS: Millis = 320;
+const REPEAT_MS: Millis = 70;
+const REPEAT_FAST_MS: Millis = 16;
+/// How long a key must be held before it is stepping as fast as it will go.
+const REPEAT_RAMP_MS: Millis = 1_200;
 
 impl LabelPick {
     fn new(cart: &Cart) -> Self {
