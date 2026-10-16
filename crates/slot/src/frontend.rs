@@ -309,6 +309,11 @@ impl Frontend {
         .map(|f| (compositor.create_texture(f.w, f.h, &f.rgba), f.w))
         .collect();
         self.session.app_mut().set_core_legend_faces(legend);
+        // Y sits on its own, above the legend rather than in it: it is about the cart's label
+        // and not about the core being picked.
+        let search = hint_face("Y", "Search");
+        let face = (compositor.create_texture(search.w, search.h, &search.rgba), search.w);
+        self.session.app_mut().set_core_search_face(face);
         let roles = menu_faces(compositor, LinkRow::ALL.iter().map(|r| r.text()));
         self.session.app_mut().set_link_menu_faces(roles);
         if let Some(linked) = menu_faces(compositor, ["Linked"].into_iter()).pop() {

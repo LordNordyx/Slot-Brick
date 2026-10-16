@@ -312,6 +312,8 @@ pub struct App {
     core_blank_chip_face: Option<TexId>,
     core_chip_shadow_face: Option<TexId>,
     core_legend_faces: Vec<(TexId, u32)>,
+    /// Y, which searches for the cart's label: above the legend, off to one side.
+    core_search_face: Option<(TexId, u32)>,
     game_menu: Option<GameMenu>,
     link_sprites: Option<LinkSprites>,
     link_hardware: LinkKind,
@@ -471,6 +473,7 @@ impl App {
             core_blank_chip_face: None,
             core_chip_shadow_face: None,
             core_legend_faces: Vec::new(),
+            core_search_face: None,
             game_menu: None,
             link_sprites: None,
             link_hardware: LinkKind::Cable,
@@ -2571,6 +2574,10 @@ impl App {
         self.core_chip_shadow_face = Some(shadow);
     }
 
+    pub fn set_core_search_face(&mut self, face: (TexId, u32)) {
+        self.core_search_face = Some(face);
+    }
+
     pub fn set_core_legend_faces(&mut self, faces: Vec<(TexId, u32)>) {
         self.core_legend_faces = faces;
     }
@@ -2750,6 +2757,7 @@ impl App {
             let gaps = (hints.len() - 1) as f32;
             let gap = ((room - inked) / gaps).clamp(8.0, slot_ui::LEGEND_GAP);
             let mut x = (OUT_W as f32 - inked - gap * gaps) / 2.0;
+            let first = x;
             for &(tex, w) in hints {
                 out.push(Draw::Tex {
                     x: x.round(),
@@ -2760,6 +2768,17 @@ impl App {
                     alpha: lift,
                 });
                 x += w.saturating_sub(HINT_EDGE) as f32 + gap;
+            }
+            // Above the leftmost of them, out of the way of the label line in the middle.
+            if let Some((tex, w)) = self.core_search_face {
+                out.push(Draw::Tex {
+                    x: first.round(),
+                    y: CORE_LEGEND_Y - HINT_H as f32 - 6.0,
+                    w: w as f32,
+                    h: HINT_H as f32,
+                    tex,
+                    alpha: lift,
+                });
             }
         }
         // Above the legend: the label line, L1/R1 flipping through labels found for the cart.
@@ -3534,7 +3553,7 @@ impl App {
             None if cart.is_some_and(|c| slot_ui::shown_label(c).is_some()) => "Current".to_string(),
             None => "Name only".to_string(),
         };
-        Some((format!("Label: {words}   Y  Search"), true))
+        Some((format!("Label: {words}"), true))
     }
 
     /// The caption's faces, built by the frontend for `text`.
