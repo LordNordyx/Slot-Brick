@@ -3262,12 +3262,13 @@ impl App {
             return;
         };
         if a.sizing {
-            // Up and Right let more of the picture in, Down and Left take it back out.
+            // Up and Right stretch the picture out, Down and Left pull it back in. A bigger
+            // picture is less of it inside the frame, so its piece shrinks as it grows.
             match dir {
-                Btn::Up => a.resize(0.0, STEP_PX),
-                Btn::Down => a.resize(0.0, -STEP_PX),
-                Btn::Right => a.resize(STEP_PX, 0.0),
-                _ => a.resize(-STEP_PX, 0.0),
+                Btn::Up => a.resize(0.0, -STEP_PX),
+                Btn::Down => a.resize(0.0, STEP_PX),
+                Btn::Right => a.resize(-STEP_PX, 0.0),
+                _ => a.resize(STEP_PX, 0.0),
             }
             return;
         }
@@ -3640,15 +3641,16 @@ impl App {
     /// Where the frame sits and where the picture sits under it, in screen units.
     fn label_adjust_layout(&self) -> Option<((f32, f32, f32, f32), Option<(f32, f32, f32, f32)>)> {
         let adjust = self.label_pick.as_ref()?.adjust.as_ref()?;
-        let (fx, fy, fw, fh) = slot_ui::frame_box(adjust.crop.2 as u32, adjust.crop.3 as u32);
-        // The frame is where it is; the picture is laid under it at whatever scale makes the
-        // piece inside the frame fill it.
-        let scale = fw / adjust.crop.2.max(1.0);
+        let (fx, fy, fw, fh) = slot_ui::frame_box(adjust.original.2 as u32, adjust.original.3 as u32);
+        // The frame stands for the label's slot and never changes shape. The picture is laid
+        // under it stretched so the piece inside fills it, which is the label as it will be:
+        // sizing one way and not the other shows as the picture itself stretching.
+        let (sx, sy) = (fw / adjust.crop.2.max(1.0), fh / adjust.crop.3.max(1.0));
         let picture = (
-            fx - adjust.crop.0 * scale,
-            fy - adjust.crop.1 * scale,
-            adjust.size.0 as f32 * scale,
-            adjust.size.1 as f32 * scale,
+            fx - adjust.crop.0 * sx,
+            fy - adjust.crop.1 * sy,
+            adjust.size.0 as f32 * sx,
+            adjust.size.1 as f32 * sy,
         );
         Some(((fx, fy, fw, fh), Some(picture)))
     }
