@@ -8,10 +8,16 @@ use crate::power_menu::{MENU_H, MENU_INK};
 use crate::slot_chrome::opening;
 use crate::text;
 
-/// The cart is drawn no larger than this, and the label slot in it is the frame.
-pub const CART_MAX_W: f32 = 430.0;
-pub const CART_MAX_H: f32 = 300.0;
-const CART_CY: f32 = 185.0;
+/// The slot is drawn as large as this, and the cart around it at whatever size that comes to:
+/// near enough to see the label properly, with only the lip of plastic round it in view and
+/// the rest of the cart running off the screen.
+pub const SLOT_MAX_W: f32 = 520.0;
+pub const SLOT_MAX_H: f32 = 252.0;
+/// Where the top of the slot sits, leaving the lip above it in view.
+const SLOT_TOP: f32 = 74.0;
+/// The words and the keys sit on a dark band, since the cart runs on behind them.
+const PLATE_TOP: f32 = 352.0;
+const PLATE: [f32; 4] = [0.0, 0.0, 0.0, 0.74];
 const CAPTION_Y: f32 = 374.0;
 const LEGEND_Y: f32 = 427.0;
 const TEXT_PX: f32 = 20.0;
@@ -23,12 +29,20 @@ const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.22];
 /// not enough to be mistaken for what will be worn.
 const CART_ALPHA: f32 = 0.72;
 
-/// Where a cart `w` x `h` across stands on screen: as big as it goes without changing shape.
-pub fn cart_stand(w: u32, h: u32) -> (f32, f32, f32, f32) {
-    let (w, h) = (w.max(1) as f32, h.max(1) as f32);
-    let k = (CART_MAX_W / w).min(CART_MAX_H / h);
-    let (cw, ch) = (w * k, h * k);
-    (((OUT_W as f32 - cw) / 2.0).round(), (CART_CY - ch / 2.0).round(), cw.round(), ch.round())
+/// Where the cart stands and where its slot lands, with the slot drawn as large as it goes.
+/// `face` is the cart's size, `slot` the label's place on it.
+pub fn slot_stand(face: (u32, u32), slot: (u32, u32, u32, u32)) -> ((f32, f32, f32, f32), (f32, f32, f32, f32)) {
+    let (lw, lh) = (slot.2.max(1) as f32, slot.3.max(1) as f32);
+    let k = (SLOT_MAX_W / lw).min(SLOT_MAX_H / lh);
+    let (sw, sh) = ((lw * k).round(), (lh * k).round());
+    let (sx, sy) = (((OUT_W as f32 - sw) / 2.0).round(), SLOT_TOP);
+    let cart = (
+        (sx - slot.0 as f32 * k).round(),
+        (sy - slot.1 as f32 * k).round(),
+        (face.0.max(1) as f32 * k).round(),
+        (face.1.max(1) as f32 * k).round(),
+    );
+    (cart, (sx, sy, sw, sh))
 }
 
 pub struct LabelAdjustView {
@@ -65,6 +79,8 @@ impl LabelAdjustView {
         if let Some((tex, x, y, w, h)) = self.cart {
             out.push(Draw::Tex { x, y, w, h, tex, alpha: CART_ALPHA });
         }
+        // The cart runs on behind the words, so they get a band of their own to sit on.
+        out.push(Draw::Rect { x: 0.0, y: PLATE_TOP, w: OUT_W as f32, h: OUT_H as f32 - PLATE_TOP, colour: PLATE });
         if let Some((tex, w, h)) = self.caption {
             let x = ((OUT_W as f32 - w as f32) / 2.0).round();
             out.push(Draw::Tex { x, y: CAPTION_Y, w: w as f32, h: h as f32, tex, alpha: 1.0 });

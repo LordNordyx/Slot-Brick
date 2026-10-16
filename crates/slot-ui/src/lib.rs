@@ -52,7 +52,7 @@ pub use cart_menu::{
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use label_adjust::{
-    cart_stand, label_adjust_caption_face, label_adjust_legend_faces, LabelAdjustView,
+    label_adjust_caption_face, label_adjust_legend_faces, slot_stand, LabelAdjustView,
 };
 pub use label_grid::{
     label_grid_caption_face, label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,

@@ -3649,11 +3649,8 @@ impl App {
     /// Where the cart stands, where its slot is, and where the picture lies behind it.
     fn label_adjust_layout(&self) -> Option<(CartStand, (f32, f32, f32, f32), (f32, f32, f32, f32))> {
         let adjust = self.label_pick.as_ref()?.adjust.as_ref()?;
-        let (cx, cy, cw, ch) = slot_ui::cart_stand(adjust.face.0, adjust.face.1);
-        // The slot, in its place on the cart as the cart stands now.
-        let k = cw / adjust.face.0.max(1) as f32;
-        let (lx, ly, lw, lh) = adjust.slot;
-        let frame = (cx + lx as f32 * k, cy + ly as f32 * k, lw as f32 * k, lh as f32 * k);
+        let (stand, frame) = slot_ui::slot_stand(adjust.face, adjust.slot);
+        let (cx, cy, cw, ch) = stand;
         // The picture behind, stretched so the piece inside the slot fills it exactly.
         let (sx, sy) = (frame.2 / adjust.crop.2.max(1.0), frame.3 / adjust.crop.3.max(1.0));
         let picture = (
