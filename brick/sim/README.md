@@ -114,7 +114,7 @@ task sim:unit                 # the sim build's own unit tests
 | `wait [MS]` | wait regardless |
 | `phase NAME [TIMEOUT]` | fail unless the Brick reaches that phase, eg `Shelf`, `QuickMenu` |
 | `set KNOB VALUE` | as the HTTP knobs |
-| `led FILE VALUE` | fail unless an LED file holds that value, eg `led effect_lr 4` |
+| `led FILE VALUE` | fail unless an LED file holds that value, eg `led effect_rgb_hex_m FFFFFF` |
 | `snap NAME` | settle, save the screen, and compare it with the golden |
 
 Each scenario starts on a fresh card with six stand-in carts and the clock fixed at
@@ -140,7 +140,7 @@ A screen whose content comes off the network cannot have one at all.
 ## Gotchas
 
 - **A battery of 5% or less is a real shutdown**, which ends the run. The battery is read every
-  10 s, so a scenario waits 10.5 s after `set battery`.
+  10 s, so a scenario needs `wait 10500` after `set battery` before the Brick has noticed.
 - **L1/R1 change the picture mode** inside a GB, GBC or NES game, and switch shelves outside one.
 - **Cart art and label searches really go to the internet.** They need DNS that can answer for
   `art.slot-cfw.fyi` and `images.launchbox-app.com`. Where the machine's resolver cannot — a
