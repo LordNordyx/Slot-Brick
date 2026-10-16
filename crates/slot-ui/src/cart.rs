@@ -409,6 +409,25 @@ pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     face
 }
 
+/// The cart with nothing in its label slot: the slot is clear through to whatever lies behind
+/// it. Framing a label draws the picture behind this, so it is seen through the very window it
+/// will be worn in. Gives the slot's place on the face as well, to line the picture up with.
+pub fn cart_cutout_face(cart: &Cart) -> (CartFace, (u32, u32, u32, u32)) {
+    let s = spec(shape_of(cart));
+    let shell = shell_for(cart);
+    let mut face = shell_face(&s, &shell);
+    mould_detail(&s, &mut face);
+    recess_label(&s, &mut face, &shell);
+    clip_to_silhouette(&s, &mut face);
+    let (lx, ly, lw, lh) = s.label;
+    for y in ly..(ly + lh).min(face.h) {
+        for x in lx..(lx + lw).min(face.w) {
+            face.rgba[((y * face.w + x) * 4 + 3) as usize] = 0;
+        }
+    }
+    (face, (lx, ly, lw, lh))
+}
+
 fn clip_to_silhouette(s: &Spec, face: &mut CartFace) {
     for (px, cover) in face.rgba.chunks_exact_mut(4).zip(s.mask) {
         px[3] = ((px[3] as u32 * *cover as u32 + 127) / 255) as u8;

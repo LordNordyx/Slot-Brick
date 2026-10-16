@@ -1,37 +1,38 @@
-//! Framing a picked label by hand: the frame stands still in the middle of the screen and the
-//! picture moves under it, the way a profile picture is set. The d-pad moves it, L and R zoom,
-//! A keeps what is inside the frame and B goes back to the grid. Nothing is cut until A.
+//! Framing a picked label by hand. The cart stands in the middle of the screen with its label
+//! slot clear, and the picture lies behind it, so what shows through the slot is the label as
+//! the cart will wear it. The d-pad moves the picture, L and the d-pad stretch it, R evens its
+//! shape back up and Y puts it back. Nothing is cut until A.
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
 use crate::plate::{centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
 use crate::power_menu::{MENU_H, MENU_INK};
 use crate::slot_chrome::opening;
 use crate::text;
 
-/// The frame is drawn no larger than this, keeping the label's own shape.
-pub const FRAME_MAX_W: f32 = 380.0;
-pub const FRAME_MAX_H: f32 = 270.0;
-const FRAME_CY: f32 = 190.0;
+/// The cart is drawn no larger than this, and the label slot in it is the frame.
+pub const CART_MAX_W: f32 = 430.0;
+pub const CART_MAX_H: f32 = 300.0;
+const CART_CY: f32 = 185.0;
 const CAPTION_Y: f32 = 374.0;
 const LEGEND_Y: f32 = 427.0;
-const EDGE: f32 = 2.0;
 const TEXT_PX: f32 = 20.0;
 const TEXT_MIN_PX: f32 = 13.0;
-/// What is outside the frame is still shown, but darkened, so the frame reads at a glance.
+/// What is outside the slot is still shown, but darkened, so the slot reads at a glance.
 const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.62];
-const FRAME_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.95];
 
-/// The frame on screen for a label `w` x `h` across: as big as it can be without changing shape.
-pub fn frame_box(w: u32, h: u32) -> (f32, f32, f32, f32) {
+/// Where a cart `w` x `h` across stands on screen: as big as it goes without changing shape.
+pub fn cart_stand(w: u32, h: u32) -> (f32, f32, f32, f32) {
     let (w, h) = (w.max(1) as f32, h.max(1) as f32);
-    let k = (FRAME_MAX_W / w).min(FRAME_MAX_H / h);
-    let (fw, fh) = (w * k, h * k);
-    (((OUT_W as f32 - fw) / 2.0).round(), (FRAME_CY - fh / 2.0).round(), fw.round(), fh.round())
+    let k = (CART_MAX_W / w).min(CART_MAX_H / h);
+    let (cw, ch) = (w * k, h * k);
+    (((OUT_W as f32 - cw) / 2.0).round(), (CART_CY - ch / 2.0).round(), cw.round(), ch.round())
 }
 
 pub struct LabelAdjustView {
     /// The picture, where it sits on screen now: texture, x, y, width, height.
     pub picture: Option<(TexId, f32, f32, f32, f32)>,
-    /// The frame it is being moved under: x, y, width, height.
+    /// The cart, its label slot clear, laid over the picture: texture and where it stands.
+    pub cart: Option<(TexId, f32, f32, f32, f32)>,
+    /// The slot the picture is being lined up in: x, y, width, height.
     pub frame: (f32, f32, f32, f32),
     pub caption: Option<(TexId, u32, u32)>,
     /// Back, move, size, even up, keep.
@@ -44,8 +45,9 @@ impl LabelAdjustView {
         if let Some((tex, x, y, w, h)) = self.picture {
             out.push(Draw::Tex { x, y, w, h, tex, alpha: 1.0 });
         }
+        // Everything but the slot, darkened, in four pieces around it. The cart covers most of
+        // this; what is left is the picture spilling out past the cart's own edges.
         let (fx, fy, fw, fh) = self.frame;
-        // Everything outside the frame, in four pieces around it.
         let (sw, sh) = (OUT_W as f32, OUT_H as f32);
         for (x, y, w, h) in
             [(0.0, 0.0, sw, fy), (0.0, fy + fh, sw, sh - fy - fh), (0.0, fy, fx, fh), (fx + fw, fy, sw - fx - fw, fh)]
@@ -54,13 +56,9 @@ impl LabelAdjustView {
                 out.push(Draw::Rect { x, y, w, h, colour: SHADE });
             }
         }
-        for (x, y, w, h) in [
-            (fx, fy, fw, EDGE),
-            (fx, fy + fh - EDGE, fw, EDGE),
-            (fx, fy, EDGE, fh),
-            (fx + fw - EDGE, fy, EDGE, fh),
-        ] {
-            out.push(Draw::Rect { x, y, w, h, colour: FRAME_INK });
+        // The cart last, so the picture shows through its slot and nowhere else.
+        if let Some((tex, x, y, w, h)) = self.cart {
+            out.push(Draw::Tex { x, y, w, h, tex, alpha: 1.0 });
         }
         if let Some((tex, w, h)) = self.caption {
             let x = ((OUT_W as f32 - w as f32) / 2.0).round();

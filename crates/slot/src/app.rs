@@ -3182,8 +3182,13 @@ impl App {
         let Some(size) = std::fs::read(&source).ok().and_then(|png| crate::cart_art::png_size(&png)) else {
             return self.end_label_pick(true);
         };
+        let Some(cart) = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i)) else {
+            return;
+        };
+        let (face, slot) = slot_ui::cart_cutout_face(cart);
         let crop = (cut.x as f32, cut.y as f32, cut.w as f32, cut.h as f32);
-        let mut adjust = Adjust { source, size, crop, original: crop, sizing: false, held: None };
+        let mut adjust =
+            Adjust { source, size, crop, original: crop, face: (face.w, face.h), slot, sizing: false, held: None };
         adjust.clamp();
         if let Some(pick) = &mut self.label_pick {
             pick.adjust = Some(adjust);
@@ -3627,12 +3632,13 @@ impl App {
     }
 
     fn draw_label_adjust(&self, out: &mut Vec<Draw>) {
-        let Some((frame, picture)) = self.label_adjust_layout() else {
+        let Some((stand, frame, picture)) = self.label_adjust_layout() else {
             return;
         };
         let faces = self.label_adjust_faces.as_ref();
         slot_ui::LabelAdjustView {
-            picture: faces.map(|f| f.picture).zip(picture).map(|(tex, p)| (tex, p.0, p.1, p.2, p.3)),
+            picture: faces.map(|f| (f.picture, picture.0, picture.1, picture.2, picture.3)),
+            cart: faces.map(|f| (f.cart, stand.0, stand.1, stand.2, stand.3)),
             frame,
             caption: faces.map(|f| f.caption),
             legend: faces.map(|f| f.legend),
@@ -3640,39 +3646,42 @@ impl App {
         .draw(out);
     }
 
-    /// Where the frame sits and where the picture sits under it, in screen units.
-    fn label_adjust_layout(&self) -> Option<((f32, f32, f32, f32), Option<(f32, f32, f32, f32)>)> {
+    /// Where the cart stands, where its slot is, and where the picture lies behind it.
+    fn label_adjust_layout(&self) -> Option<(CartStand, (f32, f32, f32, f32), (f32, f32, f32, f32))> {
         let adjust = self.label_pick.as_ref()?.adjust.as_ref()?;
-        let (fx, fy, fw, fh) = slot_ui::frame_box(adjust.original.2 as u32, adjust.original.3 as u32);
-        // The frame stands for the label's slot and never changes shape. The picture is laid
-        // under it stretched so the piece inside fills it, which is the label as it will be:
-        // sizing one way and not the other shows as the picture itself stretching.
-        let (sx, sy) = (fw / adjust.crop.2.max(1.0), fh / adjust.crop.3.max(1.0));
+        let (cx, cy, cw, ch) = slot_ui::cart_stand(adjust.face.0, adjust.face.1);
+        // The slot, in its place on the cart as the cart stands now.
+        let k = cw / adjust.face.0.max(1) as f32;
+        let (lx, ly, lw, lh) = adjust.slot;
+        let frame = (cx + lx as f32 * k, cy + ly as f32 * k, lw as f32 * k, lh as f32 * k);
+        // The picture behind, stretched so the piece inside the slot fills it exactly.
+        let (sx, sy) = (frame.2 / adjust.crop.2.max(1.0), frame.3 / adjust.crop.3.max(1.0));
         let picture = (
-            fx - adjust.crop.0 * sx,
-            fy - adjust.crop.1 * sy,
+            frame.0 - adjust.crop.0 * sx,
+            frame.1 - adjust.crop.1 * sy,
             adjust.size.0 as f32 * sx,
             adjust.size.1 as f32 * sy,
         );
-        Some(((fx, fy, fw, fh), Some(picture)))
+        Some(((cx, cy, cw, ch), frame, picture))
     }
 
     /// The picture being framed and the words under it, for the frontend to draw.
-    pub fn label_adjust_view(&self) -> Option<(PathBuf, String)> {
+    pub fn label_adjust_view(&self) -> Option<(PathBuf, String, Cart)> {
         let pick = self.label_pick.as_ref()?;
         let adjust = pick.adjust.as_ref()?;
         let choice = pick.choices.get(pick.cursor())?;
+        let cart = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i))?.clone();
         let frame = adjust.frame();
         // Says when the shape has drifted from the one it started as, which R puts back.
         let shape = adjust.original.2 / adjust.original.3.max(1.0);
         let now = frame.w as f32 / (frame.h as f32).max(1.0);
         let warped = if (now / shape - 1.0).abs() > 0.02 { "  stretched" } else { "" };
-        Some((adjust.source.clone(), format!("{}   ({} x {}){warped}", choice.caption, frame.w, frame.h)))
+        Some((adjust.source.clone(), format!("{}   ({} x {}){warped}", choice.caption, frame.w, frame.h), cart))
     }
 
     /// The hints already uploaded, so moving the frame does not draw them again.
-    pub fn label_adjust_legend(&self) -> Option<[(TexId, u32); 5]> {
-        self.label_adjust_faces.as_ref().map(|f| f.legend)
+    pub fn label_adjust_legend(&self) -> Option<([(TexId, u32); 5], TexId)> {
+        self.label_adjust_faces.as_ref().map(|f| (f.legend, f.cart))
     }
 
     pub fn label_adjust_built(&self) -> Option<(&Path, &str)> {
@@ -3683,10 +3692,11 @@ impl App {
         &mut self,
         built: (PathBuf, String),
         picture: TexId,
+        cart: TexId,
         caption: (TexId, u32, u32),
         legend: [(TexId, u32); 5],
     ) {
-        self.label_adjust_faces = Some(LabelAdjustFaces { built, picture, caption, legend });
+        self.label_adjust_faces = Some(LabelAdjustFaces { built, picture, cart, caption, legend });
     }
 
     fn draw_label_grid(&self, out: &mut Vec<Draw>) {
@@ -4602,11 +4612,16 @@ struct CartMenu {
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
 
 /// Labels found for one cart, to flip through: 0 is the label it had.
+/// Where a cart stands on screen: x, y, width, height.
+type CartStand = (f32, f32, f32, f32);
+
 /// What the framing screen is drawn from: the whole picture, uploaded once.
 struct LabelAdjustFaces {
     /// The picture and words these were made for.
     built: (PathBuf, String),
     picture: TexId,
+    /// The cart with its label slot clear, laid over the picture.
+    cart: TexId,
     caption: (TexId, u32, u32),
     legend: [(TexId, u32); 5],
 }
@@ -4655,7 +4670,11 @@ struct Adjust {
     crop: (f32, f32, f32, f32),
     /// The piece it started as, which Y goes back to and R takes its shape from.
     original: (f32, f32, f32, f32),
-    /// L is down, so the d-pad changes the frame's size rather than moving it.
+    /// The face of the cart the label is for, and where its label slot sits on it. Both are
+    /// settled when the framing starts: the cart cannot change shape while it is going on.
+    face: (u32, u32),
+    slot: (u32, u32, u32, u32),
+    /// L is down, so the d-pad stretches the picture rather than moving it.
     sizing: bool,
     /// The direction being held, when it began and when it last stepped, so holding a key
     /// keeps going. A tap alone is only a pixel or two, which would be unusable otherwise.

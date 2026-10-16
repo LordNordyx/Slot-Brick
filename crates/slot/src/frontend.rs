@@ -872,14 +872,15 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
 #[derive(Default)]
 struct LabelAdjustTex {
     picture: Option<TexId>,
+    cart: Option<TexId>,
     caption: Option<TexId>,
     legend: [Option<TexId>; 5],
 }
 
-/// The picture being framed by hand. It is read and uploaded once, when the framing screen
-/// opens; after that only the words change, as the frame is moved.
+/// The picture being framed by hand, and the cart it is being framed for. Both are read and
+/// uploaded once, when the framing screen opens; after that only the words change.
 fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut LabelAdjustTex) {
-    let Some((source, words)) = app.label_adjust_view() else {
+    let Some((source, words, cart)) = app.label_adjust_view() else {
         return;
     };
     if app.label_adjust_built() == Some((source.as_path(), words.as_str())) {
@@ -888,10 +889,9 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
     let same_picture = app.label_adjust_built().is_some_and(|(built, _)| built == source);
     let caption = face(compositor, &mut tex.caption, slot_ui::label_adjust_caption_face(&words));
     if same_picture {
-        // Only the frame moved: the picture on screen is the one already uploaded.
-        if let Some(picture) = tex.picture {
-            let legend = app.label_adjust_legend().unwrap_or([(picture, 0); 5]);
-            app.set_label_adjust_faces((source, words), picture, caption, legend);
+        // Only the frame moved: the picture and the cart are the ones already uploaded.
+        if let (Some(picture), Some((legend, cart))) = (tex.picture, app.label_adjust_legend()) {
+            app.set_label_adjust_faces((source, words), picture, cart, caption, legend);
         }
         return;
     }
@@ -901,12 +901,14 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
         return;
     };
     let picture = upload_rgba(compositor, &mut tex.picture, w, h, &rgba);
+    let (face_rgba, _) = slot_ui::cart_cutout_face(&cart);
+    let cart_tex = upload_rgba(compositor, &mut tex.cart, face_rgba.w, face_rgba.h, &face_rgba.rgba);
     let mut legend = [(picture, 0u32); 5];
     for (i, hint) in slot_ui::label_adjust_legend_faces().into_iter().enumerate() {
         let (id, lw, _) = face(compositor, &mut tex.legend[i], hint);
         legend[i] = (id, lw);
     }
-    app.set_label_adjust_faces((source, words), picture, caption, legend);
+    app.set_label_adjust_faces((source, words), picture, cart_tex, caption, legend);
 }
 
 /// How large the picture being framed is kept: enough to zoom into, and no larger.
