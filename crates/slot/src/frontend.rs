@@ -56,6 +56,7 @@ pub struct Frontend {
     label_caption_tex: [Option<TexId>; 2],
     /// The label grid's textures, kept and written over as its pages turn.
     label_grid_tex: LabelGridTex,
+    label_adjust_tex: LabelAdjustTex,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     rebuild_faces: RebuildFaces,
@@ -149,6 +150,7 @@ impl Frontend {
             faces: FaceBuilder::spawn(),
             label_caption_tex: [None, None],
             label_grid_tex: LabelGridTex::default(),
+            label_adjust_tex: LabelAdjustTex::default(),
             cart_faces,
             rebuild,
             rebuild_faces: RebuildFaces::default(),
@@ -519,6 +521,7 @@ impl Frontend {
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_label_caption(self.session.app_mut(), compositor, &mut self.label_caption_tex);
         sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
+        sync_label_adjust(self.session.app_mut(), compositor, &mut self.label_adjust_tex);
         sync_core_picker(
             self.session.app_mut(),
             compositor,
@@ -865,6 +868,49 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     let id = upload(compositor, &mut state.tex, face);
     app.set_sticker_face(id);
 }
+
+#[derive(Default)]
+struct LabelAdjustTex {
+    picture: Option<TexId>,
+    caption: Option<TexId>,
+    legend: [Option<TexId>; 4],
+}
+
+/// The picture being framed by hand. It is read and uploaded once, when the framing screen
+/// opens; after that only the words change, as the frame is moved.
+fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut LabelAdjustTex) {
+    let Some((source, words)) = app.label_adjust_view() else {
+        return;
+    };
+    if app.label_adjust_built() == Some((source.as_path(), words.as_str())) {
+        return;
+    }
+    let same_picture = app.label_adjust_built().is_some_and(|(built, _)| built == source);
+    let caption = face(compositor, &mut tex.caption, slot_ui::label_adjust_caption_face(&words));
+    if same_picture {
+        // Only the frame moved: the picture on screen is the one already uploaded.
+        if let Some(picture) = tex.picture {
+            let legend = app.label_adjust_legend().unwrap_or([(picture, 0); 4]);
+            app.set_label_adjust_faces((source, words), picture, caption, legend);
+        }
+        return;
+    }
+    let Some((rgba, w, h)) =
+        std::fs::read(&source).ok().and_then(|png| crate::cart_art::label_picture(&png, ADJUST_TEX_MAX))
+    else {
+        return;
+    };
+    let picture = upload_rgba(compositor, &mut tex.picture, w, h, &rgba);
+    let mut legend = [(picture, 0u32); 4];
+    for (i, hint) in slot_ui::label_adjust_legend_faces().into_iter().enumerate() {
+        let (id, lw, _) = face(compositor, &mut tex.legend[i], hint);
+        legend[i] = (id, lw);
+    }
+    app.set_label_adjust_faces((source, words), picture, caption, legend);
+}
+
+/// How large the picture being framed is kept: enough to zoom into, and no larger.
+const ADJUST_TEX_MAX: u32 = 1024;
 
 #[derive(Default)]
 struct LabelGridTex {

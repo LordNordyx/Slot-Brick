@@ -421,7 +421,13 @@ fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static st
     label_cut(png, spec, Cut::Clean)
 }
 
+/// The label on a cart photo, cut out: where the bulk run gets one.
 fn label_cut(png: &[u8], spec: &CartPhoto, cut: Cut) -> Result<Vec<u8>, &'static str> {
+    cut_out(png, label_frame(png, spec, cut)?)
+}
+
+/// Where the label sits on a cart photo, and whether this picture has one worth taking.
+fn label_frame(png: &[u8], spec: &CartPhoto, cut: Cut) -> Result<Frame, &'static str> {
     let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
     let alpha = |x: u32, y: u32| rgba[((y * w + x) * 4 + 3) as usize];
     // The cart's outline: a cut-out picture is transparent around it.
@@ -478,6 +484,27 @@ fn label_cut(png: &[u8], spec: &CartPhoto, cut: Cut) -> Result<Vec<u8>, &'static
     let [fx0, fy0, fx1, fy1] = spec.label;
     let (lx, ly) = (x0 + (cw * fx0).ceil() as u32, y0 + (ch * fy0).ceil() as u32);
     let (lw, lh) = (x0 + (cw * fx1) as u32 - lx, y0 + (ch * fy1) as u32 - ly);
+    Ok(Frame { x: lx, y: ly, w: lw, h: lh })
+}
+
+/// Where on a picture a label sits. Kept beside a search's pictures so the frame can be moved
+/// by hand later: nothing is cut until someone says so.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Frame {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+}
+
+/// The piece of `png` inside `frame`, as a label: no bigger than a label needs to be.
+pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
+    let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
+    let (lx, ly) = (frame.x.min(w.saturating_sub(1)), frame.y.min(h.saturating_sub(1)));
+    let (lw, lh) = (frame.w.min(w - lx), frame.h.min(h - ly));
+    if lw == 0 || lh == 0 {
+        return Err("an empty picture");
+    }
     let mut out = Vec::with_capacity((lw * lh * 4) as usize);
     for y in ly..ly + lh {
         let i = ((y * w + lx) * 4) as usize;
@@ -492,6 +519,19 @@ fn label_cut(png: &[u8], spec: &CartPhoto, cut: Cut) -> Result<Vec<u8>, &'static
         .and_then(|mut w| w.write_image_data(&out))
         .map_err(|_| "cannot encode the label")?;
     Ok(bytes)
+}
+
+/// A picture's size, without decoding it: the width and height in its IHDR.
+pub fn png_size(png: &[u8]) -> Option<(u32, u32)> {
+    let ihdr = png.get(12..16)?;
+    if ihdr != b"IHDR" {
+        return None;
+    }
+    let n = |at: usize| -> Option<u32> { Some(u32::from_be_bytes(png.get(at..at + 4)?.try_into().ok()?)) };
+    match (n(16)?, n(20)?) {
+        (0, _) | (_, 0) => None,
+        size => Some(size),
+    }
 }
 
 /// `rgba` (w x h) scaled down so its longer side is at most `max`, each pixel the average of
@@ -894,8 +934,13 @@ const WAIT: Duration = Duration::from_millis(100);
 /// A label found for the cart menu to offer: where it waits, and where it came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Choice {
+    /// The label as cut, which is what the grid shows.
     pub path: PathBuf,
     pub caption: String,
+    /// The whole picture it was cut from, kept so the frame can be moved by hand.
+    pub source: PathBuf,
+    /// Where on `source` the cut was taken.
+    pub frame: Frame,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -996,13 +1041,16 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
     std::fs::create_dir_all(&dir).map_err(|e| format!("cannot write to the card: {e}"))?;
     let mut found = 0;
     // A label goes to the card (the face builder reads it from there) and then to the menu.
-    let mut offer = |png: &[u8], caption: String| -> bool {
+    // The cut goes to the card for the grid to show, and the picture it came from beside it,
+    // so the frame can still be moved after picking. The face builder reads both from there.
+    let mut offer = |png: &[u8], whole: &[u8], frame: Frame, caption: String| -> bool {
         let path = dir.join(format!("{found}.png"));
-        if atomic_write(&path, png).is_err() {
+        let source = dir.join(format!("{found}-whole.png"));
+        if atomic_write(&path, png).is_err() || atomic_write(&source, whole).is_err() {
             return true;
         }
         found += 1;
-        if tx.send(PickNews::Found(Choice { path, caption })).is_err() {
+        if tx.send(PickNews::Found(Choice { path, caption, source, frame })).is_err() {
             return false;
         }
         // Nothing is left out of the list, so wait here rather than fetch a picture that is a
@@ -1039,7 +1087,9 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
             let source = name.split(" (").next().unwrap_or(name);
             match get(&servers.labels, &format!("/{path}"), IMAGE_MAX) {
                 Ok(Some(png)) if is_png(&png) => {
-                    if !offer(&png, caption(source, name)) {
+                    let Some((w, h)) = png_size(&png) else { continue };
+                    let whole = Frame { x: 0, y: 0, w, h };
+                    if !offer(&png, &png, whole, caption(source, name)) {
                         return Ok(());
                     }
                 }
@@ -1065,9 +1115,10 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
                     _ => continue,
                 };
                 // Only a picture a clean label can be cut from is offered.
-                if let Ok(label) = label_cut(&png, spec, Cut::Loose) {
-                    let source = name.split(" (").next().unwrap_or(name);
-                    if !offer(&label, caption(source, name)) {
+                if let Ok(frame) = label_frame(&png, spec, Cut::Loose) {
+                    let Ok(label) = cut_out(&png, frame) else { continue };
+                    let from = name.split(" (").next().unwrap_or(name);
+                    if !offer(&label, &png, frame, caption(from, name)) {
                         return Ok(());
                     }
                 }
@@ -1106,19 +1157,39 @@ pub fn forget_choices(root: &Path) {
 
 /// The label kept from a search: written where the cart's label for its current shape goes,
 /// in place of any it had.
+/// Writes the piece of `source` inside `frame` as the cart's label: the cut happens here, once
+/// whoever picked it has said where the frame goes.
+pub fn keep_framed(root: &Path, cart: &Cart, source: &Path, frame: Frame) -> std::io::Result<PathBuf> {
+    let png = std::fs::read(source)?;
+    let cut = cut_out(&png, frame).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let target = label_target(root, cart);
+    if let Some(dir) = target.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    atomic_write(&target, &cut)?;
+    Ok(target)
+}
+
 pub fn keep_choice(root: &Path, cart: &Cart, choice: &Path) -> std::io::Result<PathBuf> {
+    let target = label_target(root, cart);
+    if let Some(dir) = target.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    atomic_write(&target, &std::fs::read(choice)?)?;
+    Ok(target)
+}
+
+/// Where a cart's label goes: the one it already has, or a new file named after the game.
+fn label_target(root: &Path, cart: &Cart) -> PathBuf {
     let famicom = cart.platform == Platform::Nes && slot_ui::nes_famicom_of(cart);
     let existing = if famicom { &cart.famicom_label } else { &cart.label };
     let dir = root.join("Labels").join(cart.platform.dir_name()).join(if famicom { slot_store::FAMICOM_LABELS } else { "" });
     // A label already there under another case keeps its name, so no second one appears.
-    let target = existing
+    existing
         .as_ref()
         .filter(|p| !p.starts_with(root.join(PICK_DIR)))
         .cloned()
-        .unwrap_or_else(|| dir.join(format!("{}.png", cart.stem)));
-    std::fs::create_dir_all(&dir)?;
-    atomic_write(&target, &std::fs::read(choice)?)?;
-    Ok(target)
+        .unwrap_or_else(|| dir.join(format!("{}.png", cart.stem)))
 }
 
 #[cfg(test)]

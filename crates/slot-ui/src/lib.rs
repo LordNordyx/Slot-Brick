@@ -7,6 +7,7 @@ mod battery;
 mod board;
 mod cart;
 mod cart_menu;
+mod label_adjust;
 mod label_grid;
 mod clock;
 mod draw;
@@ -50,6 +51,9 @@ pub use cart_menu::{
     finish_name, CartMenuFaces, CartMenuView, CartRow, FINISHES, NES_SHAPES, SHAPES, SNES_SHAPES,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
+pub use label_adjust::{
+    frame_box, label_adjust_caption_face, label_adjust_legend_faces, LabelAdjustView,
+};
 pub use label_grid::{
     label_grid_caption_face, label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,
 };
