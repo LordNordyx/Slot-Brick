@@ -226,7 +226,7 @@ pub fn cart_menu_legend_faces() -> [UndoFace; 5] {
         arrows_hint_face("Change"),
         hint_face("A", "Save"),
         hint_face("A", "Reset"),
-        hint_face("Y", "Search"),
+        hint_face("Y", "Label"),
     ]
 }
 
