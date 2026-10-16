@@ -29,9 +29,12 @@ const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.22];
 /// not enough to be mistaken for what will be worn.
 const CART_ALPHA: f32 = 0.72;
 
+/// A place on the screen: x, y, width, height.
+pub type Rect = (f32, f32, f32, f32);
+
 /// Where the cart stands and where its slot lands, with the slot drawn as large as it goes.
 /// `face` is the cart's size, `slot` the label's place on it.
-pub fn slot_stand(face: (u32, u32), slot: (u32, u32, u32, u32)) -> ((f32, f32, f32, f32), (f32, f32, f32, f32)) {
+pub fn slot_stand(face: (u32, u32), slot: (u32, u32, u32, u32)) -> (Rect, Rect) {
     let (lw, lh) = (slot.2.max(1) as f32, slot.3.max(1) as f32);
     let k = (SLOT_MAX_W / lw).min(SLOT_MAX_H / lh);
     let (sw, sh) = ((lw * k).round(), (lh * k).round());

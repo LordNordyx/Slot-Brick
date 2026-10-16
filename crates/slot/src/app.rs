@@ -3625,7 +3625,7 @@ impl App {
     }
 
     /// Where the cart stands, where its slot is, and where the picture lies behind it.
-    fn label_adjust_layout(&self) -> Option<(CartStand, (f32, f32, f32, f32), (f32, f32, f32, f32))> {
+    fn label_adjust_layout(&self) -> Option<(slot_ui::Rect, slot_ui::Rect, slot_ui::Rect)> {
         let adjust = self.label_pick.as_ref()?.adjust.as_ref()?;
         let (stand, frame) = slot_ui::slot_stand(adjust.face, adjust.slot);
         let (cx, cy, cw, ch) = stand;
@@ -4590,9 +4590,6 @@ struct CartMenu {
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
 
 /// Labels found for one cart, to flip through: 0 is the label it had.
-/// Where a cart stands on screen: x, y, width, height.
-type CartStand = (f32, f32, f32, f32);
-
 /// What the framing screen is drawn from: the whole picture, uploaded once.
 struct LabelAdjustFaces {
     /// The picture and words these were made for.

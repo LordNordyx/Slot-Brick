@@ -542,7 +542,7 @@ pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
 pub fn cut_to(png: &[u8], frame: Frame, into: (u32, u32)) -> Result<Vec<u8>, &'static str> {
     let (out, lw, lh) = cut_rgba(png, frame)?;
     let (iw, ih) = (into.0.max(1), into.1.max(1));
-    let long = lw.max(lh).min(LABEL_MAX).max(1);
+    let long = lw.max(lh).clamp(1, LABEL_MAX);
     // Rounded, not floored: a whole number of pixels can only come so close to a given shape,
     // and rounding keeps it to within a pixel rather than always falling short.
     let other = |want: u32, of: u32| ((long as u64 * want as u64 + of as u64 / 2) / of as u64).max(1) as u32;
