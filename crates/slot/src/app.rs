@@ -3523,6 +3523,22 @@ impl App {
         }
     }
 
+    /// What the grid is showing now. Compared before anything is built: the words and the
+    /// pictures both cost allocations to work out, and most frames change neither.
+    pub fn label_grid_key(&self) -> Option<GridKey> {
+        let pick = self.label_pick.as_ref().filter(|p| p.grid)?;
+        let on_page = pick.choices.len().saturating_sub(pick.page() * slot_ui::PAGE).min(slot_ui::PAGE);
+        Some((pick.page(), on_page, pick.cursor(), pick.choices.len(), pick.search.is_some()))
+    }
+
+    /// The same for the framing screen.
+    pub fn label_adjust_key(&self) -> Option<AdjustKey> {
+        let pick = self.label_pick.as_ref()?;
+        let adjust = pick.adjust.as_ref()?;
+        let frame = adjust.frame();
+        Some((pick.cursor(), frame.x, frame.y, frame.w, frame.h))
+    }
+
     /// The page the grid's pictures were made for, so they are made again only when it turns.
     pub fn label_grid_built(&self) -> Option<(usize, usize)> {
         self.label_grid_faces.as_ref().map(|g| g.built)
@@ -4597,6 +4613,16 @@ struct CartMenu {
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
 
 /// Labels found for one cart, to flip through: 0 is the label it had.
+/// What the grid is showing, in values cheap enough to work out every frame: the page, how
+/// many labels are on it, where the cursor is, how many have been found in all, and whether
+/// more are still coming. The words under the grid count every label found, not only the ones
+/// on this page, so the total belongs here too. Nothing allocates, so a frame that has not
+/// moved costs a comparison and no more.
+pub type GridKey = (usize, usize, usize, usize, bool);
+
+/// The same for the framing screen: which label, and the piece of it that would be cut.
+pub type AdjustKey = (usize, i32, i32, u32, u32);
+
 /// What the framing screen is drawn from: the whole picture, uploaded once.
 struct LabelAdjustFaces {
     /// The picture and words these were made for.

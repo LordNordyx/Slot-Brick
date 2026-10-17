@@ -873,6 +873,8 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
 
 #[derive(Default)]
 struct LabelAdjustTex {
+    /// What was last drawn, so a frame that has not moved does no work at all.
+    shown: Option<crate::app::AdjustKey>,
     picture: Option<TexId>,
     cart: Option<TexId>,
     caption: Option<TexId>,
@@ -882,6 +884,11 @@ struct LabelAdjustTex {
 /// The picture being framed by hand, and the cart it is being framed for. Both are read and
 /// uploaded once, when the framing screen opens; after that only the words change.
 fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut LabelAdjustTex) {
+    let key = app.label_adjust_key();
+    if key.is_none() || (tex.shown == key && app.label_adjust_built().is_some()) {
+        return;
+    }
+    tex.shown = key;
     let Some((source, words, cart)) = app.label_adjust_view() else {
         return;
     };
@@ -918,6 +925,7 @@ const ADJUST_TEX_MAX: u32 = 1024;
 
 #[derive(Default)]
 struct LabelGridTex {
+    shown: Option<crate::app::GridKey>,
     title: Option<TexId>,
     caption: Option<TexId>,
     legend: [Option<TexId>; 3],
@@ -928,6 +936,12 @@ struct LabelGridTex {
 /// read again only when the page turns or another label lands on it; the words, which change
 /// as the cursor moves and the search runs, are drawn on their own.
 fn sync_label_grid(app: &mut App, compositor: &mut Compositor, tex: &mut LabelGridTex) {
+    // Worked out without allocating; what follows is not.
+    let key = app.label_grid_key();
+    if key.is_none() || (tex.shown == key && app.label_grid_built().is_some()) {
+        return;
+    }
+    tex.shown = key;
     let Some((page, paths, words)) = app.label_grid_page() else {
         return;
     };
