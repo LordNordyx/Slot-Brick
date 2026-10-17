@@ -1,72 +1,18 @@
 # Changelog — Slot. for TrimUI Brick
 
-## Unreleased
-- The shelf says whether Wi-Fi is on, beside the clock: connected, on but not reaching the
-  network, or off.
-- A simulator: the real Brick build runs on a PC in Docker, with its screen and buttons in a
-  browser, so a change to the frontend can be seen without writing a card. See
-  `brick/sim/README.md`.
-- Choose a game's label yourself: Y on the cart menu's Label row (or in the GBA core picker)
-  searches by the game's name, or anything you type, and Left/Right (L1/R1) flips through every
-  label found, each shown on the cart to pick from.
-- SNES labels from Super Famicom and PAL carts too: over three times as many SNES games find a
-  label, and the rounder cart gets one that fits it.
-- Wi-Fi comes back on at startup as it was left: Slot remembers whether Wi-Fi was on, and
-  starts it itself when the firmware does not (it may not, with Slot in place of its menu).
-- Wi-Fi only counts as online once it has an address, and at startup Slot waits for the
-  firmware's Wi-Fi service to answer and tries again if fixing it fails, so Cart Art and
-  RetroAchievements work without opening the Wi-Fi menu first.
-- Cart colours: START on a game changes its cartridge's colour, finish (solid, see-through,
-  glitter) and, for Game Boy carts, its shape, previewed live. NES and SNES carts only change
-  shape (NES or Famicom; US or PAL), as the real ones came in their system's grey; a Famicom
-  cart can have any colour. On GBA carts START opens the core
-  picker, where Up/Down change the colour and finish.
-- SNES: European and Japanese games get the rounder PAL / Super Famicom cart, read from the ROM's
-  header so ripped ROMs with no region in their name work too.
-- NES: Famicom games get the real Famicom cart, small, landscape and in colour, instead of a
-  coloured NES cart. Cart Art fetches Famicom labels for them from LaunchBox's pictures of
-  Japanese carts, kept in `Labels/NES/Famicom` beside the NES label, so swapping a game between
-  the NES and Famicom cart swaps its label too. A tall NES label on a Famicom cart is shown whole
-  instead of cut down.
-- Wi-Fi comes up at startup even when the firmware starts its Wi-Fi service after Slot: Slot
-  waits for it, then checks a network joined and repairs once more if not.
-- NES: a ROM on a chip only Famicom carts used (Konami VRC, Namco 163 and others) gets a Famicom
-  plastic even without "(Japan)" in its name.
-- The core picker shows the cart in its real plastic instead of the default black, and its
-  legend fits the Brick's screen.
-- SNES: `.sfc`/`.smc` ROMs in `Slot/Games/SNES` get a shelf of SNES cartridges and run on Snes9x,
-  with save states, rewind, fast-forward and RetroAchievements. X, Y, L and R are the game's own;
-  SELECT + X switches the picture. Cart Art fetches SNES labels from LaunchBox cart pictures.
-- Slot creates the NES and SNES folders on the card itself at startup.
-- Wi-Fi comes up on its own at startup: the radio the firmware leaves blocked is repaired in the
-  background, so saved networks are joined without opening the Wi-Fi menu.
-- After connecting, the Wi-Fi menu makes sure an address is asked for and waits for it, then
-  checks every couple of seconds while one is still on its way.
-- The Wi-Fi menu opens showing whether Wi-Fi is on, instead of OFF until it has checked.
-- NES: `.nes` ROMs in `Slot/Games/NES` get a shelf of NES cartridges (grey; Famicom colours for
-  Japanese releases) and run on FCEUmm (GPL-2.0), with save states, rewind, fast-forward and
-  RetroAchievements. The emulator picture canvas is now sized per system (256x240 for NES); the
-  Game Boys and GBA are unchanged.
-- The NES cart is drawn after the real one: a full-height grip on the left, the label recess
-  open to the top on the right, the arrow below it.
-- Cart Art fetches NES labels, cut out of the LaunchBox Games Database's pictures of standard NES
-  carts, found by the ROM's name.
-- New HOME > Cart Art (greyed out while Wi-Fi is off): GET CART ART gives games with no label a
-  real cartridge label scan (by ROM checksum, from the slot art set behind Cart Studio, over
-  HTTPS). Existing labels are never replaced. Labels can be deleted there one by one. Trimmed or patched ROMs are found
-  by file name and GBA game code; ROM hacks never get their base game's label.
-- The Wi-Fi keyboard is QWERTY under a number row, and briefly shows the last character typed.
-- New HOME > RetroAchievements (greyed out while Wi-Fi is off): log in, test the connection, log out. Over HTTPS (rustls);
-  only the login token is kept. While logged in, games earn achievements (softcore), with a
-  small corner toast for the game's count and each unlock, with its badge like Steam's. Built on rcheevos 12.5 (MIT), vendored in
-  crates/slot-cheevos.
-- Wi-Fi that was already on (the firmware starts it at boot with the radio blocked) is restarted
-  properly when the Wi-Fi menu opens, so scanning works without turning it off and on first.
-- Fixed Wi-Fi never turning on: the firmware's wifi_init.sh needs an rfkill.elf the Brick
-  lacks, so the radio stayed blocked. Slot now unblocks it itself and checks the result.
-- Wi-Fi errors always leave Slot/Logs/wifi.log, and B really cancels a stuck toggle.
-- Closing a game no longer turns Wi-Fi off: multiplayer's radio cleanup now only runs after a
-  real link session, and brings normal Wi-Fi back if it was on before.
+## v0.40
+**New since v0.23:**
+- Wifi status icon on the shelf footer. Icons may change.
+- Label Picker. Press Y when in the edit screen on a game cart. It has a label editor built in, so you can resize the label and make it fit the cart cutout
+- Finally fixed Wi-Fi
+- Customize cartridges: color, finish and shape for all shelves.
+- Add SNES support: SNES and PAL cartridges
+- Add NES support: NES and FAMICOM Cartridges
+- Add RetroAchievements support, softcore only
+- Automatic label fetcher in main menu, it fetches labels for all carts at once, but it is really barebones, so refer to the label picker for more control
+
+**FOR DEVELOPERS**
+- The Brick simulator - for testing in the browser before real hardware testing. Refer to the Development part of the Readme.
 
 ## v0.23
 - Settings > About credits the port to LordNordyx.

@@ -3,7 +3,7 @@
 set -u
 OUT="${1:-./slot-diagnostics.txt}"
 {
-    echo 'slot Brick v0.23 diagnostics'
+    echo 'slot Brick v0.40 diagnostics'
     date
     uname -a
     for f in /etc/os-release /proc/device-tree/model /sys/class/graphics/fb0/virtual_size /sys/class/graphics/fb0/modes; do
