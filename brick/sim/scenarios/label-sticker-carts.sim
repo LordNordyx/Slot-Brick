@@ -1,0 +1,125 @@
+# The sticker goes on every kind of cart: the GBA cart's front under the core picker's shut
+# lid, which then lifts again, and each other cart in its cart menu, in every shape. Grabs, not
+# compared: when each is caught depends on timing.
+press a
+phase Shelf
+set online 1
+# GBA: START opens the core picker; the label goes on its front, then the lid pops back up.
+press start
+idle
+grab gba-picker
+press y
+idle
+press start
+idle
+press a
+idle
+press a 40
+wait 280
+grab gba-fly
+wait 230
+grab gba-land
+wait 330
+grab gba-reopen
+idle
+grab gba-after
+press b
+idle
+# GBC.
+press r1
+idle
+press r1
+idle
+press start
+idle
+press y
+idle
+press start
+idle
+press a
+idle
+press a 40
+wait 280
+grab gbc-fly
+wait 230
+grab gbc-land
+idle
+grab gbc-after
+press b
+idle
+# NES, then the same cart as a Famicom.
+press r1
+idle
+press start
+idle
+press y
+idle
+press start
+idle
+press a
+idle
+press a 40
+wait 280
+grab nes-fly
+wait 230
+grab nes-land
+idle
+grab nes-after
+# ORIGINAL, NES, then FAMICOM.
+press right
+idle
+press right
+idle
+press y
+idle
+press start
+idle
+press a
+idle
+press a 40
+wait 280
+grab famicom-fly
+wait 230
+grab famicom-land
+idle
+grab famicom-after
+press b
+idle
+# SNES, then the same cart in the PAL / Super Famicom shape.
+press r1
+idle
+press start
+idle
+press y
+idle
+press start
+idle
+press a
+idle
+press a 40
+wait 280
+grab snes-fly
+wait 230
+grab snes-land
+idle
+grab snes-after
+# ORIGINAL, US, then PAL.
+press right
+idle
+press right
+idle
+press y
+idle
+press start
+idle
+press a
+idle
+press a 40
+wait 280
+grab pal-fly
+wait 230
+grab pal-land
+idle
+grab pal-after
+press b
+phase Shelf

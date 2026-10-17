@@ -312,6 +312,9 @@ pub struct App {
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
     core_faces_stem: Option<String>,
+    /// A label went on the cart under the lid: the lid is drawn again, as its key may not
+    /// have changed (the label is written over in place).
+    core_faces_stale: bool,
     core_socket_faces: Vec<TexId>,
     core_chip_faces: Vec<TexId>,
     core_blank_chip_face: Option<TexId>,
@@ -475,6 +478,7 @@ impl App {
             core_board_face: None,
             core_lid_face: None,
             core_faces_stem: None,
+            core_faces_stale: false,
             core_socket_faces: Vec::new(),
             core_chip_faces: Vec::new(),
             core_blank_chip_face: None,
@@ -2747,7 +2751,15 @@ impl App {
             });
         }
 
-        if ready {
+        // While a sticker is on its way the lid lies shut with its slot clear, for it to land in.
+        let clear = self.peel.as_ref().filter(|p| p.picker).zip(self.label_adjust_faces.as_ref());
+        if let Some((peel, faces)) = clear {
+            // The recess is dark, as in the cart menu: the board must not show through it.
+            let (sx, sy, sw, sh) = peel.to;
+            out.push(Draw::Rect { x: sx, y: sy, w: sw, h: sh, colour: slot_ui::opening() });
+            let (x, y, w, h) = self.picker_front();
+            out.push(Draw::Tex { x, y, w, h, tex: faces.cart, alpha: 1.0 });
+        } else if ready {
             if let Some(tex) = self.core_lid_face {
                 let (lid, turn) = lid_from(shelf, progress);
                 let at = grown(lid, TURN_PAD as f32 * lid.w / CART_W as f32);
@@ -3229,6 +3241,9 @@ impl App {
         if let Some(pick) = &mut self.label_pick {
             pick.adjust = Some(adjust);
         }
+        // Made again for this cart: the same picture and words may have been framed for
+        // another cart, or another shape of this one, before.
+        self.label_adjust_faces = None;
     }
 
     /// Framing a picked label. The d-pad moves the frame; holding L, Up and Right grow it and
@@ -3363,10 +3378,25 @@ impl App {
             return;
         };
         (cart.label, cart.famicom_label) = pick.original.clone();
-        // From the cart menu it goes on as a sticker; from the core picker, as it always has.
-        if let (Some(framing), Some(slot), true) = (framing, slot, self.cart_menu.is_some()) {
-            if let Some(peel) = Peel::start(&root, cart.clone(), source, frame, framing, slot, self.now()) {
+        // It goes on as a sticker: on the cart in the cart menu, or on the GBA cart's front
+        // with the core picker's lid shut for it.
+        let picker = self.core_picker.is_some_and(|p| !p.closing());
+        let on = if picker {
+            Some(self.picker_front())
+        } else if self.cart_menu.is_some() {
+            let (bw, bh) = slot_ui::cart_box(cart.platform);
+            Some(slot_ui::cart_menu_cart_at(bw, bh))
+        } else {
+            None
+        };
+        if let (Some(framing), Some(slot), Some(on)) = (framing, slot, on) {
+            if let Some(peel) = Peel::start(&root, cart.clone(), source, frame, framing, slot, on, picker, self.now()) {
                 self.peel = Some(peel);
+                if let Some(p) = &mut self.core_picker {
+                    if picker {
+                        p.shut();
+                    }
+                }
                 return;
             }
         }
@@ -3390,6 +3420,7 @@ impl App {
         };
         let kept = peel.poll();
         let (stem, platform, started, asked) = (peel.stem.clone(), peel.platform, peel.started, peel.asked);
+        let peel_on_picker = peel.picker;
         // Nothing to fly: the label could not be written or read back.
         let nothing = peel.baking.is_none() && peel.baked.is_none() && peel.faces.is_none();
         if let Some(kept) = kept {
@@ -3405,8 +3436,15 @@ impl App {
             if let Some(root) = &self.root {
                 crate::cart_art::forget_choices(root);
             }
+            if peel_on_picker {
+                self.core_faces_stem = None;
+                self.core_faces_stale = true;
+            }
         }
-        let face_ready = self.shelf_index_of(&stem).is_none_or(|i| self.shelf().face(i).is_some());
+        let face_ready = match peel_on_picker {
+            true => self.core_faces_ready(),
+            false => self.shelf_index_of(&stem).is_none_or(|i| self.shelf().face(i).is_some()),
+        };
         let over = match started {
             // Flat on the cart, and the cart's own face ready to take over from it.
             Some(at) => {
@@ -3417,7 +3455,23 @@ impl App {
         };
         if over {
             self.peel = None;
+            // The label is on: the lid pops back up off the board.
+            if let Some(p) = &mut self.core_picker {
+                p.reopen(now);
+            }
         }
+    }
+
+    /// The core picker's lid shut flat, showing the cart's front, for a label to go on.
+    fn picker_front(&self) -> slot_ui::Rect {
+        let (rest, scale) = self.shelf().selected_at();
+        let (lid, _) = lid_from(shelf_cart_at(rest, scale), slot_ui::SLIDE_SHARE);
+        (lid.x, lid.y, lid.w, lid.h)
+    }
+
+    /// The lid needs drawing again: once asked, it is no longer stale.
+    pub fn take_core_faces_stale(&mut self) -> bool {
+        std::mem::take(&mut self.core_faces_stale)
     }
 
     /// The sticker's curls, baked and waiting to be uploaded by the frontend.
@@ -4807,6 +4861,8 @@ struct Peel {
     to: slot_ui::Rect,
     /// The label's size in pixels, which its curls are baked at.
     label: (u32, u32),
+    /// Going on the GBA cart's front, under the core picker's shut lid.
+    picker: bool,
     baking: Option<std::sync::mpsc::Receiver<PeelBaked>>,
     baked: Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)>,
     faces: Option<(Vec<TexId>, TexId)>,
@@ -4816,6 +4872,7 @@ struct Peel {
 
 impl Peel {
     /// None when no thread can be had for the card write: the label is then kept as before.
+    #[allow(clippy::too_many_arguments)]
     fn start(
         root: &Path,
         cart: Cart,
@@ -4823,10 +4880,10 @@ impl Peel {
         frame: crate::cart_art::Frame,
         framing: (slot_ui::Rect, slot_ui::Rect, slot_ui::Rect),
         (face, slot): ((u32, u32), (u32, u32, u32, u32)),
+        (x, y, w, h): slot_ui::Rect,
+        picker: bool,
         now: Millis,
     ) -> Option<Self> {
-        let (bw, bh) = slot_ui::cart_box(cart.platform);
-        let (x, y, w, h) = slot_ui::cart_menu_cart_at(bw, bh);
         let (kx, ky) = (w / face.0.max(1) as f32, h / face.1.max(1) as f32);
         let to = (x + slot.0 as f32 * kx, y + slot.1 as f32 * ky, slot.2 as f32 * kx, slot.3 as f32 * ky);
         let label = slot_ui::label_size(&cart);
@@ -4857,6 +4914,7 @@ impl Peel {
             from: framing.1,
             to,
             label,
+            picker,
             baking: Some(rx),
             baked: None,
             faces: None,

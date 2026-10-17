@@ -1024,6 +1024,10 @@ fn sync_core_picker(
 ) {
     // Keyed by the cart and the plastic it wears, so a colour or finish changed in the picker
     // (or the cart menu) rebuilds the lid it shows.
+    // A label written over in place keeps the key the same, so it says so itself.
+    if app.take_core_faces_stale() {
+        (*asked, *built) = (None, None);
+    }
     let cart = app.selected_stem().and_then(|stem| app.carts().find(|c| c.stem == stem)).cloned();
     let highlighted = cart.as_ref().map(crate::face_builder::face_key);
     if let Some(cart) = cart {

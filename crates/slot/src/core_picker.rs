@@ -51,6 +51,8 @@ pub struct CorePicker {
     hop: Option<Hop>,
     close: Option<Close>,
     refusal: Option<Refusal>,
+    /// Shut for a label going on: the lid lies flat, slid up off the shelf, until it reopens.
+    shut: bool,
 }
 
 impl CorePicker {
@@ -62,11 +64,29 @@ impl CorePicker {
             hop: None,
             close: None,
             refusal: None,
+            shut: false,
         }
     }
 
     pub fn start(&mut self, now: Millis) {
         self.started.get_or_insert(now);
+    }
+
+    /// The lid comes down flat, showing the cart's front, for a label to go on.
+    pub fn shut(&mut self) {
+        self.shut = true;
+    }
+
+    /// The label is on: the lid lifts off the board again, from where it lay.
+    pub fn reopen(&mut self, now: Millis) {
+        if self.shut {
+            self.shut = false;
+            self.started = Some(now.saturating_sub(SLIDE_MS));
+        }
+    }
+
+    pub fn is_shut(&self) -> bool {
+        self.shut
     }
 
     pub fn waiting(&self) -> bool {
@@ -86,6 +106,9 @@ impl CorePicker {
     }
 
     pub fn openness(&self, now: Millis) -> f32 {
+        if self.shut {
+            return SLIDE_MS as f32 / OPEN_MS as f32;
+        }
         match (self.close, self.started) {
             (Some(Close { started, from }), _) => {
                 (from - now.saturating_sub(started) as f32 / CLOSE_MS as f32).max(0.0)
