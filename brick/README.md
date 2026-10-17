@@ -38,11 +38,12 @@ doesn't flash anything to the device.
 | Button           | Action                                  |
 | ---------------- | --------------------------------------- |
 | `Left` / `Right` | Browse games                            |
+| `Up` / `Down`    | Previous / next letter                  |
 | `L1` / `R1`      | Switch shelves (GBA, GB, GBC, NES, SNES) |
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
-| `START`          | Cart colour and finish (GBA: and core)   |
-| `HOME`           | Menu (settings, Wi-Fi, About)           |
+| `START`          | Cart colour, finish, shape and label (GBA: and core) |
+| `HOME`           | Menu (settings, LEDs, Wi-Fi, Cart Art, RetroAchievements, About) |
 
 ### In game
 
@@ -50,11 +51,11 @@ doesn't flash anything to the device.
 | --------------------------- | --------------------------------------------------- |
 | Hold `HOME`                 | Save, eject and return to the carousel              |
 | Double-tap `HOME`           | Save state switcher                                 |
-| `HOME + B`                  | LEDs on / off                                       |
+| `HOME + B` or `SELECT + B`  | LEDs on / off                                       |
 | `SELECT + HOME`             | Game menu (multiplayer Host / Join)                 |
 | `SELECT + R1`               | Save state                                          |
 | `SELECT + L1`               | Load the latest save state                          |
-| `SELECT + A` / `B`          | Next / previous shader                              |
+| `HOME + A` or `SELECT + A`  | Next shader                                         |
 | `SELECT + X`                | GBA/SNES: original or full screen (saved per game)  |
 | `SELECT + Y`                | Colour correction on / off (GB, GBC, GBA)           |
 | `SELECT + L2` / `R2`        | GB: previous / next colour palette                  |
@@ -81,14 +82,16 @@ can have any colour, as Famicom carts came in many. On a GBA cart `START` opens 
 and `Down` the finish. The cart changes as you go; `A` saves, `B` puts it back. Choices are kept
 in `Slot/Labels/cart_shell.ini`.
 
-**Choosing a label:** with Wi-Fi on, press `Y` on the cart menu's Label row (or in the GBA core
-picker) to search: the keyboard opens with the game's name filled in, so `START` searches right
-away, or change it first (each word only has to begin a word of the name, so `yoshi island`
-finds *Super Mario World 2: Yoshi's Island*). It looks through every game of that console in the
-places Cart Art uses. `Left` / `Right` (`L1` / `R1` in the picker) then flips through the labels
-found, each shown on the cart; `A` keeps the one showing, in place of the label the game had,
-and `B` keeps the old one. The labels not picked are deleted when the menu closes. NES games keep
-the NES and the Famicom cart's label apart: a label picked goes to the cart shape showing.
+**Choosing a label:** with Wi-Fi on, press `Y` in the cart menu (or in the GBA core picker) to
+search: the keyboard opens with the game's name filled in, so `START` searches right away, or
+change it first (each word only has to begin a word of the name, so `yoshi island` finds
+*Super Mario World 2: Yoshi's Island*). It looks through every game of that console in the
+places Cart Art uses. The labels found appear in a grid: move with the d-pad, `A` picks one,
+`Y` searches again and `B` goes back. Then frame the label to fit the cart's cutout: the d-pad
+moves the picture, hold `L1` and use the d-pad to make the frame bigger or smaller, `R1` evens
+out its shape and `Y` puts it back as it was. `A` keeps it in place of the label the game had;
+`B` goes back to the grid. The labels not picked are deleted when the menu closes. NES games
+keep the NES and the Famicom cart's label apart: a label picked goes to the cart shape showing.
 
 **NES:** put `.nes` ROMs in `Slot/Games/NES`; they get their own shelf of NES cartridges and run
 on FCEUmm. No BIOS is needed. NES carts are grey; a ROM named as a Japanese release, such as
@@ -134,6 +137,9 @@ fast-forward stay allowed): a small toast slides into the top-right corner with 
 game has when it starts, and with each unlock and its badge as it happens. A game's badges
 are fetched when it starts and kept in `Slot/System/Cache/Badges`. Unlocks made offline are sent once the Brick is back online, while the game is
 still running. Hardcore mode isn't available.
+
+**Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
+reaching the network, or off.
 
 **Auto-sleep:** the Brick sleeps after 5 minutes idle in menus or 15 minutes in a game.
 To turn this off, create an empty file named `Slot/DISABLE_AUTO_SLEEP`.

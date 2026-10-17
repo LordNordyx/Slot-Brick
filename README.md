@@ -38,10 +38,12 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | :--- | :--- |
 | **NES and SNES** | Their own shelves of NES and SNES cartridges, running on FCEUmm and Snes9x. No BIOS needed. |
 | **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
+| **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
+| **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
 | **Brick integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
-| **Wireless connectivity** | Wi-Fi support and an experimental two-player link over Wi-Fi. |
+| **Wireless connectivity** | Wi-Fi, with its status shown beside the clock, and an experimental two-player link over Wi-Fi. |
 | **Startup handling** | Support for slow-mounting SD cards. See the known startup issue below. |
 
 ## Installation
@@ -101,11 +103,11 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 | :--- | :--- |
 | `Left` / `Right` | Browse the carousel |
 | `Up` / `Down` | Jump to the previous / next letter |
-| `L1` / `R1` | Switch between the GB, GBC, GBA, NES, and SNES shelves |
+| `L1` / `R1` | Switch between the GBA, GB, GBC, NES, and SNES shelves |
 | Tap `A` | Resume the last save state |
 | Hold `A` | Start the game fresh |
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
-| `HOME` | Open the menu: settings, Wi-Fi, and About |
+| `HOME` | Open the menu: Screen, Gameplay, LEDs, Wi-Fi, Cart Art, RetroAchievements, Date & Time, and About |
 
 ### In game
 
@@ -113,13 +115,14 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 | :--- | :--- |
 | Hold `HOME` | Save state, eject the cartridge, and return to the carousel |
 | Double-tap `HOME` | Open the save state switcher: load, delete, or undo within 30 seconds |
-| `SELECT` + `B` | Toggle LEDs |
+| `SELECT` + `B` or `HOME` + `B` | Toggle LEDs |
 | `SELECT` + `HOME` | Open multiplayer Host / Join |
 | `SELECT` + `R1` | Save state |
 | `SELECT` + `L1` | Load the most recent save state |
-| `SELECT` + `A` | Cycle shaders (next) |
+| `SELECT` + `A` or `HOME` + `A` | Next shader |
 | `SELECT` + `X` | **GBA / SNES:** switch between original and full screen; saved per game |
 | `SELECT` + `Y` | Toggle colour correction |
+| `SELECT` + `L2` / `R2` | **GB:** previous / next colour palette |
 | `SELECT` + `Up` / `Down` | Adjust brightness |
 | `SELECT` + `Left` / `Right` | Adjust the blue light filter |
 | `L1` / `R1` | **GB / GBC / NES:** switch between stretched / original picture. On SNES they are the game's own buttons |
@@ -143,11 +146,24 @@ Press `START` on a game on the shelf to change its cartridge:
 - **Colour** (Game Boy, GBA and Famicom): the original, plain colours, or special-edition plastics.
 - **Finish** (Game Boy and GBA): solid, see-through, or glitter.
 - **Shape:** Game Boy carts can use the original or the Color shape, NES carts the NES or a Famicom cart, and SNES carts the US or the Europe / Japan cart.
-- **Label:** with Wi-Fi on, `Y` opens a search with the game's name filled in: press `START` to search as it is, or change it first. `Left` / `Right` then flips through every label found, shown on the cart as you go.
+- **Label:** with Wi-Fi on, press `Y` to choose a label. See [Choosing a label](#choosing-a-label).
 
 NES and SNES carts are always their system's grey, like the real ones. Famicom carts came in many colours, so a NES game on the Famicom cart can have any colour.
 
-The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, `Down` the finish, `Y` searches for a label, and `L1` / `R1` flips through the ones found.
+The cart changes as you go. `A` saves, `B` puts it back, and **Reset to original** restores the game's own look. On a GBA cart, `START` opens the core picker instead: `Left` / `Right` change the core, `Up` the colour, `Down` the finish, and `Y` searches for a label.
+
+### Choosing a label
+
+1. Press `Y` in the cart menu or the GBA core picker. A keyboard opens with the game's name filled in: press `START` to search as it is, or change it first.
+2. The labels found appear in a grid. Move with the d-pad, press `A` on the one you want, `Y` to search again, or `B` to go back.
+3. Frame the label to fit the cart's cutout. The d-pad moves the picture; hold `L1` and use the d-pad to make the frame bigger or smaller; `R1` evens out its shape; `Y` puts it back as it was. `A` keeps it, `B` goes back to the grid.
+
+## Cart Art and RetroAchievements
+
+Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
+
+- **Cart Art:** **GET CART ART** gives every game without a label a scan of its real cartridge label. Labels you already have are never replaced. GB, GBC and GBA labels come from the art set behind Cart Studio, NES and SNES labels from the LaunchBox Games Database. Below the button, every game with a label is listed: press `A` twice on one to delete its label. It is quick but basic; use [Choosing a label](#choosing-a-label) for more control.
+- **RetroAchievements:** log in to your [RetroAchievements](https://retroachievements.org) account. Only the login token is kept, never your password. Games then earn achievements in softcore mode, with a small toast for each unlock. Hardcore mode isn't available.
 
 ## NES and SNES
 
@@ -208,7 +224,8 @@ Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release
 needs write access, so only maintainers can start one. Before tagging:
 
 1. Put the version at the top of [`brick/README.md`](brick/README.md) — it is what the card
-   says it is.
+   says it is — and in `brick/card/Apps/Slot/config.json`, `brick/card/Slot/System/launch.sh`
+   and `brick/card/Slot/System/diagnose.sh`.
 2. Move the `## Unreleased` notes in [`brick/CHANGELOG.md`](brick/CHANGELOG.md) under a
    `## vX.Y` heading. Those notes become the release's text, so write them for players.
 3. `git tag vX.Y && git push origin vX.Y`, with the tag on `main`.
