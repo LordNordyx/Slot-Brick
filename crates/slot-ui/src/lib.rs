@@ -56,7 +56,7 @@ pub use label_adjust::{
     label_adjust_legend_faces, slot_stand, LabelAdjustView, Rect,
 };
 pub use peel::{
-    draw_peel, fade_from, peel_face, peel_pose, peel_shadow_face, peel_step, PeelPose, PEEL_MS, PEEL_STEPS,
+    draw_peel, fade_from, peel_face, peel_pad, peel_pose, peel_shadow_face, peel_step, PeelPose, PEEL_MS, PEEL_STEPS,
 };
 pub use label_grid::{
     label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,

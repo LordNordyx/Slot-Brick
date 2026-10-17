@@ -21,21 +21,21 @@ idle
 grab framing
 press a 40
 grab peel-1
-wait 70
+wait 120
 grab peel-2
-wait 70
+wait 120
 grab peel-3
-wait 70
+wait 120
 grab peel-4
-wait 70
+wait 120
 grab peel-5
-wait 70
+wait 120
 grab peel-6
-wait 70
+wait 120
 grab peel-7
-wait 70
+wait 120
 grab peel-8
-wait 70
+wait 120
 grab peel-9
 idle
 grab menu-after

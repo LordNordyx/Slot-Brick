@@ -15,10 +15,12 @@ idle
 press a
 idle
 press a 40
-wait 280
+wait 400
 grab gba-fly
-wait 230
+wait 320
 grab gba-land
+wait 180
+grab gba-smooth
 wait 330
 grab gba-reopen
 idle
@@ -39,10 +41,12 @@ idle
 press a
 idle
 press a 40
-wait 280
+wait 400
 grab gbc-fly
-wait 230
+wait 320
 grab gbc-land
+wait 180
+grab gbc-smooth
 idle
 grab gbc-after
 press b
@@ -59,10 +63,12 @@ idle
 press a
 idle
 press a 40
-wait 280
+wait 400
 grab nes-fly
-wait 230
+wait 320
 grab nes-land
+wait 180
+grab nes-smooth
 idle
 grab nes-after
 # ORIGINAL, NES, then FAMICOM.
@@ -77,10 +83,12 @@ idle
 press a
 idle
 press a 40
-wait 280
+wait 400
 grab famicom-fly
-wait 230
+wait 320
 grab famicom-land
+wait 180
+grab famicom-smooth
 idle
 grab famicom-after
 press b
@@ -97,10 +105,12 @@ idle
 press a
 idle
 press a 40
-wait 280
+wait 400
 grab snes-fly
-wait 230
+wait 320
 grab snes-land
+wait 180
+grab snes-smooth
 idle
 grab snes-after
 # ORIGINAL, US, then PAL.
@@ -115,10 +125,12 @@ idle
 press a
 idle
 press a 40
-wait 280
+wait 400
 grab pal-fly
-wait 230
+wait 320
 grab pal-land
+wait 180
+grab pal-smooth
 idle
 grab pal-after
 press b

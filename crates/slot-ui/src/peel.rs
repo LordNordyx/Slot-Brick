@@ -2,8 +2,9 @@
 //! framing screen with a corner curled up, flies over to the cart in the cart menu, is pressed
 //! down, and the curled corner is smoothed flat last.
 //!
-//! The curl is a fold across the corner with the label's paper back showing, baked into the
-//! label's own picture a step at a time. The GPU then only ever draws plain turned rectangles,
+//! The curl is a fold, square to the label's diagonal, with the label's paper back showing,
+//! baked into the label's own picture a step at a time: at its most it reaches halfway, so
+//! half the label is folded back over the other half. The GPU then only ever draws plain turned rectangles,
 //! which is all the sprite pipeline has; at the size a label is on the Brick's screen a fold
 //! shaded like a roll reads as a curl.
 use crate::cart::CartFace;
@@ -12,18 +13,19 @@ use crate::hud::Millis;
 use crate::label_adjust::Rect;
 use crate::slot_chrome::ease;
 
-/// How many curls are baked, flat first: enough that lifting and smoothing it never steps.
-pub const PEEL_STEPS: usize = 10;
+/// How many curls are baked, flat first: enough that peeling and smoothing it never steps.
+pub const PEEL_STEPS: usize = 48;
 /// A clear pixel round the label's picture, so its edges stay smooth once it is turned.
 pub const PEEL_PAD: u32 = 1;
 /// How far the drop shadow's soft edge reaches either side of the label's own.
 pub const PEEL_SHADOW_PAD: u32 = 14;
 
-/// Lifting off the framing screen, the flight, the press onto the cart, smoothing the corner.
-const LIFT_MS: Millis = 170;
-const FLY_MS: Millis = 480;
-const LAND_MS: Millis = 560;
-pub const PEEL_MS: Millis = 720;
+/// Peeling off the framing screen, the flight, the press onto the cart, smoothing it down: the
+/// smoothing is the longest, as it rolls the fold back across half the label.
+const LIFT_MS: Millis = 240;
+const FLY_MS: Millis = 600;
+const LAND_MS: Millis = 700;
+pub const PEEL_MS: Millis = 1_100;
 /// The framing screen is gone a little after the sticker is clear of it.
 const BACKDROP_MS: Millis = LIFT_MS + 80;
 
@@ -39,8 +41,13 @@ const TILT: f32 = -0.06;
 const AIR: f32 = 18.0;
 const SHADOW_ALPHA: f32 = 0.42;
 
-/// How far into the label the fold reaches at its most, as a share of the shorter side.
-const CURL: f32 = 0.42;
+/// How far the fold reaches at its most, as a share of the way to the label's middle.
+const CURL: f32 = 1.0;
+/// The flap stands up off the label rather than lying flat on it, so it is seen shortened:
+/// this much of its length shows. Flat (1.0) it would hide all the art under it.
+const STANDING: f32 = 0.5;
+/// How wide the roll at the crease is at most, in pixels; a small fold is all roll.
+const ROLL: f32 = 26.0;
 /// The paper on the back of a label.
 const BACK: [f32; 3] = [238.0, 233.0, 222.0];
 /// The shadow the curled flap casts on the label under it, at its darkest.
@@ -64,6 +71,8 @@ pub struct PeelPose {
 pub fn peel_pose(t: Millis, from: Rect, to: Rect) -> PeelPose {
     let span = |a: Millis, b: Millis| ease((t.saturating_sub(a) as f32 / (b - a) as f32).clamp(0.0, 1.0));
     let (lift, fly, land, flat) = (span(0, LIFT_MS), span(LIFT_MS, FLY_MS), span(FLY_MS, LAND_MS), span(LAND_MS, PEEL_MS));
+    // Smoothed from the crease out, slow to start and to finish, as a thumb would.
+    let flat = flat * flat * (3.0 - 2.0 * flat);
     let lifted = scaled(from, 1.0 - LIFT_SHRINK * lift);
     let mut at = mix(mix(lifted, scaled(to, AIR_GROW), fly), to, land);
     if fly < 1.0 {
@@ -99,50 +108,102 @@ pub fn peel_step(curl: f32) -> usize {
     (curl.clamp(0.0, 1.0) * (PEEL_STEPS - 1) as f32).round() as usize
 }
 
-/// The label, `w` by `h` RGBA, with its bottom right corner curled up by `curl` (0 flat, 1
-/// most): folded back over itself along a line across the corner, the back of the paper up and
-/// shaded darkest at the crease as a roll would be, with the flap's shadow on the label beside
-/// it. Comes with PEEL_PAD clear all round.
+/// The way the label folds: square to its diagonal, so a long label folds along its length
+/// and a square one across the corner. A unit vector pointing at the bottom right corner.
+fn fold_normal(w: f32, h: f32) -> (f32, f32) {
+    let n = (w * w + h * h).sqrt().max(1.0);
+    (w / n, h / n)
+}
+
+/// The clear edge the baked curls are given all round: enough that the folded half, which can
+/// stand past the label's own edge, is never cut off. The same for every curl of a label.
+pub fn peel_pad(w: u32, h: u32) -> u32 {
+    let (wf, hf) = (w as f32, h as f32);
+    let (nx, ny) = fold_normal(wf, hf);
+    let c = (nx * wf + ny * hf) * (1.0 - CURL / 2.0);
+    // The folded half is the label's corners past the fold, and where the fold crosses its
+    // edges, mirrored: as far out as any of those lands is as far as it stands out.
+    let mut points = vec![(0.0, 0.0), (wf, 0.0), (0.0, hf), (wf, hf)];
+    if nx > 0.0 {
+        points.extend([((c - ny * 0.0) / nx, 0.0), ((c - ny * hf) / nx, hf)]);
+    }
+    if ny > 0.0 {
+        points.extend([(0.0, (c - nx * 0.0) / ny), (wf, (c - nx * wf) / ny)]);
+    }
+    let mut over: f32 = 0.0;
+    for (x, y) in points {
+        let e = c - (nx * x + ny * y);
+        if e > 0.5 || x < -0.01 || y < -0.01 || x > wf + 0.01 || y > hf + 0.01 {
+            continue;
+        }
+        let (mx, my) = (x + 2.0 * e * nx, y + 2.0 * e * ny);
+        over = over.max(-mx).max(-my).max(mx - wf).max(my - hf);
+    }
+    // A pixel more for the fold's own smoothed edge, which can fall just past the label's.
+    over.ceil() as u32 + 1 + PEEL_PAD
+}
+
+/// The label, `w` by `h` RGBA, peeled back by `curl` (0 flat, 1 most, halfway across): folded
+/// back over itself along a line square to its diagonal, the back of the paper up and shaded
+/// darkest at the crease as a roll would be, with the flap's shadow on the label beside it.
+/// Comes with peel_pad clear all round.
 pub fn peel_face(label: &[u8], w: u32, h: u32, curl: f32) -> CartFace {
-    let (fw, fh) = (w + 2 * PEEL_PAD, h + 2 * PEEL_PAD);
+    let pad = peel_pad(w, h);
+    let (fw, fh) = (w + 2 * pad, h + 2 * pad);
     let mut rgba = vec![0u8; (fw * fh * 4) as usize];
     if label.len() < (w * h * 4) as usize {
         return CartFace { rgba, w: fw, h: fh };
     }
     let (wf, hf) = (w as f32, h as f32);
-    let d = curl.clamp(0.0, 1.0) * CURL * wf.min(hf);
-    // The fold is the line x + y = k: past it the corner has lifted away and folded back over.
-    let k = wf + hf - d;
-    let reach = d * 0.3 + 3.0;
-    for y in 0..h {
-        for x in 0..w {
-            let src = ((y * w + x) * 4) as usize;
-            let dst = (((y + PEEL_PAD) * fw + x + PEEL_PAD) * 4) as usize;
+    let (nx, ny) = fold_normal(wf, hf);
+    let deepest = nx * wf + ny * hf;
+    let d = curl.clamp(0.0, 1.0) * CURL * deepest / 2.0;
+    // The fold is the line n . p = c: past it the label has lifted away and folded back over.
+    let c = deepest - d;
+    let reach = (d * 0.25 + 3.0).min(24.0);
+    let roll = d.min(ROLL).max(1.0);
+    let inside = |x: f32, y: f32| {
+        (x + 0.5).clamp(0.0, 1.0) * (wf - x + 0.5).clamp(0.0, 1.0) * (y + 0.5).clamp(0.0, 1.0) * (hf - y + 0.5).clamp(0.0, 1.0)
+    };
+    for oy in 0..fh {
+        for ox in 0..fw {
+            let dst = ((oy * fw + ox) * 4) as usize;
+            let (x, y) = (ox as i64 - pad as i64, oy as i64 - pad as i64);
+            let on_label = x >= 0 && y >= 0 && x < w as i64 && y < h as i64;
+            let src = if on_label { ((y as u32 * w + x as u32) * 4) as usize } else { 0 };
             if d < 0.5 {
-                rgba[dst..dst + 4].copy_from_slice(&label[src..src + 4]);
+                if on_label {
+                    rgba[dst..dst + 4].copy_from_slice(&label[src..src + 4]);
+                }
                 continue;
             }
             let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-            let s = px + py;
-            // How much of the pixel is on the label's side of the fold, smoothed over a pixel.
-            let kept = ((k - s) / std::f32::consts::SQRT_2 + 0.5).clamp(0.0, 1.0);
-            // The flap is the corner reflected across the fold: (x, y) is under it when its
-            // reflection, (k - y, k - x), lands on the label.
-            let flap = kept * (py - (k - wf) + 0.5).clamp(0.0, 1.0) * (px - (k - hf) + 0.5).clamp(0.0, 1.0);
-            let outside = ((k - hf) - px).max((k - wf) - py).max(0.0);
+            // How far the pixel is on the label's side of the fold, smoothed over a pixel.
+            let e = c - (nx * px + ny * py);
+            let kept = (e + 0.5).clamp(0.0, 1.0);
+            if kept <= 0.0 {
+                continue;
+            }
+            // The flap is the peeled part turned back over the fold, standing up so it shows
+            // shortened: this pixel is under it when the point that far up the flap is on the
+            // label.
+            let t = e + e / STANDING;
+            let (mx, my) = (px + t * nx, py + t * ny);
+            let flap = kept * inside(mx, my);
+            let outside = (-mx).max(mx - wf).max(-my).max(my - hf).max(0.0);
             let shade = FLAP_SHADE * (1.0 - outside / reach).clamp(0.0, 1.0).powi(2) * (1.0 - flap);
-            // Along the flap from the crease (0) to its tip (1): dark in the roll, light flat.
-            let along = ((k - s) / d).clamp(0.0, 1.0);
-            let lum = 0.72 + 0.28 * (1.0 - (1.0 - along).powi(2));
-            let front_a = label[src + 3] as f32 / 255.0 * kept;
+            // From the crease out: dark in the roll, light where the paper lies flat.
+            let along = (e / STANDING / roll).clamp(0.0, 1.0);
+            let lum = 0.70 + 0.30 * (1.0 - (1.0 - along).powi(2));
+            let front_a = if on_label { label[src + 3] as f32 / 255.0 * kept } else { 0.0 };
             let a = flap + front_a * (1.0 - flap);
             if a <= 0.0 {
                 continue;
             }
-            for c in 0..3 {
-                let front = label[src + c] as f32 * (1.0 - shade);
-                let v = (BACK[c] * lum * flap + front * front_a * (1.0 - flap)) / a;
-                rgba[dst + c] = v.round().clamp(0.0, 255.0) as u8;
+            for ch in 0..3 {
+                let front = if on_label { label[src + ch] as f32 * (1.0 - shade) } else { 0.0 };
+                let v = (BACK[ch] * lum * flap + front * front_a * (1.0 - flap)) / a;
+                rgba[dst + ch] = v.round().clamp(0.0, 255.0) as u8;
             }
             rgba[dst + 3] = (a * 255.0).round() as u8;
         }
@@ -190,7 +251,8 @@ pub fn draw_peel(pose: &PeelPose, faces: &[TexId], shadow: TexId, label: (u32, u
             turn: pose.turn,
         });
     }
-    let (px, py) = (PEEL_PAD as f32 * kx, PEEL_PAD as f32 * ky);
+    let pad = peel_pad(label.0, label.1) as f32;
+    let (px, py) = (pad * kx, pad * ky);
     out.push(Draw::Turned { x: x - px, y: y - py, w: w + 2.0 * px, h: h + 2.0 * py, tex, alpha: 1.0, turn: pose.turn });
 }
 
@@ -237,27 +299,49 @@ mod tests {
     fn a_flat_peel_is_the_label_untouched() {
         let label: Vec<u8> = (0..6 * 4 * 4).map(|i| (i * 7 % 256) as u8).collect();
         let face = peel_face(&label, 6, 4, 0.0);
-        assert_eq!((face.w, face.h), (6 + 2 * PEEL_PAD, 4 + 2 * PEEL_PAD));
+        let pad = peel_pad(6, 4);
+        assert_eq!((face.w, face.h), (6 + 2 * pad, 4 + 2 * pad));
         for y in 0..4 {
-            let row = ((y + PEEL_PAD) * face.w + PEEL_PAD) as usize * 4;
+            let row = ((y + pad) * face.w + pad) as usize * 4;
             assert_eq!(&face.rgba[row..row + 24], &label[y as usize * 24..(y as usize + 1) * 24]);
         }
         assert!(face.rgba[..face.w as usize * 4].iter().all(|&v| v == 0), "the edge is clear");
     }
 
     #[test]
-    fn curled_the_corner_is_gone_and_the_paper_back_shows_beside_it() {
+    fn peeled_halfway_the_far_half_is_gone_and_the_paper_back_lies_over_the_near_one() {
         let (w, h) = (100u32, 60u32);
         let label = [20u8, 40, 200, 255].repeat((w * h) as usize);
         let face = peel_face(&label, w, h, 1.0);
+        let pad = peel_pad(w, h);
         let at = |x: u32, y: u32| {
-            let i = (((y + PEEL_PAD) * face.w + x + PEEL_PAD) * 4) as usize;
+            let i = (((y + pad) * face.w + x + pad) * 4) as usize;
             [face.rgba[i], face.rgba[i + 1], face.rgba[i + 2], face.rgba[i + 3]]
         };
-        assert_eq!(at(w - 1, h - 1)[3], 0, "the very corner has lifted away");
-        let back = at(w - 18, h - 18);
+        assert_eq!(at(w - 1, h - 1)[3], 0, "the far corner has lifted away");
+        assert_eq!(at(w - 5, 3)[3], 0, "and so has the half it was on");
+        let back = at(40, 30);
         assert!(back[3] == 255 && back[0] > 150 && back[0] > back[2] - 30, "paper back: {back:?}");
-        assert_eq!(at(5, 5), [20, 40, 200, 255], "far from the corner, the label as it was");
+        assert_eq!(at(3, h - 3), [20, 40, 200, 255], "where the fold does not reach, the label as it was");
+    }
+
+    #[test]
+    fn the_folded_half_is_never_cut_off_by_the_edge_of_the_face() {
+        // A long label, a tall one and a square one: nothing is drawn on the outermost pixels
+        // at any curl, so the fold always had room.
+        for (w, h) in [(240u32, 52u32), (60, 150), (90, 90)] {
+            let label = [200u8, 50, 50, 255].repeat((w * h) as usize);
+            for i in 0..PEEL_STEPS {
+                let face = peel_face(&label, w, h, i as f32 / (PEEL_STEPS - 1) as f32);
+                let px = |x: u32, y: u32| face.rgba[((y * face.w + x) * 4 + 3) as usize];
+                for x in 0..face.w {
+                    assert_eq!((px(x, 0), px(x, face.h - 1)), (0, 0), "{w}x{h} step {i}");
+                }
+                for y in 0..face.h {
+                    assert_eq!((px(0, y), px(face.w - 1, y)), (0, 0), "{w}x{h} step {i}");
+                }
+            }
+        }
     }
 
     #[test]
