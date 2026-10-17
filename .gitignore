@@ -4,6 +4,10 @@ __pycache__/
 target-docker/
 .docker-cache/
 dist-brick/
+# docker-build.sh takes the output directory as an argument, so it is not always that one.
+dist-brick-*/
+# The card, zipped for people to download.
+*.zip
 brick/core-src/
 brick/core-build/
 target-sim/

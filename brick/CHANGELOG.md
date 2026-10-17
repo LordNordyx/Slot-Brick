@@ -1,6 +1,8 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- The shelf says whether Wi-Fi is on, beside the clock: connected, on but not reaching the
+  network, or off.
 - A simulator: the real Brick build runs on a PC in Docker, with its screen and buttons in a
   browser, so a change to the frontend can be seen without writing a card. See
   `brick/sim/README.md`.

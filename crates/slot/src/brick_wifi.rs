@@ -76,6 +76,9 @@ fn card_root()->PathBuf{PathBuf::from(std::env::var_os("SLOT_ROOT").unwrap_or_el
 fn service(on:bool,cancel:&AtomicBool)->Result<()>{helper_run(if on{"start"}else{"stop"},cancel)}
 /// Control sockets slot can reach a supplicant on, in its search order.
 const SOCKETS:[&str;3]=["/etc/wifi/sockets/wlan0","/var/run/wpa_supplicant/wlan0","/run/wpa_supplicant/wlan0"];
+/// Wi-Fi is switched on, whether or not it has reached anything. Cheap: it only looks for the
+/// supplicant's socket. The shelf asks a few times a second, so it must stay cheap.
+pub fn radio_on()->bool{supplicant_up()}
 /// A supplicant is running: what the menu reports as Wi-Fi on, known without asking it.
 fn supplicant_up()->bool{SOCKETS.iter().any(|s|slot_power::hw(s).exists())}
 /// A supplicant that answers: the firmware's socket appears a while before it does.

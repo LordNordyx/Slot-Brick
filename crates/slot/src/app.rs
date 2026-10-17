@@ -270,6 +270,10 @@ pub struct App {
     /// wlan0 is associated, polled with the Fn switch; Cart Art and RetroAchievements need it.
     #[cfg(feature = "brick")]
     net_up: bool,
+    /// Wi-Fi is switched on, whether or not it has reached anything.
+    net_on: bool,
+    /// The three Wi-Fi symbols: on the network, on but not reaching it, off.
+    wifi_faces: Option<[(TexId, u32, u32); 3]>,
     phase: Phase,
     shelves: Vec<(Platform, Shelf)>,
     /// Faces of carts whose label changed, for CartFaces to recycle and rebuild.
@@ -454,6 +458,8 @@ impl App {
             wifi_power: None,
             #[cfg(feature = "brick")]
             net_up: false,
+            net_on: false,
+            wifi_faces: None,
             power_menu: None,
             power_menu_faces: Vec::new(),
             core_picker: None,
@@ -783,6 +789,20 @@ impl App {
 
     pub fn set_wallpaper(&mut self, face: TexId) {
         self.wallpaper = Some(face);
+    }
+
+    pub fn set_wifi_faces(&mut self, faces: [(TexId, u32, u32); 3]) {
+        self.wifi_faces = Some(faces);
+    }
+
+    /// Which Wi-Fi symbol the shelf wears: on the network, on but not reaching it, or off.
+    fn wifi_face(&self) -> Option<(TexId, u32, u32)> {
+        let faces = self.wifi_faces?;
+        Some(match (self.net_up, self.net_on) {
+            (true, _) => faces[0],
+            (false, true) => faces[1],
+            (false, false) => faces[2],
+        })
     }
 
     pub fn set_bolt_face(&mut self, bolt: TexId) {
@@ -2028,6 +2048,7 @@ impl App {
         if self.now() >= self.brick_switch_at {
             self.brick_switch_at = self.now() + 200;
             self.net_up = crate::brick_wifi::online();
+            self.net_on = self.net_up || crate::brick_wifi::radio_on();
             if let Ok(value) = std::fs::read_to_string(slot_power::hw("/sys/class/gpio/gpio243/value")) {
                 match value.trim() {
                     "0" => self.set_brick_mute(false),
@@ -2400,6 +2421,7 @@ impl App {
                     self.battery,
                     self.battery_percent,
                     self.bolt,
+                    self.wifi_face(),
                     self.shelf_clock,
                     out,
                 );

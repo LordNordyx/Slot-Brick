@@ -21,10 +21,14 @@ pub enum Icon {
     Charging,
     Headphones,
     HeadphonesMuted,
+    /// Wi-Fi, as the shelf reports it: on the network, on but not reaching it, and off.
+    Wifi,
+    WifiNoRoute,
+    WifiOff,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 12] = [
+    pub const ALL: [Icon; 15] = [
         Icon::Volume,
         Icon::VolumeZero,
         Icon::VolumeMuted,
@@ -37,6 +41,9 @@ impl Icon {
         Icon::Charging,
         Icon::Headphones,
         Icon::HeadphonesMuted,
+        Icon::Wifi,
+        Icon::WifiNoRoute,
+        Icon::WifiOff,
     ];
 
     pub fn index(self) -> usize {
@@ -57,6 +64,10 @@ impl Icon {
             Icon::Charging => '\u{f0e7}',
             Icon::Headphones => '\u{f025}',
             Icon::HeadphonesMuted => '\u{f07ce}',
+            Icon::Wifi => '\u{f05a9}',
+            // One arc against the full fan above: on, but nothing coming back through it.
+            Icon::WifiNoRoute => '\u{f091f}',
+            Icon::WifiOff => '\u{f05aa}',
         }
     }
 }

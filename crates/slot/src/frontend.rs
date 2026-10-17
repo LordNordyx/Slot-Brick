@@ -367,6 +367,12 @@ impl Frontend {
         let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);
+        // The shelf's Wi-Fi symbol, in its three states; which one shows is the app's to say.
+        let wifi = [Icon::Wifi, Icon::WifiNoRoute, Icon::WifiOff].map(|icon| {
+            let face = icon_face(icon, slot_ui::WIFI_PX, HUD_INK);
+            (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
+        });
+        self.session.app_mut().set_wifi_faces(wifi);
         self.upload_wallpaper(compositor);
     }
 

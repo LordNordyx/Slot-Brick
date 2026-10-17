@@ -58,7 +58,7 @@ pub use label_grid::{
     label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,
 };
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
-pub use footer::{draw_footer, Printed};
+pub use footer::{draw_footer, Printed, WIFI_PX};
 pub use hud::{
     badge_at, ff_badge, FfState, Hud, HudKind, LinkBadge, Millis, ALARM_BAND_H, HUD_ICON_PX,
     HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
