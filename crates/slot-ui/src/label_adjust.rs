@@ -3,10 +3,8 @@
 //! the cart will wear it. The d-pad moves the picture, L and the d-pad stretch it, R evens its
 //! shape back up and Y puts it back. Nothing is cut until A.
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
-use crate::plate::{centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
-use crate::power_menu::{MENU_H, MENU_INK};
+use crate::plate::{centred_hints, hint_face, UndoFace, CAPTION_Y, HINT_H, LEGEND_GAP, LEGEND_Y};
 use crate::slot_chrome::opening;
-use crate::text;
 
 /// The slot is drawn as large as this, and the cart around it at whatever size that comes to:
 /// near enough to see the label properly, with only the lip of plastic round it in view and
@@ -18,10 +16,6 @@ const SLOT_TOP: f32 = 74.0;
 /// The words and the keys sit on a dark band, since the cart runs on behind them.
 const PLATE_TOP: f32 = 352.0;
 const PLATE: [f32; 4] = [0.0, 0.0, 0.0, 0.74];
-const CAPTION_Y: f32 = 374.0;
-const LEGEND_Y: f32 = 427.0;
-const TEXT_PX: f32 = 20.0;
-const TEXT_MIN_PX: f32 = 13.0;
 /// What is outside the slot is still shown, but darkened, so the slot reads at a glance.
 const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.22];
 /// The cart is laid over the picture not quite solid, so what is outside the slot still shows
@@ -94,22 +88,6 @@ impl LabelAdjustView {
             }
         }
     }
-}
-
-pub fn label_adjust_caption_face(words: &str) -> UndoFace {
-    let Some(font) = text::label_font() else {
-        return UndoFace { rgba: Vec::new(), w: 0, h: 0 };
-    };
-    let layout = text::fit(font, words, OUT_W as f32 - 48.0, 1, TEXT_PX, TEXT_MIN_PX);
-    let set = layout
-        .lines
-        .iter()
-        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
-        .fold(0.0, f32::max);
-    let w = (set.ceil() as u32).max(1);
-    let mut rgba = vec![0u8; (w * MENU_H * 4) as usize];
-    text::draw_centred(&mut rgba, w, MENU_H, &layout, MENU_INK);
-    UndoFace { rgba, w, h: MENU_H }
 }
 
 pub fn label_adjust_legend_faces() -> [UndoFace; 5] {

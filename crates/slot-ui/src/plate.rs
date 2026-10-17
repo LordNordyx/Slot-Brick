@@ -15,6 +15,15 @@ const LABEL_MAX_W: f32 = 140.0;
 pub const TITLE_W: u32 = 360;
 pub const TITLE_H: u32 = 24;
 
+/// The footer every screen shares: a line of words saying what is being looked at, and under
+/// it the keys. Screens that have only the keys still hang them at LEGEND_Y.
+pub const CAPTION_Y: f32 = 374.0;
+pub const LEGEND_Y: f32 = 427.0;
+/// The caption's own texture: as tall as a menu row, with the words centred in it.
+const CAPTION_H: u32 = 40;
+const CAPTION_PX: f32 = 20.0;
+const CAPTION_MIN_PX: f32 = 13.0;
+
 const INK: [u8; 3] = [0xf6, 0xf4, 0xef];
 const CAP_INK: [u8; 3] = [0x1a, 0x19, 0x17];
 const KEY_PX: f32 = 14.0;
@@ -151,6 +160,23 @@ fn band_width(label: &str) -> u32 {
         .map(|l| text::line_width(font, l, layout.px, layout.tracking))
         .fold(0.0, f32::max);
     (ink.ceil() as u32).clamp(1, LABEL_MAX_W as u32)
+}
+
+/// A screen's caption: one line, centred, as wide as the screen will take.
+pub fn caption_face(words: &str) -> UndoFace {
+    let Some(font) = text::label_font() else {
+        return UndoFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let layout = text::fit(font, words, OUT_W as f32 - 48.0, 1, CAPTION_PX, CAPTION_MIN_PX);
+    let set = layout
+        .lines
+        .iter()
+        .map(|l| text::line_width(font, l, layout.px, layout.tracking))
+        .fold(0.0, f32::max);
+    let w = (set.ceil() as u32).max(1);
+    let mut rgba = vec![0u8; (w * CAPTION_H * 4) as usize];
+    text::draw_centred(&mut rgba, w, CAPTION_H, &layout, INK);
+    UndoFace { rgba, w, h: CAPTION_H }
 }
 
 pub fn title_face(text: &str) -> UndoFace {

@@ -1,5 +1,5 @@
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
-use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
+use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP, LEGEND_Y};
 use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
 use crate::slot_chrome::{edge, opening};
 use crate::text;
@@ -299,7 +299,6 @@ const BAR_INSET: f32 = 4.0;
 const TYPE_DROP: f32 = 4.0;
 const CARET_GAP: f32 = 14.0;
 const CARET_PX: f32 = 24.0;
-const LEGEND_Y: f32 = 427.0;
 pub const QUICK_SPLIT: f32 = LEGEND_Y - 2.0;
 const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
 

@@ -3,7 +3,7 @@
 //! the right its plastic (colour, finish: Game Boy paks) and shape can be changed. NES and SNES
 //! carts only change shape, as they came in their system's grey. A saves, B puts it all back.
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
-use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP};
+use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, HINT_H, LEGEND_GAP, LEGEND_Y};
 use crate::power_menu::{MENU_H, MENU_INK};
 use crate::shell::{shell_presets, Finish, Shell};
 use crate::slot_chrome::{edge, opening};
@@ -130,7 +130,6 @@ const VALUE_W: f32 = 170.0;
 const TEXT_PX: f32 = 22.0;
 const TEXT_MIN_PX: f32 = 14.0;
 const CARET_GAP: f32 = 8.0;
-const LEGEND_Y: f32 = 427.0;
 const DIM_INK: [u8; 3] = [0x9a, 0x9a, 0xa4];
 /// A key that cannot be pressed just now: there but plainly not for the taking.
 pub const GREYED: f32 = 0.35;

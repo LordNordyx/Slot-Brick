@@ -52,10 +52,10 @@ pub use cart_menu::{
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use label_adjust::{
-    label_adjust_caption_face, label_adjust_legend_faces, slot_stand, LabelAdjustView, Rect,
+    label_adjust_legend_faces, slot_stand, LabelAdjustView, Rect,
 };
 pub use label_grid::{
-    label_grid_caption_face, label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,
+    label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,
 };
 pub use draw::{Draw, TexId, OUT_H, OUT_W};
 pub use footer::{draw_footer, Printed};
@@ -72,8 +72,8 @@ pub use link_art::{
 pub use banner::{banner_face, BADGE_PX, BANNER_H, BANNER_W, BANNER_X, BANNER_Y};
 pub use plate::{
     arrows_hint_face, caret_hint_face, arrows_hint_width, cap_width, centred_hints, hint_face, hint_quad, hint_row,
-    hint_width, title_face, word_face, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP,
-    HINT_EDGE, HINT_GAP, HINT_H, LEGEND_GAP, TITLE_H, TITLE_W,
+    caption_face, hint_width, title_face, word_face, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP,
+    CAPTION_Y, HINT_EDGE, HINT_GAP, HINT_H, LEGEND_GAP, LEGEND_Y, TITLE_H, TITLE_W,
 };
 pub use polaroids::{photo_face, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
 pub use power_menu::{menu_face, PowerChoice, MENU_PAD};

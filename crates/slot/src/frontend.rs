@@ -889,7 +889,7 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
         return;
     }
     let same_picture = app.label_adjust_built().is_some_and(|(built, _)| built == source);
-    let caption = face(compositor, &mut tex.caption, slot_ui::label_adjust_caption_face(&words));
+    let caption = face(compositor, &mut tex.caption, slot_ui::caption_face(&words));
     if same_picture {
         // Only the frame moved: the picture and the cart are the ones already uploaded.
         if let (Some(picture), Some((legend, cart))) = (tex.picture, app.label_adjust_legend()) {
@@ -934,7 +934,7 @@ fn sync_label_grid(app: &mut App, compositor: &mut Compositor, tex: &mut LabelGr
     let fresh = app.label_grid_built() == Some((page, paths.len()));
     if fresh {
         if app.label_grid_caption_built() != Some(words.as_str()) {
-            let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
+            let caption = face(compositor, &mut tex.caption, slot_ui::caption_face(&words));
             app.set_label_grid_caption(words, caption);
         }
         return;
@@ -943,7 +943,7 @@ fn sync_label_grid(app: &mut App, compositor: &mut Compositor, tex: &mut LabelGr
     let heading =
         if query.is_empty() { "FIND A LABEL".to_string() } else { format!("FIND A LABEL \u{b7} {query}") };
     let title = face(compositor, &mut tex.title, slot_ui::title_face(&heading));
-    let caption = face(compositor, &mut tex.caption, slot_ui::label_grid_caption_face(&words));
+    let caption = face(compositor, &mut tex.caption, slot_ui::caption_face(&words));
     let mut legend = [(caption.0, 0u32); 3];
     for (i, hint) in slot_ui::label_grid_legend_faces().into_iter().enumerate() {
         let (id, w, _) = face(compositor, &mut tex.legend[i], hint);
