@@ -56,6 +56,7 @@ pub struct Frontend {
     /// The label grid's textures, kept and written over as its pages turn.
     label_grid_tex: LabelGridTex,
     label_adjust_tex: LabelAdjustTex,
+    peel_tex: PeelTex,
     cart_faces: CartFaces,
     rebuild: Option<Rebuild>,
     rebuild_faces: RebuildFaces,
@@ -149,6 +150,7 @@ impl Frontend {
             faces: FaceBuilder::spawn(),
             label_grid_tex: LabelGridTex::default(),
             label_adjust_tex: LabelAdjustTex::default(),
+            peel_tex: PeelTex::default(),
             cart_faces,
             rebuild,
             rebuild_faces: RebuildFaces::default(),
@@ -530,6 +532,7 @@ impl Frontend {
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
         sync_label_adjust(self.session.app_mut(), compositor, &mut self.label_adjust_tex);
+        sync_peel(self.session.app_mut(), compositor, &mut self.peel_tex);
         sync_core_picker(
             self.session.app_mut(),
             compositor,
@@ -924,6 +927,24 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
         legend[i] = (id, lw);
     }
     app.set_label_adjust_faces((source, words), picture, cart_tex, caption, legend);
+}
+
+/// The sticker's curls and its shadow: the same textures every time, written over.
+#[derive(Default)]
+struct PeelTex {
+    curls: Vec<Option<TexId>>,
+    shadow: Option<TexId>,
+}
+
+/// A label just kept: its curls, baked off the UI thread, go up once, which sets it off.
+fn sync_peel(app: &mut App, compositor: &mut Compositor, tex: &mut PeelTex) {
+    let Some((curls, shadow)) = app.peel_unbaked() else {
+        return;
+    };
+    tex.curls.resize(curls.len().max(tex.curls.len()), None);
+    let ids = curls.iter().zip(&mut tex.curls).map(|(c, at)| upload_rgba(compositor, at, c.w, c.h, &c.rgba)).collect();
+    let shadow = upload_rgba(compositor, &mut tex.shadow, shadow.w, shadow.h, &shadow.rgba);
+    app.set_peel_faces(ids, shadow);
 }
 
 /// How large the picture being framed is kept: enough to zoom into, and no larger.

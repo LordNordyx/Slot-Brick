@@ -18,7 +18,7 @@ use slot_ui::{
     draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at, ClockPicker,
     Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids, PowerChoice,
     QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast,
-    CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT,
+    CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT, PEEL_MS,
     SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
@@ -307,6 +307,8 @@ pub struct App {
     label_grid_faces: Option<LabelGridFaces>,
     /// The picture being framed by hand, and the words under it.
     label_adjust_faces: Option<LabelAdjustFaces>,
+    /// A label just kept, going on its cart like a sticker.
+    peel: Option<Peel>,
     core_board_face: Option<TexId>,
     core_lid_face: Option<TexId>,
     core_faces_stem: Option<String>,
@@ -469,6 +471,7 @@ impl App {
             label_pick: None,
             label_grid_faces: None,
             label_adjust_faces: None,
+            peel: None,
             core_board_face: None,
             core_lid_face: None,
             core_faces_stem: None,
@@ -1465,6 +1468,8 @@ impl App {
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
+                // Like the core picker's lid closing: the sticker is never cut short.
+                _ if self.peel.is_some() => {}
                 _ if self.label_adjust_open() => self.label_adjust_input(action),
                 _ if self.label_grid_open() => self.label_grid_input(action),
                 _ if self.cart_menu.is_some() => self.cart_menu_input(action),
@@ -1904,6 +1909,7 @@ impl App {
         }
         self.poll_label_pick();
         self.tick_label_adjust();
+        self.tick_peel();
         if !self.on_shelf() {
             self.shelf_mut().release_hold();
         }
@@ -2481,6 +2487,9 @@ impl App {
         }
         if self.label_adjust_open() {
             self.draw_label_adjust(out);
+        }
+        if let Some(peel) = &self.peel {
+            self.draw_peel(peel, out);
         }
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
@@ -3341,6 +3350,9 @@ impl App {
 
     /// Cuts the frame out of the picture and wears it, then goes back to the cart menu.
     fn keep_framed_label(&mut self, source: &Path, frame: crate::cart_art::Frame) {
+        // Where the slot was on the framing screen, read before the framing ends.
+        let framing = self.label_adjust_layout();
+        let slot = self.label_pick.as_ref().and_then(|p| p.adjust.as_ref()).map(|a| (a.face, a.slot));
         let Some(pick) = self.label_pick.take() else {
             return;
         };
@@ -3351,6 +3363,13 @@ impl App {
             return;
         };
         (cart.label, cart.famicom_label) = pick.original.clone();
+        // From the cart menu it goes on as a sticker; from the core picker, as it always has.
+        if let (Some(framing), Some(slot), true) = (framing, slot, self.cart_menu.is_some()) {
+            if let Some(peel) = Peel::start(&root, cart.clone(), source, frame, framing, slot, self.now()) {
+                self.peel = Some(peel);
+                return;
+            }
+        }
         match crate::cart_art::keep_framed(&root, &cart, source, frame) {
             Ok(kept) => eprintln!("slot: label: kept {} for {}", kept.display(), cart.stem),
             Err(e) => {
@@ -3360,6 +3379,80 @@ impl App {
         }
         self.adopt_label(cart.platform, &cart.stem, None);
         crate::cart_art::forget_choices(&root);
+    }
+
+    /// The sticker: the label written and its curls baked, then its flight, then the cart's
+    /// own face, with the new label, takes over from it once that face is ready.
+    fn tick_peel(&mut self) {
+        let now = self.now();
+        let Some(peel) = &mut self.peel else {
+            return;
+        };
+        let kept = peel.poll();
+        let (stem, platform, started, asked) = (peel.stem.clone(), peel.platform, peel.started, peel.asked);
+        // Nothing to fly: the label could not be written or read back.
+        let nothing = peel.baking.is_none() && peel.baked.is_none() && peel.faces.is_none();
+        if let Some(kept) = kept {
+            match kept {
+                Ok(kept) => eprintln!("slot: label: kept {} for {stem}", kept.display()),
+                Err(e) => {
+                    eprintln!("slot: label: {e}");
+                    self.card_failing.store(true, Ordering::Relaxed);
+                }
+            }
+            // Read back from the card: the label kept, or the one it had if writing failed.
+            self.adopt_label(platform, &stem, None);
+            if let Some(root) = &self.root {
+                crate::cart_art::forget_choices(root);
+            }
+        }
+        let face_ready = self.shelf_index_of(&stem).is_none_or(|i| self.shelf().face(i).is_some());
+        let over = match started {
+            // Flat on the cart, and the cart's own face ready to take over from it.
+            Some(at) => {
+                let t = now.saturating_sub(at);
+                t >= PEEL_MS && (face_ready || t >= PEEL_MS + PEEL_WAIT_MS)
+            }
+            None => nothing || now.saturating_sub(asked) >= PEEL_WAIT_MS,
+        };
+        if over {
+            self.peel = None;
+        }
+    }
+
+    /// The sticker's curls, baked and waiting to be uploaded by the frontend.
+    pub fn peel_unbaked(&mut self) -> Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)> {
+        self.peel.as_mut()?.baked.take()
+    }
+
+    /// The curls uploaded: the sticker sets off.
+    pub fn set_peel_faces(&mut self, faces: Vec<TexId>, shadow: TexId) {
+        let now = self.now();
+        if let Some(peel) = &mut self.peel {
+            peel.faces = Some((faces, shadow));
+            peel.started = Some(now);
+        }
+    }
+
+    fn draw_peel(&self, peel: &Peel, out: &mut Vec<Draw>) {
+        let t = peel.started.map_or(0, |at| self.now().saturating_sub(at));
+        let pose = slot_ui::peel_pose(t, peel.from, peel.to);
+        if let (true, Some(faces)) = (pose.backdrop > 0.0, &self.label_adjust_faces) {
+            let (stand, frame, picture) = peel.framing;
+            let at = out.len();
+            slot_ui::LabelAdjustView {
+                picture: Some((faces.picture, picture.0, picture.1, picture.2, picture.3)),
+                cart: Some((faces.cart, stand.0, stand.1, stand.2, stand.3)),
+                frame,
+                caption: Some(faces.caption),
+                legend: Some(faces.legend),
+            }
+            .draw(out);
+            slot_ui::fade_from(out, at, pose.backdrop);
+        }
+        if let (Some((faces, shadow)), Some(_)) = (&peel.faces, peel.started) {
+            slot_ui::draw_peel(&pose, faces, *shadow, peel.label, out);
+        }
     }
 
     /// The label being framed is in front of the grid.
@@ -3624,7 +3717,10 @@ impl App {
     fn draw_cart_menu(&self, menu: &CartMenu, out: &mut Vec<Draw>) {
         let index = self.shelf_index_of(&menu.stem);
         let cart = index.and_then(|i| self.shelf().carts.get(i));
-        let face = index.and_then(|i| self.shelf().face(i)).zip(cart).map(|(tex, cart)| {
+        // While a sticker is on its way the slot is clear, for the sticker to land in.
+        let clear = self.peel.as_ref().filter(|p| p.stem == menu.stem).and(self.label_adjust_faces.as_ref());
+        let tex = clear.map(|f| f.cart).or_else(|| index.and_then(|i| self.shelf().face(i)));
+        let face = tex.zip(cart).map(|(tex, cart)| {
             let (w, h) = slot_ui::cart_box(cart.platform);
             (tex, w, h)
         });
@@ -4688,6 +4784,101 @@ struct LabelPick {
     grid: bool,
     /// The label picked is being framed by hand, in front of the grid.
     adjust: Option<Adjust>,
+}
+
+/// How long the sticker waits for its curls, or the cart's new face, before going without.
+const PEEL_WAIT_MS: Millis = 2_000;
+
+/// What the card write sends back: how keeping the label went, and the sticker's curls and
+/// shadow when it could be read back.
+type PeelBaked = (std::io::Result<PathBuf>, Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)>);
+
+/// A label kept on the framing screen, going on its cart in the cart menu like a sticker. The
+/// label is written and its curls baked off the UI thread, which the framing screen stays up
+/// for; then it flies.
+struct Peel {
+    stem: String,
+    platform: Platform,
+    /// The framing screen as it was left, faded out under the sticker: where the cart stood,
+    /// its slot and the picture.
+    framing: (slot_ui::Rect, slot_ui::Rect, slot_ui::Rect),
+    /// The slot on the framing screen, and the cart's slot in the cart menu.
+    from: slot_ui::Rect,
+    to: slot_ui::Rect,
+    /// The label's size in pixels, which its curls are baked at.
+    label: (u32, u32),
+    baking: Option<std::sync::mpsc::Receiver<PeelBaked>>,
+    baked: Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)>,
+    faces: Option<(Vec<TexId>, TexId)>,
+    asked: Millis,
+    started: Option<Millis>,
+}
+
+impl Peel {
+    /// None when no thread can be had for the card write: the label is then kept as before.
+    fn start(
+        root: &Path,
+        cart: Cart,
+        source: &Path,
+        frame: crate::cart_art::Frame,
+        framing: (slot_ui::Rect, slot_ui::Rect, slot_ui::Rect),
+        (face, slot): ((u32, u32), (u32, u32, u32, u32)),
+        now: Millis,
+    ) -> Option<Self> {
+        let (bw, bh) = slot_ui::cart_box(cart.platform);
+        let (x, y, w, h) = slot_ui::cart_menu_cart_at(bw, bh);
+        let (kx, ky) = (w / face.0.max(1) as f32, h / face.1.max(1) as f32);
+        let to = (x + slot.0 as f32 * kx, y + slot.1 as f32 * ky, slot.2 as f32 * kx, slot.3 as f32 * ky);
+        let label = slot_ui::label_size(&cart);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (stem, platform) = (cart.stem.clone(), cart.platform);
+        let (root, source) = (root.to_path_buf(), source.to_path_buf());
+        let spawned = std::thread::Builder::new().name("slot-label-peel".into()).spawn(move || {
+            let kept = crate::cart_art::keep_framed(&root, &cart, &source, frame);
+            // The label as the cart will wear it, read back from where it was written.
+            let curls = kept.as_ref().ok().and_then(|_| {
+                let mut worn = cart.clone();
+                (worn.label, worn.famicom_label) = slot_store::labels_of(&root, cart.platform, &cart.stem);
+                let art = slot_ui::fitted_label(&worn, label.0, label.1)?;
+                let step = |i: usize| i as f32 / (slot_ui::PEEL_STEPS - 1) as f32;
+                let faces = (0..slot_ui::PEEL_STEPS).map(|i| slot_ui::peel_face(&art, label.0, label.1, step(i))).collect();
+                Some((faces, slot_ui::peel_shadow_face(label.0, label.1)))
+            });
+            let _ = tx.send((kept, curls));
+        });
+        if let Err(e) = spawned {
+            eprintln!("slot: label: {e}");
+            return None;
+        }
+        Some(Peel {
+            stem,
+            platform,
+            framing,
+            from: framing.1,
+            to,
+            label,
+            baking: Some(rx),
+            baked: None,
+            faces: None,
+            asked: now,
+            started: None,
+        })
+    }
+
+    /// How keeping the label went, once the card write is done.
+    fn poll(&mut self) -> Option<std::io::Result<PathBuf>> {
+        let rx = self.baking.as_ref()?;
+        let (kept, curls) = match rx.try_recv() {
+            Ok(done) => done,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                (Err(std::io::Error::other("the label was never written")), None)
+            }
+        };
+        self.baking = None;
+        self.baked = curls;
+        Some(kept)
+    }
 }
 
 /// Framing a picked label. What is held is the piece of the picture the frame covers, in the

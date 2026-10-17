@@ -1,0 +1,46 @@
+# A label framed by hand goes on its cart like a sticker: it peels off the framing screen with
+# a corner curled up, flies to the cart in the cart menu and is smoothed down onto it.
+# The search finds the scenario's made-up label; the screens in flight are grabbed, not
+# compared, as they depend on when they are caught.
+press a
+phase Shelf
+set online 1
+# The GB shelf: START on a GBA cart opens the core picker instead.
+press r1
+idle
+press start
+idle
+grab menu-before
+press y
+idle
+press start
+idle
+grab grid
+press a
+idle
+grab framing
+press a 40
+grab peel-1
+wait 70
+grab peel-2
+wait 70
+grab peel-3
+wait 70
+grab peel-4
+wait 70
+grab peel-5
+wait 70
+grab peel-6
+wait 70
+grab peel-7
+wait 70
+grab peel-8
+wait 70
+grab peel-9
+idle
+grab menu-after
+# Kept: B leaves the menu with the cart wearing it.
+press b
+phase Shelf
+idle
+grab shelf-after

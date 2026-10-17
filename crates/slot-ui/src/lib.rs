@@ -15,6 +15,7 @@ mod footer;
 mod hud;
 mod icon;
 mod link_art;
+mod peel;
 mod plate;
 mod polaroids;
 mod power_menu;
@@ -47,12 +48,15 @@ pub use cart::{
     NES_LABEL_Y, SNES_CART_H, SNES_CART_W, SNES_LABEL_H, SNES_LABEL_W, SNES_LABEL_X, SNES_LABEL_Y,
 };
 pub use cart_menu::{
-    cart_menu_label_face, cart_menu_legend_faces, GREYED, cart_menu_value_face, colour_choices,
+    cart_menu_cart_at, cart_menu_label_face, cart_menu_legend_faces, GREYED, cart_menu_value_face, colour_choices,
     finish_name, CartMenuFaces, CartMenuView, CartRow, FINISHES, NES_SHAPES, SHAPES, SNES_SHAPES,
 };
 pub use clock::{clock_label, date_time_text, hhmm, set_clock_hint_face, ClockPicker, Field};
 pub use label_adjust::{
     label_adjust_legend_faces, slot_stand, LabelAdjustView, Rect,
+};
+pub use peel::{
+    draw_peel, fade_from, peel_face, peel_pose, peel_shadow_face, peel_step, PeelPose, PEEL_MS, PEEL_STEPS,
 };
 pub use label_grid::{
     label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,

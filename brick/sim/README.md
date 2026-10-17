@@ -116,6 +116,7 @@ task sim:unit                 # the sim build's own unit tests
 | `set KNOB VALUE` | as the HTTP knobs |
 | `led FILE VALUE` | fail unless an LED file holds that value, eg `led effect_rgb_hex_m FFFFFF` |
 | `snap NAME` | settle, save the screen, and compare it with the golden |
+| `grab NAME` | save the screen as it is this moment, unsettled and with no golden: for animations |
 
 Each scenario starts on a fresh card with six stand-in carts and the clock fixed at
 2026-01-01 00:00, so a run is the same every time. Screenshots land in
@@ -142,6 +143,8 @@ A screen whose content comes off the network cannot have one at all.
 - **A battery of 5% or less is a real shutdown**, which ends the run. The battery is read every
   10 s, so a scenario needs `wait 10500` after `set battery` before the Brick has noticed.
 - **L1/R1 change the picture mode** inside a GB, GBC or NES game, and switch shelves outside one.
+- **In a scenario, a label search never leaves the machine**: it finds one made-up label, so the
+  label screens can be walked through. Under `serve` it is the real search.
 - **Cart art and label searches really go to the internet.** They need DNS that can answer for
   `art.slot-cfw.fyi` and `images.launchbox-app.com`. Where the machine's resolver cannot — a
   resolver that does not handle the `.fyi` TLD is the usual cause — `serve` looks the hosts up

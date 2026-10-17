@@ -140,17 +140,8 @@ impl CartMenuView<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
         out.push(Draw::Rect { x: 0.0, y: 0.0, w: OUT_W as f32, h: OUT_H as f32, colour: opening() });
         if let Some((tex, w, h)) = self.cart {
-            let [bx, by, bw, bh] = CART_BOX;
-            let k = (bw / w as f32).min(bh / h as f32);
-            let (cw, ch) = (w as f32 * k, h as f32 * k);
-            out.push(Draw::Tex {
-                x: (bx + (bw - cw) / 2.0).round(),
-                y: (by + (bh - ch) / 2.0).round(),
-                w: cw,
-                h: ch,
-                tex,
-                alpha: 1.0,
-            });
+            let (x, y, w, h) = cart_menu_cart_at(w, h);
+            out.push(Draw::Tex { x, y, w, h, tex, alpha: 1.0 });
         }
         let top = rows_top(self.rows.len());
         if let Some(at) = self.rows.iter().position(|r| *r == self.row) {
@@ -217,6 +208,14 @@ impl CartMenuView<'_> {
             });
         }
     }
+}
+
+/// Where a cart `w` by `h` stands in the menu: as large as fits left of the rows.
+pub fn cart_menu_cart_at(w: u32, h: u32) -> crate::label_adjust::Rect {
+    let [bx, by, bw, bh] = CART_BOX;
+    let k = (bw / w.max(1) as f32).min(bh / h.max(1) as f32);
+    let (cw, ch) = (w as f32 * k, h as f32 * k);
+    ((bx + (bw - cw) / 2.0).round(), (by + (bh - ch) / 2.0).round(), cw, ch)
 }
 
 fn rows_top(rows: usize) -> f32 {

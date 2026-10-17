@@ -1033,7 +1033,50 @@ pub struct LabelSearch {
 impl LabelSearch {
     /// Labels for `cart`, found by what was typed among every game of its console.
     pub fn start(root: PathBuf, cart: Cart, query: String) -> Self {
+        // A sim scenario never goes to the internet: it is handed a made-up label instead.
+        #[cfg(feature = "sim")]
+        if std::env::var_os("SLOT_SIM_SCRIPT").is_some() {
+            return Self::stand_in(root, cart);
+        }
         Self::start_at(root, cart, query, Servers { labels: SLOT_ART.into(), photos: PHOTOS.into() })
+    }
+
+    /// One label, drawn here: a striped picture with a disc on it, framed in its middle.
+    #[cfg(feature = "sim")]
+    fn stand_in(root: PathBuf, cart: Cart) -> Self {
+        let (tx, rx) = mpsc::channel();
+        let offered = (|| {
+            let (pw, ph) = (480u32, 360u32);
+            let mut rgba = Vec::with_capacity((pw * ph * 4) as usize);
+            for y in 0..ph {
+                for x in 0..pw {
+                    let (dx, dy) = (x as f32 - 240.0, y as f32 - 180.0);
+                    let px = match () {
+                        _ if dx * dx + dy * dy < 90.0 * 90.0 => [30, 30, 46],
+                        _ if (x + y) / 40 % 2 == 0 => [226, 72, 58],
+                        _ => [246, 190, 64],
+                    };
+                    rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                }
+            }
+            let whole = encode(&rgba, pw, ph)?;
+            let (lw, lh) = slot_ui::label_size(&cart);
+            let w = 360u32;
+            let h = (w * lh / lw.max(1)).clamp(1, ph - 20);
+            let frame = Frame { x: ((pw - w) / 2) as i32, y: ((ph - h) / 2) as i32, w, h };
+            let cut = cut_to(&whole, frame, (lw, lh))?;
+            let dir = root.join(PICK_DIR).join("sim");
+            std::fs::create_dir_all(&dir).map_err(|_| "cannot write to the card")?;
+            let (path, source) = (dir.join("0.png"), dir.join("0-whole.png"));
+            atomic_write(&path, &cut).map_err(|_| "cannot write to the card")?;
+            atomic_write(&source, &whole).map_err(|_| "cannot write to the card")?;
+            Ok::<_, &str>(Choice { path, caption: "Sim Label (Stand-in)".into(), source, frame })
+        })();
+        let done = offered.map(|choice| {
+            let _ = tx.send(PickNews::Found(choice));
+        });
+        let _ = tx.send(PickNews::Done(done.map_err(str::to_string)));
+        LabelSearch { rx, cancel: Arc::new(AtomicBool::new(false)), looked_at: Arc::new(AtomicUsize::new(0)) }
     }
 
     fn start_at(root: PathBuf, cart: Cart, query: String, servers: Servers) -> Self {

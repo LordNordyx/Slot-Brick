@@ -167,9 +167,24 @@ impl Step<'_> {
                 }
             }
             "snap" => return self.snap(words.get(1).ok_or("needs a name")?),
+            "grab" => self.grab(words.get(1).ok_or("needs a name")?)?,
             other => return Err(format!("no step {other:?}")),
         }
         Ok(None)
+    }
+
+    /// The screen now, without waiting for it to settle and with no golden: a moment out of a
+    /// moving screen, to look at.
+    fn grab(&self, name: &str) -> Result<(), String> {
+        if name.contains(['/', '\\', '.']) {
+            return Err("a screenshot name is a bare name, eg shelf".into());
+        }
+        let rgba = self
+            .shared
+            .screenshot(Duration::from_secs(5))
+            .ok_or("no screenshot came back")?;
+        let shot = self.out.join(format!("{name}.png"));
+        std::fs::write(&shot, image::encode(PANEL.0, PANEL.1, &rgba)).map_err(|e| format!("{}: {e}", shot.display()))
     }
 
     fn snap(&self, name: &str) -> Result<Option<String>, String> {
