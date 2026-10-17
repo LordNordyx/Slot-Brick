@@ -202,6 +202,21 @@ Brick-specific code is gated behind the `brick` Cargo feature.
 - **Change history:** [`brick/CHANGELOG.md`](brick/CHANGELOG.md)
 - **Dev builds:** every change to `main` is built automatically and published as the [Dev build](../../releases/tag/dev) release, replacing the previous one.
 
+### Making a release
+
+Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release. Pushing a tag
+needs write access, so only maintainers can start one. Before tagging:
+
+1. Put the version at the top of [`brick/README.md`](brick/README.md) — it is what the card
+   says it is.
+2. Move the `## Unreleased` notes in [`brick/CHANGELOG.md`](brick/CHANGELOG.md) under a
+   `## vX.Y` heading. Those notes become the release's text, so write them for players.
+3. `git tag vX.Y && git push origin vX.Y`, with the tag on `main`.
+
+The run refuses to publish if the tag is not on `main`, if the card's README names another
+version, if the changelog has no section for it, or if that release already exists — and it
+runs the simulator's unit tests and scenarios before it builds anything.
+
 ## Credits
 
 | Project / contributor | Contribution |

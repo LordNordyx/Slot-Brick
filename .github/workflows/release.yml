@@ -1,0 +1,122 @@
+# Pushing a vX.Y tag builds the SD card from that tag and publishes it as a release people can
+# download. Pushing a tag needs write access to this repository, so only the people who have it
+# can start a release. The Dev build release is left alone.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Only the release is written; nothing else in the repository.
+permissions:
+  contents: write
+
+# One release at a time, and never cancelled halfway: a half-made release is worse than a slow one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Forks' tags build nothing and release nothing.
+    if: github.repository == 'LordNordyx/Slot-Brick'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      # Pinned to commits, so a moved tag cannot change what runs with write access.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          # The whole history: the checks below need main and the other tags.
+          fetch-depth: 0
+
+      # Everything that would make a bad release is caught here, before anything is built.
+      - name: Check the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          case "$TAG" in
+              v[0-9]*) ;;
+              *) echo "::error::$TAG is not a vX.Y tag"; exit 1 ;;
+          esac
+
+          # A tag off some side branch would ship something that was never on main.
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error::$TAG is not on main"
+              exit 1
+          fi
+
+          # The card's README carries the version people see on the device.
+          if ! head -1 brick/README.md | grep -qF -- "$TAG"; then
+              echo "::error::brick/README.md says $(head -1 brick/README.md), not $TAG"
+              exit 1
+          fi
+
+          # An empty release is one nobody can read.
+          bash brick/release-notes.sh "$TAG" > notes.md
+          if [ ! -s notes.md ]; then
+              echo "::error::brick/CHANGELOG.md has no '## $TAG' section"
+              exit 1
+          fi
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+              echo "::error::a $TAG release already exists"
+              exit 1
+          fi
+
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            .docker-cache/cargo
+            target-sim
+          key: sim-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/sim/Dockerfile', 'brick/sim/build-cores.sh', 'vendor/*-src.tar.gz', 'cores/*/*.patch') }}
+          restore-keys: sim-
+
+      # A release goes to people's devices, so it is tested before it is built.
+      - name: Unit tests
+        run: sh brick/sim.sh unit
+
+      - name: Scenarios
+        run: sh brick/sim.sh test
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sim-screens
+          path: target-sim/out
+          if-no-files-found: ignore
+
+      # Not .docker-cache/cargo: the step above holds that one, and two caches saving the
+      # same directory would write over each other.
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            target
+            brick/bootlogo-tool/target
+          key: release-brick-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/bootlogo-tool/Cargo.lock', 'brick/Dockerfile') }}
+          restore-keys: |
+            release-brick-
+            brick-
+
+      - name: Build the card
+        run: sh brick/docker-build.sh
+
+      - name: Zip the card
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python3 brick/zip-card.py dist-brick "slot-brick-$TAG-sd-card.zip"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          bash brick/release-notes.sh "$TAG" > notes.md
+          gh release create "$TAG" "slot-brick-$TAG-sd-card.zip" \
+            --title "$TAG" --notes-file notes.md --verify-tag
