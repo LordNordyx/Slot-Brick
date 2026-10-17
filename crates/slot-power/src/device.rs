@@ -435,14 +435,14 @@ impl Platform for DevicePlatform {
                 let (r, g, b) = match state {
                     LedState::Off => (0, 0, 0),
                     LedState::Running | LedState::Charged => (0, 255, 0),
-                    LedState::Low => (255, 0, 0),
+                    LedState::Low | LedState::VeryLow => (255, 0, 0),
                     LedState::Charging => (255, 140, 0),
                 };
                 let _ = fs::write(dir.join("multi_intensity"), format!("{r} {g} {b}\n"));
                 let _ = fs::write(dir.join("brightness"), "255\n");
             }
             Led::Mono { dir, max } => {
-                let on = !matches!(state, LedState::Off | LedState::Low);
+                let on = !matches!(state, LedState::Off | LedState::Low | LedState::VeryLow);
                 let value = if on { *max } else { 0 };
                 let _ = fs::write(dir.join("brightness"), format!("{value}\n"));
             }

@@ -56,6 +56,9 @@ const BATTERY_POLL_MS: Millis = 10_000;
 const CHARGE_POLL_MS: Millis = 1_000;
 const HEADPHONES_POLL_MS: Millis = 500;
 
+#[cfg(feature = "brick")]
+const BATTERY_LOW: u8 = 15;
+#[cfg(not(feature = "brick"))]
 const BATTERY_LOW: u8 = 20;
 
 pub const UNDO_GRACE_MS: Millis = 30_000;
@@ -2115,6 +2118,8 @@ impl App {
         match b.charge {
             Charge::Charging => LedState::Charging,
             Charge::Full => LedState::Charged,
+            #[cfg(feature = "brick")]
+            _ if b.percent <= 10 => LedState::VeryLow,
             _ if b.percent <= BATTERY_LOW => LedState::Low,
             _ => LedState::Running,
         }
@@ -2126,6 +2131,13 @@ impl App {
         }
         if self.last_led == Some(state) {
             return;
+        }
+        #[cfg(feature = "brick")]
+        if let Some(leds) = &mut self.brick_leds {
+            if let Err(e) = leds.set_power_state(state) {
+                eprintln!("slot: battery LEDs: {e}");
+                return;
+            }
         }
         self.last_led = Some(state);
         if let Some(power) = self.power.as_mut() {

@@ -253,6 +253,8 @@ fn a_multicolour_led_gets_a_colour_per_state() {
     let amber = read(&d, "power/multi_intensity");
     p.set_led(LedState::Low);
     let red = read(&d, "power/multi_intensity");
+    p.set_led(LedState::VeryLow);
+    assert_eq!(read(&d, "power/multi_intensity"), "255 0 0");
     p.set_led(LedState::Running);
     let green = read(&d, "power/multi_intensity");
     assert_ne!(amber, red);
@@ -274,6 +276,8 @@ fn a_mono_led_is_on_except_when_the_battery_is_low() {
     p.set_led(LedState::Charging);
     assert_eq!(read(&d, "power/brightness"), "255");
     p.set_led(LedState::Low);
+    assert_eq!(read(&d, "power/brightness"), "0");
+    p.set_led(LedState::VeryLow);
     assert_eq!(read(&d, "power/brightness"), "0");
 }
 

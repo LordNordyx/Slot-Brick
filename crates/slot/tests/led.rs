@@ -38,31 +38,32 @@ fn a_flat_battery_that_is_not_charging_reads_low() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let (mut a, charge, percent) = app_playing_with_charge(d.path(), "Emerald");
     charge.store(1, Ordering::Relaxed);
-    percent.store(10, Ordering::Relaxed);
+    percent.store(13, Ordering::Relaxed);
     a.tick_ms(10_000);
     assert_eq!(a.led_state(), LedState::Low);
 }
 
 #[test]
-fn the_low_threshold_is_twenty_percent_not_just_a_number_comfortably_below_it() {
+fn low_battery_warning_starts_at_the_platform_threshold() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let (mut a, charge, percent) = app_playing_with_charge(d.path(), "Emerald");
     charge.store(1, Ordering::Relaxed);
 
-    percent.store(20, Ordering::Relaxed);
+    let threshold = if cfg!(feature = "brick") { 15 } else { 20 };
+    percent.store(threshold, Ordering::Relaxed);
     a.tick_ms(10_000);
     assert_eq!(
         a.led_state(),
         LedState::Low,
-        "20% is still at the threshold"
+        "the threshold must trigger the warning"
     );
 
-    percent.store(21, Ordering::Relaxed);
+    percent.store(threshold + 1, Ordering::Relaxed);
     a.tick_ms(20_000);
     assert_eq!(
         a.led_state(),
         LedState::Running,
-        "21% is one point above the threshold"
+        "one point above the threshold must not trigger the warning"
     );
 }
 
@@ -71,6 +72,37 @@ fn no_reading_yet_reads_running_not_off() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let a = app_playing_in(d.path(), "Emerald");
     assert_eq!(a.led_state(), LedState::Running);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn brick_changes_warning_at_fifteen_and_ten_percent_and_clears_on_charge() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let (mut a, charge, percent, led, _) = app_playing_with_led(d.path(), "Emerald");
+    charge.store(1, Ordering::Relaxed);
+    let mut now = 0;
+    for (percent_value, state, code) in [
+        (16, LedState::Running, 1),
+        (15, LedState::Low, 2),
+        (11, LedState::Low, 2),
+        (10, LedState::VeryLow, 5),
+        (9, LedState::VeryLow, 5),
+        (11, LedState::Low, 2),
+        (16, LedState::Running, 1),
+        (10, LedState::VeryLow, 5),
+    ] {
+        percent.store(percent_value, Ordering::Relaxed);
+        now += 10_000;
+        a.tick_ms(now);
+        assert_eq!(a.led_state(), state);
+        assert_eq!(led.load(Ordering::Relaxed), code);
+    }
+    charge.store(2, Ordering::Relaxed);
+    a.tick_ms(now + 1_000);
+    assert_eq!(led.load(Ordering::Relaxed), 3);
+    charge.store(1, Ordering::Relaxed);
+    a.tick_ms(now + 2_000);
+    assert_eq!(led.load(Ordering::Relaxed), 5);
 }
 
 #[test]

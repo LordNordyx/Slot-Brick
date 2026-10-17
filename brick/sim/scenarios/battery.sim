@@ -1,7 +1,69 @@
-# The status bar follows the battery and the charger.
+# The normal event loop drives the warning, including with decorative LEDs off.
 press a
 phase Shelf
-set battery 10  # 5 % or less shuts the Brick down
-wait 10500  # the battery is read every 10 s
+set battery 16
+wait 10500
+led effect_f1 4
+set battery 15
+wait 10500
+led effect_rgb_hex_f1 FF0000
+led effect_rgb_hex_f2 FF0000
+led effect_f1 4
+led effect_f2 4
+led max_scale_f1f2 20
+led effect_rgb_hex_m FFFFFF
+# The LED shortcut is available during gameplay.
+press l1
+wait 1200
+press l1
+wait 1200
+press l1
+wait 1200
+press l1
+press a
+phase Playing 20000
+set battery 11
+wait 10500
+led effect_f1 4
+led effect_rgb_hex_f1 FF0000
+set battery 10
+wait 10500
+led effect_f1 5
+led effect_f2 5
+led effect_duration_f1 500
+led effect_duration_f2 500
+down select
+press b
+up select
+led max_scale 0
+led max_scale_lr 0
+led max_scale_f1f2 20
+led effect_f1 5
 set charging 1
-wait 10500  # the battery is read every 10 s
+wait 1500
+led max_scale_f1f2 0
+led effect_f1 4
+set charging 0
+wait 1500
+led effect_f1 5
+led max_scale_f1f2 20
+press power
+phase Doze
+led effect_enable 0
+led max_scale_f1f2 0
+set charging 1
+wait 1500
+led effect_enable 0
+press power
+phase Playing
+wait 1500
+led effect_f1 4
+led max_scale_f1f2 0
+set charging 0
+wait 1500
+led effect_f1 5
+set battery 11
+wait 10500
+led effect_f1 4
+led effect_rgb_hex_f1 FF0000
+led max_scale_f1f2 20
