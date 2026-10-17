@@ -3421,8 +3421,9 @@ impl App {
         let kept = peel.poll();
         let (stem, platform, started, asked) = (peel.stem.clone(), peel.platform, peel.started, peel.asked);
         let peel_on_picker = peel.picker;
-        // Nothing to fly: the label could not be written or read back.
-        let nothing = peel.baking.is_none() && peel.baked.is_none() && peel.faces.is_none();
+        // Nothing to fly: the label could not be cut, so there are no curls.
+        let nothing = peel.curled && peel.baked.is_none() && peel.faces.is_none();
+        let written = peel.written;
         if let Some(kept) = kept {
             match kept {
                 Ok(kept) => eprintln!("slot: label: kept {} for {stem}", kept.display()),
@@ -3447,11 +3448,12 @@ impl App {
         };
         let over = match started {
             // Flat on the cart, and the cart's own face ready to take over from it.
+            // The card is written while it flies; if that takes longer, it waits on the cart.
             Some(at) => {
                 let t = now.saturating_sub(at);
-                t >= PEEL_MS && (face_ready || t >= PEEL_MS + PEEL_WAIT_MS)
+                t >= PEEL_MS && ((written && face_ready) || t >= PEEL_MS + PEEL_WAIT_MS)
             }
-            None => nothing || now.saturating_sub(asked) >= PEEL_WAIT_MS,
+            None => (nothing && written) || now.saturating_sub(asked) >= PEEL_WAIT_MS,
         };
         if over {
             self.peel = None;
@@ -3480,17 +3482,18 @@ impl App {
     }
 
     /// The curls uploaded: the sticker sets off.
-    pub fn set_peel_faces(&mut self, faces: Vec<TexId>, shadow: TexId) {
+    /// The curls go up a few a frame; it sets off with the first of them.
+    pub fn set_peel_faces(&mut self, faces: Vec<Option<TexId>>, shadow: TexId) {
         let now = self.now();
         if let Some(peel) = &mut self.peel {
             peel.faces = Some((faces, shadow));
-            peel.started = Some(now);
+            peel.started.get_or_insert(now);
         }
     }
 
     fn draw_peel(&self, peel: &Peel, out: &mut Vec<Draw>) {
         let t = peel.started.map_or(0, |at| self.now().saturating_sub(at));
-        let pose = slot_ui::peel_pose(t, peel.from, peel.to);
+        let pose = slot_ui::peel_pose(t, peel.from, peel.to, peel.bow);
         if let (true, Some(faces)) = (pose.backdrop > 0.0, &self.label_adjust_faces) {
             let (stand, frame, picture) = peel.framing;
             let at = out.len();
@@ -4845,7 +4848,12 @@ const PEEL_WAIT_MS: Millis = 2_000;
 
 /// What the card write sends back: how keeping the label went, and the sticker's curls and
 /// shadow when it could be read back.
-type PeelBaked = (std::io::Result<PathBuf>, Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)>);
+/// What the sticker's thread sends back, in this order: the curls and shadow, baked from the
+/// label cut in memory (None when it could not be cut), then how writing it to the card went.
+enum PeelBaked {
+    Curls(Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)>),
+    Kept(std::io::Result<PathBuf>),
+}
 
 /// A label kept on the framing screen, going on its cart in the cart menu like a sticker. The
 /// label is written and its curls baked off the UI thread, which the framing screen stays up
@@ -4863,9 +4871,16 @@ struct Peel {
     label: (u32, u32),
     /// Going on the GBA cart's front, under the core picker's shut lid.
     picker: bool,
+    /// Which way, and how far, its flight bends: the same each time for the same game.
+    bow: f32,
     baking: Option<std::sync::mpsc::Receiver<PeelBaked>>,
+    /// The curls came back: `baked` holds them until uploaded, or nothing could be made.
+    curled: bool,
     baked: Option<(Vec<slot_ui::CartFace>, slot_ui::CartFace)>,
-    faces: Option<(Vec<TexId>, TexId)>,
+    /// The curls uploaded so far (they go up a few a frame) and the shadow.
+    faces: Option<(Vec<Option<TexId>>, TexId)>,
+    /// The card write is done and its outcome taken.
+    written: bool,
     asked: Millis,
     started: Option<Millis>,
 }
@@ -4891,23 +4906,29 @@ impl Peel {
         let (stem, platform) = (cart.stem.clone(), cart.platform);
         let (root, source) = (root.to_path_buf(), source.to_path_buf());
         let spawned = std::thread::Builder::new().name("slot-label-peel".into()).spawn(move || {
-            let kept = crate::cart_art::keep_framed(&root, &cart, &source, frame);
-            // The label as the cart will wear it, read back from where it was written.
-            let curls = kept.as_ref().ok().and_then(|_| {
-                let mut worn = cart.clone();
-                (worn.label, worn.famicom_label) = slot_store::labels_of(&root, cart.platform, &cart.stem);
-                let art = slot_ui::fitted_label(&worn, label.0, label.1)?;
-                let step = |i: usize| i as f32 / (slot_ui::PEEL_STEPS - 1) as f32;
-                let faces = (0..slot_ui::PEEL_STEPS).map(|i| slot_ui::peel_face(&art, label.0, label.1, step(i))).collect();
-                Some((faces, slot_ui::peel_shadow_face(label.0, label.1)))
+            let began = std::time::Instant::now();
+            let cut = std::fs::read(&source).and_then(|png| {
+                crate::cart_art::cut_label(&png, frame, label)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
             });
-            let _ = tx.send((kept, curls));
+            // The curls first, from the label as the cart will wear it, fitted from the cut in
+            // memory: the sticker sets off at once, and the card is written while it flies.
+            let curls = cut.as_ref().ok().and_then(|(rgba, cw, ch)| {
+                let art = slot_ui::fitted_label_rgba(&cart, rgba, *cw, *ch, label.0, label.1)?;
+                Some((bake_curls(&art, label), slot_ui::peel_shadow_face(label.0, label.1)))
+            });
+            let curled = began.elapsed().as_millis();
+            let _ = tx.send(PeelBaked::Curls(curls));
+            let kept = cut.and_then(|cut| crate::cart_art::keep_cut(&root, &cart, &cut));
+            eprintln!("slot: label: curls ready in {curled} ms, written in {} ms", began.elapsed().as_millis());
+            let _ = tx.send(PeelBaked::Kept(kept));
         });
         if let Err(e) = spawned {
             eprintln!("slot: label: {e}");
             return None;
         }
         Some(Peel {
+            bow: slot_ui::peel_bow(&stem),
             stem,
             platform,
             framing,
@@ -4916,27 +4937,60 @@ impl Peel {
             label,
             picker,
             baking: Some(rx),
+            curled: false,
             baked: None,
             faces: None,
+            written: false,
             asked: now,
             started: None,
         })
     }
 
-    /// How keeping the label went, once the card write is done.
+    /// Takes in the curls when they come, and how keeping the label went once the card write
+    /// is done.
     fn poll(&mut self) -> Option<std::io::Result<PathBuf>> {
         let rx = self.baking.as_ref()?;
-        let (kept, curls) = match rx.try_recv() {
-            Ok(done) => done,
-            Err(std::sync::mpsc::TryRecvError::Empty) => return None,
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                (Err(std::io::Error::other("the label was never written")), None)
+        loop {
+            match rx.try_recv() {
+                Ok(PeelBaked::Curls(curls)) => (self.curled, self.baked) = (true, curls),
+                Ok(PeelBaked::Kept(kept)) => {
+                    (self.baking, self.written) = (None, true);
+                    return Some(kept);
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => return None,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    (self.baking, self.written, self.curled) = (None, true, true);
+                    return Some(Err(std::io::Error::other("the label was never written")));
+                }
             }
-        };
-        self.baking = None;
-        self.baked = curls;
-        Some(kept)
+        }
     }
+}
+
+/// Every curl of the label `art`, flat first, baked on as many cores as there are (up to four):
+/// they are what the sticker waits for before it sets off.
+fn bake_curls(art: &[u8], (w, h): (u32, u32)) -> Vec<slot_ui::CartFace> {
+    let steps = slot_ui::PEEL_STEPS;
+    let step = |i: usize| i as f32 / (steps - 1) as f32;
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 4);
+    let mut faces: Vec<Option<slot_ui::CartFace>> = (0..steps).map(|_| None).collect();
+    std::thread::scope(|scope| {
+        // Each takes every `cores`th curl, so all of them finish at about the same time.
+        let runs: Vec<_> = (0..cores)
+            .map(|first| {
+                scope.spawn(move || {
+                    (first..steps).step_by(cores).map(|i| (i, slot_ui::peel_face(art, w, h, step(i)))).collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        for run in runs {
+            // A run that cannot be had leaves its curls to be baked here instead.
+            for (i, face) in run.join().unwrap_or_default() {
+                faces[i] = Some(face);
+            }
+        }
+    });
+    faces.into_iter().enumerate().map(|(i, f)| f.unwrap_or_else(|| slot_ui::peel_face(art, w, h, step(i)))).collect()
 }
 
 /// Framing a picked label. What is held is the piece of the picture the frame covers, in the

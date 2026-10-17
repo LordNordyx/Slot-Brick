@@ -540,6 +540,12 @@ pub fn cut_out(png: &[u8], frame: Frame) -> Result<Vec<u8>, &'static str> {
 /// by cropping, so a label handed over in another shape would be cropped rather than stretched
 /// and would not be what was framed. Stretching it here is what makes the two agree.
 pub fn cut_to(png: &[u8], frame: Frame, into: (u32, u32)) -> Result<Vec<u8>, &'static str> {
+    let (out, nw, nh) = cut_label(png, frame, into)?;
+    encode(&out, nw, nh)
+}
+
+/// The label `cut_to` makes, as RGBA and its size, before it is made a PNG.
+pub fn cut_label(png: &[u8], frame: Frame, into: (u32, u32)) -> Result<(Vec<u8>, u32, u32), &'static str> {
     let (out, lw, lh) = cut_rgba(png, frame)?;
     let (iw, ih) = (into.0.max(1), into.1.max(1));
     let long = lw.max(lh).clamp(1, LABEL_MAX);
@@ -550,8 +556,7 @@ pub fn cut_to(png: &[u8], frame: Frame, into: (u32, u32)) -> Result<Vec<u8>, &'s
         true => (long, other(ih, iw)),
         false => (other(iw, ih), long),
     };
-    let out = resample(&out, lw, lh, nw, nh);
-    encode(&out, nw, nh)
+    Ok((resample(&out, lw, lh, nw, nh), nw, nh))
 }
 
 fn encode(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>, &'static str> {
@@ -1275,8 +1280,14 @@ pub fn forget_choices(root: &Path) {
 /// whoever picked it has said where the frame goes.
 pub fn keep_framed(root: &Path, cart: &Cart, source: &Path, frame: Frame) -> std::io::Result<PathBuf> {
     let png = std::fs::read(source)?;
-    let cut = cut_to(&png, frame, slot_ui::label_size(cart))
+    let cut = cut_label(&png, frame, slot_ui::label_size(cart))
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    keep_cut(root, cart, &cut)
+}
+
+/// Keeps a label already cut (`cut_label`) as the cart's own.
+pub fn keep_cut(root: &Path, cart: &Cart, (rgba, w, h): &(Vec<u8>, u32, u32)) -> std::io::Result<PathBuf> {
+    let cut = encode(rgba, *w, *h).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let target = label_target(root, cart);
     if let Some(dir) = target.parent() {
         std::fs::create_dir_all(dir)?;

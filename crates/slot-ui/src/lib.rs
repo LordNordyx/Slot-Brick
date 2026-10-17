@@ -43,7 +43,7 @@ pub use board::{
 pub use cart::{
     cart_box, cart_cutout_face, cart_face, cart_face_with, cart_shadow, clean_label, gb_cart_shadow, gb_label_panel,
     gb_shell_of, label_colour, label_panel, label_size, label_tags, label_text, nes_cart_shadow,
-    nes_label_panel, seated_box, snes_cart_shadow, snes_label_panel, snes_shell_of, nes_famicom_of, famicom_label_panel, fitted_label, shown_label, CartFace, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H,
+    nes_label_panel, seated_box, snes_cart_shadow, snes_label_panel, snes_shell_of, nes_famicom_of, famicom_label_panel, fitted_label, fitted_label_rgba, shown_label, CartFace, CART_H, CART_W, GB_CART_H, GB_CART_W, GB_LABEL_H,
     GB_LABEL_W, GB_LABEL_X, GB_LABEL_Y, LABEL_H, LABEL_W, LABEL_X, LABEL_Y, NES_CART_H, NES_CART_W, NES_LABEL_H, NES_LABEL_W, NES_LABEL_X,
     NES_LABEL_Y, SNES_CART_H, SNES_CART_W, SNES_LABEL_H, SNES_LABEL_W, SNES_LABEL_X, SNES_LABEL_Y,
 };
@@ -56,7 +56,7 @@ pub use label_adjust::{
     label_adjust_legend_faces, slot_stand, LabelAdjustView, Rect,
 };
 pub use peel::{
-    draw_peel, fade_from, peel_face, peel_pad, peel_pose, peel_shadow_face, peel_step, PeelPose, PEEL_MS, PEEL_STEPS,
+    draw_peel, fade_from, peel_bow, peel_face, peel_pad, peel_pose, peel_shadow_face, peel_step, PeelPose, PEEL_MS, PEEL_STEPS,
 };
 pub use label_grid::{
     label_grid_legend_faces, LabelGridView, GRID_COLS, GRID_ROWS, PAGE,

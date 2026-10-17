@@ -20,23 +20,25 @@ pub const PEEL_PAD: u32 = 1;
 /// How far the drop shadow's soft edge reaches either side of the label's own.
 pub const PEEL_SHADOW_PAD: u32 = 14;
 
-/// Peeling off the framing screen, the flight, the press onto the cart, smoothing it down: the
-/// smoothing is the longest, as it rolls the fold back across half the label.
+/// Peeling up off the framing screen, the flight (which sets off while it is still peeling)
+/// and smoothing it down, which starts the moment it touches the cart: it never hangs over the
+/// slot first. The smoothing is the longest, as it rolls the fold back across half the label.
 const LIFT_MS: Millis = 240;
-const FLY_MS: Millis = 600;
-const LAND_MS: Millis = 700;
+const FLY_FROM_MS: Millis = 120;
+const LAND_MS: Millis = 640;
 pub const PEEL_MS: Millis = 1_100;
 /// The framing screen is gone a little after the sticker is clear of it.
 const BACKDROP_MS: Millis = LIFT_MS + 80;
 
-/// Lifted, it is a touch smaller than it was lying flat; in the air over the cart, a touch
-/// larger than it will be, so landing presses it down.
+/// Peeled up, it is a touch smaller than it was lying flat; high in the air, a touch larger.
 const LIFT_SHRINK: f32 = 0.06;
-const AIR_GROW: f32 = 1.05;
-/// How far the flight bows upwards, in pixels.
-const ARC: f32 = 46.0;
-/// The tilt it lifts with, in radians: a few degrees.
+const AIR_GROW: f32 = 0.06;
+/// How far the flight bows off the straight line, as a share of the way it goes, at most.
+const BOW: f32 = 0.3;
+/// The tilt it peels up with, in radians: a few degrees.
 const TILT: f32 = -0.06;
+/// How far it banks into the bend of its flight, in radians, at most.
+const BANK: f32 = 0.14;
 /// How high it is held, as the distance its shadow falls from it.
 const AIR: f32 = 18.0;
 const SHADOW_ALPHA: f32 = 0.42;
@@ -67,40 +69,54 @@ pub struct PeelPose {
 }
 
 /// The sticker `t` into its flight from `from`, the slot on the framing screen, to `to`, the
-/// cart's slot in the cart menu.
-pub fn peel_pose(t: Millis, from: Rect, to: Rect) -> PeelPose {
-    let span = |a: Millis, b: Millis| ease((t.saturating_sub(a) as f32 / (b - a) as f32).clamp(0.0, 1.0));
-    let (lift, fly, land, flat) = (span(0, LIFT_MS), span(LIFT_MS, FLY_MS), span(FLY_MS, LAND_MS), span(LAND_MS, PEEL_MS));
+/// slot on the cart. `bow`, -1 to 1, is which way and how far its flight bends off the
+/// straight line (peel_bow), so it does not take the same path every time.
+pub fn peel_pose(t: Millis, from: Rect, to: Rect, bow: f32) -> PeelPose {
+    let span = |a: Millis, b: Millis| (t.saturating_sub(a) as f32 / (b - a) as f32).clamp(0.0, 1.0);
+    let lift = ease(span(0, LIFT_MS));
+    // Slow to leave, quick across, slowing right down into the slot: no stop above it.
+    let u = span(FLY_FROM_MS, LAND_MS);
+    let fly = u * u * u * (u * (6.0 * u - 15.0) + 10.0);
     // Smoothed from the crease out, slow to start and to finish, as a thumb would.
+    let flat = span(LAND_MS, PEEL_MS);
     let flat = flat * flat * (3.0 - 2.0 * flat);
-    let lifted = scaled(from, 1.0 - LIFT_SHRINK * lift);
-    let mut at = mix(mix(lifted, scaled(to, AIR_GROW), fly), to, land);
-    if fly < 1.0 {
-        at.1 -= ARC * (std::f32::consts::PI * fly).sin();
-    }
+
+    // A curve from one slot's centre to the other's, bent to one side of the straight line.
+    let centre = |(x, y, w, h): Rect| (x + w / 2.0, y + h / 2.0);
+    let ((ax, ay), (bx, by)) = (centre(from), centre(to));
+    let bend = bow.clamp(-1.0, 1.0) * BOW;
+    let (cx, cy) = ((ax + bx) / 2.0 - (by - ay) * bend, (ay + by) / 2.0 + (bx - ax) * bend);
+    let v = 1.0 - fly;
+    let (px, py) = (v * v * ax + 2.0 * v * fly * cx + fly * fly * bx, v * v * ay + 2.0 * v * fly * cy + fly * fly * by);
+    // Peeled up a touch smaller, larger high in the air, the slot's own size as it touches.
+    let air = (std::f32::consts::PI * fly).sin();
+    let k = 1.0 - LIFT_SHRINK * lift * (1.0 - fly);
+    let grow = 1.0 + AIR_GROW * air;
+    let (w, h) = ((from.2 * k + (to.2 - from.2) * fly) * grow, (from.3 * k + (to.3 - from.3) * fly) * grow);
+    // Exactly there once there, so the hand-over to the cart's own label is to the pixel.
+    let at = if u >= 1.0 { to } else { (px - w / 2.0, py - h / 2.0, w, h) };
     PeelPose {
         at,
-        // Tilted as it comes up, straightening some on the way and the rest as it lands.
-        turn: TILT * lift * (1.0 - 0.4 * fly) * (1.0 - land),
+        // The tilt it peels up with gives way to banking into the bend, and both straighten
+        // out as it comes down.
+        turn: if u >= 1.0 { 0.0 } else { TILT * lift * (1.0 - fly) - BANK * bow.clamp(-1.0, 1.0) * air },
         curl: lift * (1.0 - flat),
-        lift: AIR * lift * (1.0 - 0.85 * land) * (1.0 - flat),
+        lift: AIR * lift.max(air) * (1.0 - fly * 0.85) * (1.0 - flat),
         shadow: SHADOW_ALPHA * lift * (1.0 - flat),
-        backdrop: 1.0 - span(0, BACKDROP_MS),
+        backdrop: 1.0 - ease(span(0, BACKDROP_MS)),
     }
 }
 
-fn scaled((x, y, w, h): Rect, k: f32) -> Rect {
-    let (nw, nh) = (w * k, h * k);
-    (x + (w - nw) / 2.0, y + (h - nh) / 2.0, nw, nh)
-}
-
-fn mix(a: Rect, b: Rect, u: f32) -> Rect {
-    // Exactly there once there, so the hand-over to the cart's own label is to the pixel.
-    if u >= 1.0 {
-        return b;
+/// A bend for a label's flight, -1 to 1, the same each time for the same game: never quite
+/// straight, and not always to the same side.
+pub fn peel_bow(stem: &str) -> f32 {
+    let mut h: u32 = 0x811c_9dc5;
+    for b in stem.bytes() {
+        h = (h ^ b as u32).wrapping_mul(0x0100_0193);
     }
-    let m = |p: f32, q: f32| p + (q - p) * u;
-    (m(a.0, b.0), m(a.1, b.1), m(a.2, b.2), m(a.3, b.3))
+    // 0.4 to 1 either way: a gentle bend at the least.
+    let size = 0.4 + 0.6 * ((h >> 8) % 1000) as f32 / 999.0;
+    if h & 1 == 0 { size } else { -size }
 }
 
 /// Which of the baked curls to draw for `curl`.
@@ -161,7 +177,7 @@ pub fn peel_face(label: &[u8], w: u32, h: u32, curl: f32) -> CartFace {
     // The fold is the line n . p = c: past it the label has lifted away and folded back over.
     let c = deepest - d;
     let reach = (d * 0.25 + 3.0).min(24.0);
-    let roll = d.min(ROLL).max(1.0);
+    let roll = d.clamp(1.0, ROLL);
     let inside = |x: f32, y: f32| {
         (x + 0.5).clamp(0.0, 1.0) * (wf - x + 0.5).clamp(0.0, 1.0) * (y + 0.5).clamp(0.0, 1.0) * (hf - y + 0.5).clamp(0.0, 1.0)
     };
@@ -232,9 +248,12 @@ pub fn peel_shadow_face(w: u32, h: u32) -> CartFace {
 }
 
 /// The sticker as it is at `pose`: `faces` are its baked curls, flat first, for a label `label`
-/// pixels in size, and `shadow` its drop shadow.
-pub fn draw_peel(pose: &PeelPose, faces: &[TexId], shadow: TexId, label: (u32, u32), out: &mut Vec<Draw>) {
-    let Some(&tex) = faces.get(peel_step(pose.curl)).or(faces.first()) else {
+/// pixels in size, those still on their way to the GPU None, and `shadow` its drop shadow.
+pub fn draw_peel(pose: &PeelPose, faces: &[Option<TexId>], shadow: TexId, label: (u32, u32), out: &mut Vec<Draw>) {
+    let want = peel_step(pose.curl);
+    // The curl wanted, or the nearest one there is while the rest are still going up.
+    let nearest = (0..faces.len()).filter(|&i| faces[i].is_some()).min_by_key(|&i| i.abs_diff(want));
+    let Some(tex) = nearest.and_then(|i| faces[i]) else {
         return;
     };
     let (x, y, w, h) = pose.at;
@@ -276,23 +295,52 @@ mod tests {
 
     #[test]
     fn it_starts_where_it_was_framed_and_ends_flat_on_the_cart() {
-        let start = peel_pose(0, FROM, TO);
+        let start = peel_pose(0, FROM, TO, 0.7);
         assert_eq!((start.at, start.curl, start.shadow, start.backdrop), (FROM, 0.0, 0.0, 1.0));
-        let end = peel_pose(PEEL_MS, FROM, TO);
+        let end = peel_pose(PEEL_MS, FROM, TO, 0.7);
         assert_eq!((end.at, end.turn, end.curl, end.shadow, end.backdrop), (TO, 0.0, 0.0, 0.0, 0.0));
-        assert_eq!(peel_pose(PEEL_MS + 500, FROM, TO), end);
+        assert_eq!(peel_pose(PEEL_MS + 500, FROM, TO, 0.7), end);
     }
 
     #[test]
     fn the_corner_is_curled_through_the_flight_and_smoothed_only_after_landing() {
-        for t in [LIFT_MS, (LIFT_MS + FLY_MS) / 2, FLY_MS, LAND_MS] {
-            let p = peel_pose(t, FROM, TO);
+        for t in [LIFT_MS, (LIFT_MS + LAND_MS) / 2, LAND_MS] {
+            let p = peel_pose(t, FROM, TO, -0.5);
             assert!(p.curl > 0.99, "{t} ms: curl {}", p.curl);
         }
-        let landed = peel_pose(LAND_MS, FROM, TO);
-        assert_eq!(landed.at, TO, "it lands before the corner goes down");
-        let half = peel_pose((LAND_MS + PEEL_MS) / 2, FROM, TO);
+        let landed = peel_pose(LAND_MS, FROM, TO, -0.5);
+        assert_eq!((landed.at, landed.turn), (TO, 0.0), "it lands flat and square before it is smoothed");
+        let half = peel_pose((LAND_MS + PEEL_MS) / 2, FROM, TO, -0.5);
         assert!(half.curl > 0.0 && half.curl < 1.0);
+    }
+
+    #[test]
+    fn it_comes_down_into_the_slot_without_stopping_over_it() {
+        // Just before landing it is still on its way in, closing on the slot, not held over it.
+        let centre = |(x, y, w, h): Rect| (x + w / 2.0, y + h / 2.0);
+        let gap = |t| {
+            let (a, b) = (centre(peel_pose(t, FROM, TO, 0.6).at), centre(TO));
+            ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+        };
+        let mut last = f32::MAX;
+        for t in (FLY_FROM_MS..LAND_MS).step_by(40) {
+            let g = gap(t);
+            assert!(g <= last, "{t} ms: {g} is further than {last}");
+            last = g;
+        }
+        let size = peel_pose(LAND_MS - 20, FROM, TO, 0.6).at;
+        assert!((size.2 / TO.2 - 1.0).abs() < 0.01, "near enough its own size as it touches: {size:?}");
+    }
+
+    #[test]
+    fn the_flight_bends_to_the_side_its_bow_says_and_differs_by_game() {
+        let mid = (FLY_FROM_MS + LAND_MS) / 2;
+        let (a, b) = (peel_pose(mid, FROM, TO, 1.0).at, peel_pose(mid, FROM, TO, -1.0).at);
+        assert!((a.0 - b.0).abs() + (a.1 - b.1).abs() > 40.0, "{a:?} and {b:?} took the same path");
+        let bows: Vec<f32> = ["Tetris", "Zelda", "Metroid", "Kirby", "Mother 3"].iter().map(|g| peel_bow(g)).collect();
+        assert!(bows.iter().all(|b| (0.4..=1.0).contains(&b.abs())), "{bows:?}");
+        assert!(bows.iter().any(|b| *b > 0.0) && bows.iter().any(|b| *b < 0.0), "always to one side: {bows:?}");
+        assert_eq!(peel_bow("Tetris"), peel_bow("Tetris"));
     }
 
     #[test]

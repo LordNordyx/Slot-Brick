@@ -208,6 +208,16 @@ pub fn fitted_label(cart: &Cart, w: u32, h: u32) -> Option<Vec<u8>> {
     }
 }
 
+/// `fitted_label` for a label picture already in memory, `sw` by `sh` RGBA: as the cart will
+/// show it once it is written.
+pub fn fitted_label_rgba(cart: &Cart, src: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> Option<Vec<u8>> {
+    if nes_famicom_of(cart) {
+        art::label_fit_rgba(src, sw, sh, w, h)
+    } else {
+        art::cover_rgba(src, sw, sh, w, h)
+    }
+}
+
 /// The label a cart wears: a NES game keeps one for each of its carts, so swapping the
 /// shape swaps the picture; while it has only one, both carts show it.
 pub fn shown_label(cart: &Cart) -> Option<&std::path::Path> {

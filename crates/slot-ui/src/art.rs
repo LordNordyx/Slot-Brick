@@ -2,7 +2,12 @@ use std::path::Path;
 
 pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode(path)?;
-    if sw == 0 || sh == 0 {
+    cover_rgba(&src, sw, sh, w, h)
+}
+
+/// `cover` for a picture already in memory, `sw` by `sh` RGBA.
+pub fn cover_rgba(src: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> Option<Vec<u8>> {
+    if sw == 0 || sh == 0 || src.len() < (sw * sh * 4) as usize {
         return None;
     }
 
@@ -17,7 +22,7 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
         for x in 0..w {
             let x0 = ox + x as f32 / scale;
             let x1 = ox + (x + 1) as f32 / scale;
-            let px = box_average(&src, sw, sh, x0, y0, x1, y1);
+            let px = box_average(src, sw, sh, x0, y0, x1, y1);
             out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
         }
     }
@@ -29,17 +34,22 @@ pub fn cover(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
 /// sides filled with the colour round its edge.
 pub fn label_fit(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
     let (src, sw, sh) = decode(path)?;
-    if sw == 0 || sh == 0 || w == 0 || h == 0 {
+    label_fit_rgba(&src, sw, sh, w, h)
+}
+
+/// `label_fit` for a picture already in memory, `sw` by `sh` RGBA.
+pub fn label_fit_rgba(src: &[u8], sw: u32, sh: u32, w: u32, h: u32) -> Option<Vec<u8>> {
+    if sw == 0 || sh == 0 || w == 0 || h == 0 || src.len() < (sw * sh * 4) as usize {
         return None;
     }
     let (from, to) = (sw as f32 / sh as f32, w as f32 / h as f32);
     if (from / to).max(to / from) < LABEL_TURNED {
-        return cover(path, w, h);
+        return cover_rgba(src, sw, sh, w, h);
     }
     let scale = (w as f32 / sw as f32).min(h as f32 / sh as f32);
     let (dw, dh) = (sw as f32 * scale, sh as f32 * scale);
     let (dx, dy) = ((w as f32 - dw) / 2.0, (h as f32 - dh) / 2.0);
-    let fill = edge_colour(&src, sw, sh);
+    let fill = edge_colour(src, sw, sh);
     let mut out = vec![0u8; (w * h * 4) as usize];
     for y in 0..h {
         for x in 0..w {
@@ -49,7 +59,7 @@ pub fn label_fit(path: &Path, w: u32, h: u32) -> Option<Vec<u8>> {
             } else {
                 let (x0, y0) = ((x as f32 - dx).max(0.0) / scale, (y as f32 - dy).max(0.0) / scale);
                 let (x1, y1) = (((x + 1) as f32 - dx).min(dw) / scale, ((y + 1) as f32 - dy).min(dh) / scale);
-                box_average(&src, sw, sh, x0, y0, x1, y1)
+                box_average(src, sw, sh, x0, y0, x1, y1)
             };
             out[((y * w + x) * 4) as usize..][..4].copy_from_slice(&px);
         }

@@ -934,17 +934,38 @@ fn sync_label_adjust(app: &mut App, compositor: &mut Compositor, tex: &mut Label
 struct PeelTex {
     curls: Vec<Option<TexId>>,
     shadow: Option<TexId>,
+    /// Curls baked but not yet uploaded, and how many of them have gone up.
+    pending: Vec<slot_ui::CartFace>,
+    sent: usize,
+    shadow_id: Option<TexId>,
 }
 
-/// A label just kept: its curls, baked off the UI thread, go up once, which sets it off.
+/// How many curls go up to the GPU a frame: a few at a time, so no one frame stalls on them all.
+const PEEL_UPLOADS: usize = 8;
+
+/// A label just kept: its curls, baked off the UI thread, go up a few a frame, flat first; the
+/// first of them sets it off.
 fn sync_peel(app: &mut App, compositor: &mut Compositor, tex: &mut PeelTex) {
-    let Some((curls, shadow)) = app.peel_unbaked() else {
+    if let Some((curls, shadow)) = app.peel_unbaked() {
+        tex.shadow_id = Some(upload_rgba(compositor, &mut tex.shadow, shadow.w, shadow.h, &shadow.rgba));
+        tex.curls.resize(curls.len().max(tex.curls.len()), None);
+        (tex.pending, tex.sent) = (curls, 0);
+    }
+    let (Some(shadow), true) = (tex.shadow_id, tex.sent < tex.pending.len()) else {
         return;
     };
-    tex.curls.resize(curls.len().max(tex.curls.len()), None);
-    let ids = curls.iter().zip(&mut tex.curls).map(|(c, at)| upload_rgba(compositor, at, c.w, c.h, &c.rgba)).collect();
-    let shadow = upload_rgba(compositor, &mut tex.shadow, shadow.w, shadow.h, &shadow.rgba);
+    let upto = (tex.sent + PEEL_UPLOADS).min(tex.pending.len());
+    for i in tex.sent..upto {
+        let c = &tex.pending[i];
+        upload_rgba(compositor, &mut tex.curls[i], c.w, c.h, &c.rgba);
+    }
+    tex.sent = upto;
+    let ids = (0..tex.pending.len()).map(|i| if i < upto { tex.curls[i] } else { None }).collect();
     app.set_peel_faces(ids, shadow);
+    if upto == tex.pending.len() {
+        // All up: the pictures themselves are no longer needed.
+        (tex.pending, tex.sent) = (Vec::new(), 0);
+    }
 }
 
 /// How large the picture being framed is kept: enough to zoom into, and no larger.
