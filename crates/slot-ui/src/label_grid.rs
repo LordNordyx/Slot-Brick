@@ -2,7 +2,7 @@
 //! this screen. Every label is shown as it was cut, the one under the cursor ringed. A wears it
 //! and goes back to the cart menu; B goes back leaving the cart as it was.
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
-use crate::plate::{arrows_hint_face, centred_hints, hint_face, UndoFace, CAPTION_Y, HINT_H, LEGEND_GAP, LEGEND_Y};
+use crate::plate::{arrows_hint_face, centred_hints, footer_plate, hint_face, UndoFace, CAPTION_Y, HINT_H, LEGEND_GAP, LEGEND_Y};
 use crate::slot_chrome::{edge, opening};
 
 /// The grid's shape, and so how many labels a page holds.
@@ -15,6 +15,9 @@ const GRID_X: f32 = 24.0;
 const GRID_Y: f32 = 54.0;
 const GRID_W: f32 = OUT_W as f32 - GRID_X * 2.0;
 const GRID_H: f32 = 300.0;
+/// The ring around the cell under the cursor, and what it is drawn in.
+const RING: f32 = 2.0;
+const RING_INK: [f32; 4] = [0.96, 0.95, 0.94, 1.0];
 /// Room around a label inside its cell, so the ring never touches it.
 const CELL_PAD: f32 = 8.0;
 
@@ -39,7 +42,17 @@ impl LabelGridView<'_> {
         for i in 0..PAGE {
             let (x, y) = (GRID_X + cw * (i % GRID_COLS) as f32, GRID_Y + ch * (i / GRID_COLS) as f32);
             if i == self.at {
+                // The house marks a chosen row by filling it. A label covers most of its cell,
+                // though, so the fill alone is a sliver: it gets a ring as well.
                 out.push(Draw::Rect { x: x.round(), y: y.round(), w: cw.round(), h: ch.round(), colour: edge() });
+                for (bx, by, bw, bh) in [
+                    (x, y, cw, RING),
+                    (x, y + ch - RING, cw, RING),
+                    (x, y, RING, ch),
+                    (x + cw - RING, y, RING, ch),
+                ] {
+                    out.push(Draw::Rect { x: bx.round(), y: by.round(), w: bw.round(), h: bh.round(), colour: RING_INK });
+                }
             }
             let Some(&Some((tex, w, h))) = self.cells.get(i) else {
                 continue;
@@ -57,6 +70,7 @@ impl LabelGridView<'_> {
                 alpha: 1.0,
             });
         }
+        footer_plate(out, OUT_H as f32);
         if let Some((tex, w, h)) = self.caption {
             push(out, tex, (OUT_W as f32 - w as f32) / 2.0, CAPTION_Y, w, h);
         }

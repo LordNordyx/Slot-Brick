@@ -3,7 +3,7 @@
 //! the cart will wear it. The d-pad moves the picture, L and the d-pad stretch it, R evens its
 //! shape back up and Y puts it back. Nothing is cut until A.
 use crate::draw::{Draw, TexId, OUT_H, OUT_W};
-use crate::plate::{centred_hints, hint_face, UndoFace, CAPTION_Y, HINT_H, LEGEND_GAP, LEGEND_Y};
+use crate::plate::{centred_hints, footer_plate, hint_face, UndoFace, CAPTION_Y, HINT_H, LEGEND_GAP, LEGEND_Y};
 use crate::slot_chrome::opening;
 
 /// The slot is drawn as large as this, and the cart around it at whatever size that comes to:
@@ -13,9 +13,6 @@ pub const SLOT_MAX_W: f32 = 520.0;
 pub const SLOT_MAX_H: f32 = 252.0;
 /// Where the top of the slot sits, leaving the lip above it in view.
 const SLOT_TOP: f32 = 74.0;
-/// The words and the keys sit on a dark band, since the cart runs on behind them.
-const PLATE_TOP: f32 = 352.0;
-const PLATE: [f32; 4] = [0.0, 0.0, 0.0, 0.74];
 /// What is outside the slot is still shown, but darkened, so the slot reads at a glance.
 const SHADE: [f32; 4] = [0.0, 0.0, 0.0, 0.22];
 /// The cart is laid over the picture not quite solid, so what is outside the slot still shows
@@ -76,8 +73,8 @@ impl LabelAdjustView {
         if let Some((tex, x, y, w, h)) = self.cart {
             out.push(Draw::Tex { x, y, w, h, tex, alpha: CART_ALPHA });
         }
-        // The cart runs on behind the words, so they get a band of their own to sit on.
-        out.push(Draw::Rect { x: 0.0, y: PLATE_TOP, w: OUT_W as f32, h: OUT_H as f32 - PLATE_TOP, colour: PLATE });
+        // The cart runs on behind the words, so they get ground of their own to sit on.
+        footer_plate(out, OUT_H as f32);
         if let Some((tex, w, h)) = self.caption {
             let x = ((OUT_W as f32 - w as f32) / 2.0).round();
             out.push(Draw::Tex { x, y: CAPTION_Y, w: w as f32, h: h as f32, tex, alpha: 1.0 });

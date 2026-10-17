@@ -162,6 +162,30 @@ fn band_width(label: &str) -> u32 {
     (ink.ceil() as u32).clamp(1, LABEL_MAX_W as u32)
 }
 
+/// Where the footer's own ground begins, and how dark it is. A screen with something behind
+/// its footer needs the words to sit on something; one with nothing behind loses nothing.
+const PLATE_TOP: f32 = 366.0;
+const PLATE_INK: [f32; 4] = [0.0, 0.0, 0.0, 0.74];
+/// The ground does not begin at a line. It comes in over this, so a picture running behind the
+/// footer is not cut in half by an edge that belongs to nothing.
+const PLATE_FADE: f32 = 16.0;
+const PLATE_STEPS: u32 = 4;
+
+/// The ground the caption and the keys sit on, drawn before them.
+pub fn footer_plate(out: &mut Vec<Draw>, height: f32) {
+    for step in 0..PLATE_STEPS {
+        let at = step as f32 / PLATE_STEPS as f32;
+        out.push(Draw::Rect {
+            x: 0.0,
+            y: PLATE_TOP - PLATE_FADE + PLATE_FADE * at,
+            w: OUT_W as f32,
+            h: PLATE_FADE / PLATE_STEPS as f32,
+            colour: [0.0, 0.0, 0.0, PLATE_INK[3] * (at + 1.0) / PLATE_STEPS as f32],
+        });
+    }
+    out.push(Draw::Rect { x: 0.0, y: PLATE_TOP, w: OUT_W as f32, h: height - PLATE_TOP, colour: PLATE_INK });
+}
+
 /// A screen's caption: one line, centred, as wide as the screen will take.
 pub fn caption_face(words: &str) -> UndoFace {
     let Some(font) = text::label_font() else {
