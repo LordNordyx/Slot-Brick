@@ -144,10 +144,11 @@ reaching the network, or off.
 
 **Overlays:** put your own 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or
 `SNES`, then pick one under **HOME → Screen →** the system **→ Overlay**. The game is fitted into
-the overlay's transparent area; while one is on, the picture size shortcuts do nothing.
+the part of the overlay that isn't fully opaque; while one is on, the picture size shortcuts do nothing.
 In game, `HOME + L1` / `R1` steps through them and Off. Slot comes
-with none; mugwomp93's [1024x768 overlays](https://github.com/mugwomp93/1024x768_overlays)
-for GB, GBC and GBA work as they are.
+with none; KrutzOtrem's [Trimui Brick Overlays](https://github.com/KrutzOtrem/Trimui-Brick-Overlays)
+are made for the Brick: copy the `GB`, `GBC` and `GBA` folders from a handheld set into
+`Slot/Overlays`, and the CRT overlays into `Slot/Overlays/NES` and `SNES`.
 
 **Auto-sleep:** the Brick sleeps after 5 minutes idle in menus or 15 minutes in a game.
 To turn this off, create an empty file named `Slot/DISABLE_AUTO_SLEEP`.

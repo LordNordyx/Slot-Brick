@@ -1,5 +1,8 @@
-//! An overlay laid over a game: a picture the size of the screen with a clear window, found by
-//! looking for its fully clear pixels, that the game is fitted into.
+//! An overlay laid over a game: a picture the size of the screen with a window the game is
+//! fitted into. The window is wherever the overlay is not fully opaque: overlays tint the game
+//! with a grid or shade its edges, so its window is seldom fully clear, but the game always
+//! shows through it, and its size is the one the overlay was drawn for (5x for a Game Boy,
+//! 4x for a GBA, or the screen's full height or width).
 use std::path::Path;
 
 use slot_store::Platform;
@@ -13,7 +16,7 @@ pub struct Overlay {
     pub rgba: Vec<u8>,
     pub w: u32,
     pub h: u32,
-    /// The clear window, as shares of the picture: left, top, width, height.
+    /// The window, as shares of the picture: left, top, width, height.
     pub window: [f32; 4],
 }
 
@@ -30,12 +33,12 @@ pub fn load(path: &Path) -> Option<Overlay> {
     Some(Overlay { rgba, w, h, window })
 }
 
-/// The box round the picture's fully clear pixels, as shares of its size.
+/// The box round the picture's pixels that are not fully opaque, as shares of its size.
 pub fn window(rgba: &[u8], w: u32, h: u32) -> Option<[f32; 4]> {
     let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
     for y in 0..h {
         for x in 0..w {
-            if rgba.get(((y * w + x) * 4 + 3) as usize) == Some(&0) {
+            if rgba.get(((y * w + x) * 4 + 3) as usize).is_some_and(|&a| a < 255) {
                 (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
             }
         }
@@ -69,10 +72,15 @@ mod tests {
     use super::*;
 
     fn picture(w: u32, h: u32, clear: (u32, u32, u32, u32)) -> Vec<u8> {
+        tinted(w, h, clear, 0)
+    }
+
+    /// An opaque picture with a window `alpha` opaque, as a grid or a tint over the game is.
+    fn tinted(w: u32, h: u32, window: (u32, u32, u32, u32), alpha: u8) -> Vec<u8> {
         let mut rgba = vec![255u8; (w * h * 4) as usize];
-        for y in clear.1..clear.1 + clear.3 {
-            for x in clear.0..clear.0 + clear.2 {
-                rgba[((y * w + x) * 4 + 3) as usize] = 0;
+        for y in window.1..window.1 + window.3 {
+            for x in window.0..window.0 + window.2 {
+                rgba[((y * w + x) * 4 + 3) as usize] = alpha;
             }
         }
         rgba
@@ -84,6 +92,9 @@ mod tests {
         assert_eq!(window(&rgba, 100, 80), Some([0.1, 0.25, 0.5, 0.5]));
         assert_eq!(window(&picture(100, 80, (0, 0, 0, 0)), 100, 80), None, "no window");
         assert_eq!(window(&picture(100, 80, (5, 5, 2, 2)), 100, 80), None, "a speck is not a window");
+        // A grid or tint over the game, half see-through, is still its window.
+        assert_eq!(window(&tinted(100, 80, (10, 20, 50, 40), 128), 100, 80), Some([0.1, 0.25, 0.5, 0.5]));
+        assert_eq!(window(&tinted(100, 80, (10, 20, 50, 40), 254), 100, 80), Some([0.1, 0.25, 0.5, 0.5]));
     }
 
     #[test]

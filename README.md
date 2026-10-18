@@ -180,12 +180,12 @@ Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
 
 Slot doesn't ship any overlays, but it can use your own:
 
-1. Put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the overlay's fully transparent area.
+1. Put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the part of the overlay that isn't fully opaque.
 2. Open **HOME → Screen**, choose the system, and pick the overlay on its **Overlay** row.
 
-The game is scaled to fill the transparent area without stretching. While an overlay is on, the in-game picture size shortcuts do nothing. In game, `HOME` + `L1` / `R1` steps through the system's overlays and Off, naming each as it goes on.
+The game is scaled to fill that area without stretching. While an overlay is on, the in-game picture size shortcuts do nothing. In game, `HOME` + `L1` / `R1` steps through the system's overlays and Off, naming each as it goes on.
 
-mugwomp93's [1024x768 overlays](https://github.com/mugwomp93/1024x768_overlays) for GB, GBC and GBA work as they are.
+KrutzOtrem's [Trimui Brick Overlays](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) are made for the Brick and work as they are: copy the `GB`, `GBC` and `GBA` folders from a handheld set (such as *Vanilla – Complete Edition*) into `Slot/Overlays`, and the *Complete CRT Overlays* into `Slot/Overlays/NES` and `SNES`.
 
 ## Stock firmware apps
 

@@ -1,5 +1,9 @@
 # Changelog — Slot. for TrimUI Brick
 
+## Unreleased
+- Overlays with a grid or tint over the game (such as KrutzOtrem's LCD and DMG grids) now work: the game fills the part of the overlay that isn't fully opaque, at the size the overlay was drawn for.
+- An overlay name too long for its row is shortened, and scrolls slowly while the row is selected.
+
 ## v0.42
 **New since v0.41:**
 - Screen settings are sorted by system: Game Boy / GBC, Game Boy Advance, NES and SNES each have their own page. NES and SNES shaders can now be set there too.
