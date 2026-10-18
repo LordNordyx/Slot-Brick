@@ -388,6 +388,25 @@ fn quick_text_face(label: &str, colour: [u8; 3]) -> UndoFace {
     UndoFace { rgba, w, h: MENU_H }
 }
 
+/// The least space kept between a row's label and its value.
+const VALUE_GAP: f32 = 28.0;
+
+/// The widest a value's face may be on a row whose label face is `label_w` wide, beside the
+/// carets (their faces' widths, left and right) when the row is the one lit, so it never runs
+/// into the label. Laid out as QuickMenu::draw lays it out.
+pub fn quick_value_room(label_w: u32, carets: Option<(u32, u32)>) -> u32 {
+    let pad = MENU_PAD as f32;
+    let right = OUT_W as f32 - QUICK_EDGE;
+    let label_end = QUICK_EDGE + label_w as f32 - 2.0 * pad;
+    let room = match carets {
+        None => right + 2.0 * pad - label_end - VALUE_GAP,
+        Some((left, right_caret)) => {
+            right - right_caret as f32 - 2.0 * CARET_GAP + 2.0 * pad - left as f32 - label_end - VALUE_GAP
+        }
+    };
+    room.max(0.0) as u32
+}
+
 pub fn quick_caret_face(right: bool) -> UndoFace {
     let glyph = if right { '\u{f0da}' } else { '\u{f0d9}' };
     let (Some(symbols), Some(label)) = (crate::icon::symbols_font(), text::label_font()) else {

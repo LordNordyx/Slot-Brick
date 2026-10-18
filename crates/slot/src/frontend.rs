@@ -98,6 +98,88 @@ struct OverlayTex {
     /// An overlay that could not be used, so it is not read again every frame.
     refused: Option<std::path::PathBuf>,
     texts: [[Option<TexId>; 2]; slot_store::Platform::ALL.len()],
+    /// A name too long for its row, scrolled while the row is lit.
+    scrolls: [Option<Scroll>; slot_store::Platform::ALL.len()],
+    /// The carets' widths, left and right, measured once.
+    carets: Option<(u32, u32)>,
+}
+
+/// A value too long to show whole beside its label: the whole of it drawn once, and the piece
+/// of it showing, `room` wide, moved along slowly and back while its row is lit.
+struct Scroll {
+    whole: slot_ui::UndoFace,
+    room: u32,
+    since: std::time::Instant,
+    at: Option<u32>,
+}
+
+/// How fast a long value scrolls, and how long it rests at either end.
+const SCROLL_PX_PER_S: f32 = 40.0;
+const SCROLL_REST_S: f32 = 1.2;
+
+impl Scroll {
+    /// How far along the piece showing is, `secs` after the row was lit: resting at the start,
+    /// along to the end, resting, and back.
+    fn offset(&self, secs: f32) -> u32 {
+        let span = self.whole.w.saturating_sub(self.room) as f32;
+        let travel = span / SCROLL_PX_PER_S;
+        let t = secs % (2.0 * (SCROLL_REST_S + travel));
+        let x = if t < SCROLL_REST_S {
+            0.0
+        } else if t < SCROLL_REST_S + travel {
+            (t - SCROLL_REST_S) * SCROLL_PX_PER_S
+        } else if t < 2.0 * SCROLL_REST_S + travel {
+            span
+        } else {
+            span - (t - 2.0 * SCROLL_REST_S - travel) * SCROLL_PX_PER_S
+        };
+        x.clamp(0.0, span) as u32
+    }
+
+    /// The piece `at` along, inside the clear margin every value face has at its sides (so it
+    /// sits by the carets as a whole one would), faded in at an edge where more carries on.
+    fn piece(&self, at: u32) -> Vec<u8> {
+        let (w, h, room, pad) = (self.whole.w, self.whole.h, self.room, slot_ui::MENU_PAD);
+        let ink = room.saturating_sub(2 * pad);
+        let mut out = vec![0u8; (room * h * 4) as usize];
+        for y in 0..h {
+            let from = ((y * w + pad + at) * 4) as usize;
+            let to = ((y * room + pad) * 4) as usize;
+            out[to..to + (ink * 4) as usize].copy_from_slice(&self.whole.rgba[from..from + (ink * 4) as usize]);
+        }
+        const FADE: u32 = 14;
+        for x in 0..FADE.min(ink) {
+            let k = x as f32 / FADE as f32;
+            for y in 0..h {
+                if at > 0 {
+                    let i = ((y * room + pad + x) * 4 + 3) as usize;
+                    out[i] = (out[i] as f32 * k) as u8;
+                }
+                if at + room < w {
+                    let i = ((y * room + pad + ink - 1 - x) * 4 + 3) as usize;
+                    out[i] = (out[i] as f32 * k) as u8;
+                }
+            }
+        }
+        out
+    }
+}
+
+/// `text` as a value face no wider than `room`: whole when it fits, else cut short with "...".
+fn shortened_value_face(text: &str, lit: bool, room: u32) -> slot_ui::UndoFace {
+    let whole = quick_value_face(text, lit);
+    if whole.w <= room {
+        return whole;
+    }
+    let chars: Vec<char> = text.chars().collect();
+    // The most of it that fits with the dots after it.
+    let (mut lo, mut hi) = (0, chars.len());
+    while lo < hi {
+        let mid = (lo + hi).div_ceil(2);
+        let cut: String = chars[..mid].iter().collect::<String>() + "...";
+        if quick_value_face(&cut, lit).w <= room { lo = mid } else { hi = mid - 1 }
+    }
+    quick_value_face(&(chars[..lo].iter().collect::<String>() + "..."), lit)
 }
 
 /// Each system's Overlay row reads the overlay's name, or Off, made again when it changes.
@@ -105,16 +187,46 @@ fn sync_overlay_texts(app: &mut App, compositor: &mut Compositor, tex: &mut Over
     if app.quick_menu().is_none() {
         return;
     }
+    let carets = *tex.carets.get_or_insert_with(|| (quick_caret_face(false).w, quick_caret_face(true).w));
+    let lit_row = app.quick_menu();
     for platform in slot_store::Platform::ALL {
-        if app.overlay_text_shown(platform) == Some(app.overlay_text(platform)) {
+        let i = platform.index();
+        let Some(row) = QuickRow::ALL.into_iter().find(|r| r.overlay_of() == Some(platform)) else {
             continue;
+        };
+        if app.overlay_text_shown(platform) != Some(app.overlay_text(platform)) {
+            // The name changed: made again, cut short to fit when not lit and scrolled when lit.
+            let text = app.overlay_text(platform).to_string();
+            let label_w = quick_label_face(row).w;
+            let dim = shortened_value_face(&text, false, slot_ui::quick_value_room(label_w, None));
+            let room = slot_ui::quick_value_room(label_w, Some(carets));
+            let whole = quick_value_face(&text, true);
+            let (lit, scroll) = match whole.w > room {
+                true => {
+                    let scroll = Scroll { whole, room, since: std::time::Instant::now(), at: Some(0) };
+                    let piece = slot_ui::UndoFace { rgba: scroll.piece(0), w: room, h: scroll.whole.h };
+                    (piece, Some(scroll))
+                }
+                false => (whole, None),
+            };
+            tex.scrolls[i] = scroll;
+            let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
+            let dim = upload(compositor, &mut tex.texts[i][0], dim);
+            let lit = upload(compositor, &mut tex.texts[i][1], lit);
+            app.set_overlay_text_faces(platform, text, [(dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1)]);
         }
-        let (i, text) = (platform.index(), app.overlay_text(platform).to_string());
-        let [dim, lit] = [false, true].map(|lit| quick_value_face(&text, lit));
-        let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
-        let dim = upload(compositor, &mut tex.texts[i][0], dim);
-        let lit = upload(compositor, &mut tex.texts[i][1], lit);
-        app.set_overlay_text_faces(platform, text, [(dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1)]);
+        // A long name moves along only while its row is the lit one, starting from its start.
+        let (Some(scroll), Some(id)) = (&mut tex.scrolls[i], tex.texts[i][1]) else {
+            continue;
+        };
+        if lit_row != Some(row) {
+            scroll.since = std::time::Instant::now();
+        }
+        let at = scroll.offset(scroll.since.elapsed().as_secs_f32());
+        if scroll.at != Some(at) {
+            scroll.at = Some(at);
+            compositor.update_texture(id, scroll.room, scroll.whole.h, &scroll.piece(at));
+        }
     }
 }
 

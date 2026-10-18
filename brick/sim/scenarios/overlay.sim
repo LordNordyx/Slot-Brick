@@ -11,6 +11,21 @@ press down
 press down    # GB Overlay
 press right
 snap menu-overlay
+# A name too long for its row: lit, it starts at its start and scrolls along; not lit, it is
+# cut short with dots.
+press b
+press down    # Game Boy Advance
+press a
+press down
+press down    # Overlay
+press right
+snap menu-overlay-long
+wait 4000
+grab menu-overlay-long-scrolled
+press up
+snap menu-overlay-long-dim
+press b
+press up
 press b
 press b
 press b

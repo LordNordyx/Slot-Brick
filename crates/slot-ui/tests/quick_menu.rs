@@ -203,3 +203,14 @@ fn the_arrows_are_faces_the_height_of_a_value() {
         assert_eq!(caret.h, quick_value_face("On", true).h);
     }
 }
+
+#[test]
+fn a_value_gets_the_room_beside_its_label_and_less_of_it_beside_the_carets() {
+    use slot_ui::{quick_caret_face, quick_label_face, quick_value_room};
+    let label = quick_label_face(QuickRow::GbaOverlay).w;
+    let carets = (quick_caret_face(false).w, quick_caret_face(true).w);
+    let (dim, lit) = (quick_value_room(label, None), quick_value_room(label, Some(carets)));
+    assert!(lit > 200 && dim > lit, "dim {dim}, lit {lit}");
+    // A longer label leaves less room.
+    assert!(quick_value_room(quick_label_face(QuickRow::GbcOverlay).w, None) < dim);
+}

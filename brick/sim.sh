@@ -48,6 +48,8 @@ fresh() {
     done
     python3 -I brick/sim/make-rom.py "$1/card/Slot/Games/GB/Pocket Test.gb"
     python3 -I brick/sim/make-overlay.py "$1/card/Slot/Overlays/GB/Sim Frame.png"
+    cp "$1/card/Slot/Overlays/GB/Sim Frame.png" \
+        "$1/card/Slot/Overlays/GBA/Sim Frame with a name far too long to fit beside its label.png"
 }
 
 # Where the cart art and label servers live. Docker looks names up with this machine's DNS;
