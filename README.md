@@ -40,7 +40,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
 | **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
-| **Overlays** | Lay your own 1024×768 overlay over GB, GBC, GBA, NES or SNES games; the game fits itself into the overlay's window. |
+| **Overlays** | Frames for GB, GBC, GBA, NES and SNES games, by KrutzOtrem, or your own 1024×768 ones; the game fits itself into the overlay's window. |
 | **Brick integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down. |
@@ -178,14 +178,13 @@ Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
 
 ## Overlays
 
-Slot doesn't ship any overlays, but it can use your own:
+Slot comes with [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays)'s overlays, made for the Brick: the *Vanilla* set for GB, GBC and GBA, and the *CRT* set for NES and SNES. Open **HOME → Screen**, choose the system, and pick one on its **Overlay** row. They're off until you do.
 
-1. Put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the part of the overlay that isn't fully opaque.
-2. Open **HOME → Screen**, choose the system, and pick the overlay on its **Overlay** row.
+To add your own, put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the part of the overlay that isn't fully opaque.
 
 The game is scaled to fill that area without stretching. While an overlay is on, the in-game picture size shortcuts do nothing. In game, `HOME` + `L1` / `R1` steps through the system's overlays and Off, naming each as it goes on.
 
-KrutzOtrem's [Trimui Brick Overlays](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) are made for the Brick and work as they are: copy the `GB`, `GBC` and `GBA` folders from a handheld set (such as *Vanilla – Complete Edition*) into `Slot/Overlays`, and the *Complete CRT Overlays* into `Slot/Overlays/NES` and `SNES`.
+More of KrutzOtrem's sets are in their [repository](https://github.com/KrutzOtrem/Trimui-Brick-Overlays): copy the `GB`, `GBC` and `GBA` folders from a handheld set into `Slot/Overlays`.
 
 ## Stock firmware apps
 
@@ -255,6 +254,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | :--- | :--- |
 | [Brandon T. Kowalski](https://github.com/BrandonKowalski/slot) | Original Slot. frontend and Cart Studio |
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
+| [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
 
 ## AI Disclosure
 This port was developed with assistance from [Claude Opus](https://claude.ai/). 
