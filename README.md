@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="assets/slot-brick-banner.png" alt="Slot. for TrimUI Brick — retro handheld and cartridge artwork" width="100%">
+  <img src="assets/slot-brick-banner.png" alt="Slot. for TrimUI Brick and Brick Hammer — retro handheld and cartridge artwork" width="100%">
 </p>
 
-<h1 align="center">Slot. for TrimUI Brick</h1>
+<h1 align="center">Slot. for TrimUI Brick and Brick Hammer</h1>
 
 <p align="center">
   A lightweight frontend for your Game Boy, Game Boy Color, Game Boy Advance, NES, and SNES collection.<br>
-  Built for the <strong>original TrimUI Brick</strong> running <strong>stock firmware</strong>.
+  Built for the <strong>TrimUI Brick</strong> and <strong>Brick Hammer</strong> running <strong>stock firmware</strong>.
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@
 
 ---
 
-A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed by **Brandon T. Kowalski** for the Anbernic RG SP. This version adapts Slot. to the original TrimUI Brick, including its screen, controls, LEDs, and stock firmware startup.
+A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed by **Brandon T. Kowalski** for the Anbernic RG SP. This version adapts Slot. to the TrimUI Brick and Brick Hammer, including its screen, controls, LEDs, and stock firmware startup.
 
 > [!IMPORTANT]
 > **Unofficial port · Active development**
@@ -41,7 +41,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
 | **Overlays** | Frames for GB, GBC, GBA, NES and SNES games, by KrutzOtrem, or your own 1024×768 ones; the game fits itself into the overlay's window. |
-| **Brick integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
+| **Brick and Brick Hammer integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down. |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
@@ -86,7 +86,7 @@ Copy your games, save files, save states, and BIOS files from your backup into t
 
 ### 6. Launch Slot.
 
-Insert the SD card into your TrimUI Brick and power on the device. Slot. should launch automatically.
+Insert the SD card into your TrimUI Brick or Brick Hammer and power on the device. Slot. should launch automatically.
 
 > [!NOTE]
 > **Known startup issue:** On first launch or after a restart, the stock firmware menu may appear instead of Slot.
@@ -95,7 +95,7 @@ Insert the SD card into your TrimUI Brick and power on the device. Slot. should 
 
 ## Controls
 
-The three small buttons on the bottom of the Brick are **HOME** (left, labelled Menu), **SELECT** (middle), and **START** (right).
+The three small buttons on the bottom of the Brick and Brick Hammer are **HOME** (left, labelled Menu), **SELECT** (middle), and **START** (right).
 
 **Notation:** `/` means either button. `+` means hold the first button and press the second.
 
@@ -178,7 +178,7 @@ Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
 
 ## Overlays
 
-Slot comes with [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays)'s overlays, made for the Brick: the *Vanilla* set for GB, GBC and GBA, and the *CRT* set for NES and SNES. Open **HOME → Screen**, choose the system, and pick one on its **Overlay** row. They're off until you do.
+Slot comes with [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays)'s overlays, made for the Brick and Brick Hammer: the *Vanilla* set for GB, GBC and GBA, and the *CRT* set for NES and SNES. Open **HOME → Screen**, choose the system, and pick one on its **Overlay** row. They're off until you do.
 
 To add your own, put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the part of the overlay that isn't fully opaque.
 
@@ -202,9 +202,9 @@ These utilities appear under **Apps** in the stock OS:
 > [!WARNING]
 > **Experimental:** Multiplayer has not yet been tested on two physical devices.
 
-1. Install the **same Slot. version** on both Bricks, using the **same game, emulator core, and BIOS**.
+1. Install the **same Slot. version** on both devices (Brick or Brick Hammer), using the **same game, emulator core, and BIOS**.
 2. In game, press `SELECT` + `HOME` to open the game menu, then choose **Host** or **Join**.
-3. Start **Host** on one Brick first, then **Join** on the other.
+3. Start **Host** on one Brick or Brick Hammer first, then **Join** on the other.
 
 If the connection fails, attach both logs to your issue:
 
@@ -224,10 +224,10 @@ Slot/Logs/slot.log
 
 ## Development
 
-Brick-specific code is gated behind the `brick` Cargo feature.
+Brick and Brick Hammer code is gated behind the `brick` Cargo feature.
 
 - **Device scripts and apps:** [`brick/`](brick/)
-- **Simulator:** [`brick/sim/README.md`](brick/sim/README.md) — the real Brick build running on a PC in Docker, with its screen and buttons in a browser. Needs no device, and is how a frontend change is checked before a card is written.
+- **Simulator:** [`brick/sim/README.md`](brick/sim/README.md) — the real Brick and Brick Hammer build running on a PC in Docker, with its screen and buttons in a browser. Needs no device, and is how a frontend change is checked before a card is written.
 - **Change history:** [`brick/CHANGELOG.md`](brick/CHANGELOG.md)
 - **Dev builds:** every change to `main` is built automatically and published as the [Dev build](../../releases/tag/dev) release, replacing the previous one.
 
@@ -261,4 +261,4 @@ This port was developed with assistance from [Claude Opus](https://claude.ai/).
 
 ---
 
-<p align="center"><sub>Slot. for TrimUI Brick · An unofficial port by LordNordyx</sub></p>
+<p align="center"><sub>Slot. for TrimUI Brick and Brick Hammer · An unofficial port by LordNordyx</sub></p>
