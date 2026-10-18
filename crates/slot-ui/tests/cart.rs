@@ -477,11 +477,12 @@ fn a_nes_cart_is_drawn_at_its_own_size_in_grey_with_a_famicom_one_coloured() {
     std::fs::create_dir(d.path().join("Games/NES")).unwrap();
     let mut rom = b"NES\x1a".to_vec();
     rom.resize(0x4010, 0);
-    std::fs::write(d.path().join("Games/NES/Zelda (USA).nes"), &rom).unwrap();
-    std::fs::write(d.path().join("Games/NES/Zelda (Japan).nes"), &rom).unwrap();
+    // Not a Zelda: those two NES carts were gold.
+    std::fs::write(d.path().join("Games/NES/Metroid (USA).nes"), &rom).unwrap();
+    std::fs::write(d.path().join("Games/NES/Metroid (Japan).nes"), &rom).unwrap();
     let carts = scan(d.path()).unwrap();
     let face = |stem: &str| cart_face(carts.iter().find(|c| c.stem == stem).unwrap());
-    let (usa, japan) = (face("Zelda (USA)"), face("Zelda (Japan)"));
+    let (usa, japan) = (face("Metroid (USA)"), face("Metroid (Japan)"));
     assert_eq!((usa.w, usa.h), (NES_CART_W, NES_CART_H));
     // Below the grip, beside the label: bare plastic.
     let px = |f: &slot_ui::CartFace| {
@@ -884,24 +885,25 @@ fn a_ripped_rom_with_no_region_in_its_name_goes_by_its_header() {
 }
 
 #[test]
-fn a_colour_saved_for_a_nes_or_snes_cart_is_ignored() {
+fn a_colour_saved_for_a_snes_cart_is_ignored_and_one_for_a_nes_cart_is_worn() {
+    // SNES carts came only in their system's grey; NES carts in a few plastics, which the cart
+    // menu offers, so the one chosen is worn.
     use slot_store::{Outline, ShellChoice, ShellFinish};
-    use slot_ui::{shell_for, NES_SHELL, SNES_SHELL};
+    use slot_ui::{shell_for, SNES_SHELL};
     let pink = Some(ShellChoice { outline: Outline::Auto, colour: [0xe2, 0x8c, 0xa9], finish: ShellFinish::Glitter });
-    for (platform, grey) in [(Platform::Nes, NES_SHELL), (Platform::Snes, SNES_SHELL)] {
-        let cart = slot_store::Cart {
-            platform, stem: "Mario (USA)".into(), rom: "missing".into(), label: None,
-            code: String::new(), shell: pink, title: String::new(),
-            famicom_label: None,
-        };
-        assert_eq!(shell_for(&cart), grey, "{platform:?} took the chosen colour");
-    }
+    let cart = |platform| slot_store::Cart {
+        platform, stem: "Mario (USA)".into(), rom: "missing".into(), label: None,
+        code: String::new(), shell: pink, title: String::new(),
+        famicom_label: None,
+    };
+    assert_eq!(shell_for(&cart(Platform::Snes)), SNES_SHELL, "a SNES cart took the chosen colour");
+    assert_eq!(shell_for(&cart(Platform::Nes)).colour, [0xe2, 0x8c, 0xa9], "a NES cart lost its chosen colour");
 }
 
 #[test]
 fn a_famicom_cart_is_small_and_landscape_and_wears_its_chosen_colour() {
     use slot_store::{Outline, ShellChoice, ShellFinish};
-    use slot_ui::{nes_famicom_of, shell_for, NES_SHELL};
+    use slot_ui::{nes_famicom_of, shell_for};
     let nes = |stem: &str, shell: Option<ShellChoice>| slot_store::Cart {
         platform: Platform::Nes, stem: stem.into(), rom: "missing.nes".into(), label: None,
         code: String::new(), shell, title: String::new(),
@@ -924,7 +926,9 @@ fn a_famicom_cart_is_small_and_landscape_and_wears_its_chosen_colour() {
     let fc = shell_for(&nes("Mario (USA)", pink(Outline::Rounded)));
     assert_eq!(fc.colour, [0xe2, 0x8c, 0xa9]);
     assert_eq!(fc.finish, Finish::Solid, "a Famicom cart took a finish");
-    assert_eq!(shell_for(&nes("Mario (Japan)", pink(Outline::Notched))), NES_SHELL);
+    // Put on the NES cart, it is a NES cart's plastic again, finish and all.
+    let back = shell_for(&nes("Mario (Japan)", pink(Outline::Notched)));
+    assert_eq!((back.colour, back.finish), ([0xe2, 0x8c, 0xa9], Finish::Glitter));
 }
 
 #[test]
