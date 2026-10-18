@@ -42,6 +42,23 @@ pub struct SlotState {
     pub rewind: bool,
     pub gb_palettes: bool,
     pub gb_palette: GbPalette,
+    /// The overlay chosen for each system, by file name in Overlays/<system>, in the order of
+    /// Platform::ALL; None is off.
+    pub overlays: [Option<String>; 5],
+}
+
+impl SlotState {
+    pub fn overlay(&self, platform: Platform) -> Option<&str> {
+        self.overlays[overlay_slot(platform)].as_deref()
+    }
+
+    pub fn set_overlay(&mut self, platform: Platform, name: Option<String>) {
+        self.overlays[overlay_slot(platform)] = name.filter(|n| crate::overlay_name_ok(n));
+    }
+}
+
+fn overlay_slot(platform: Platform) -> usize {
+    Platform::ALL.iter().position(|p| *p == platform).unwrap_or(0)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -119,6 +136,7 @@ impl Default for SlotState {
             rewind: true,
             gb_palettes: false,
             gb_palette: GbPalette::DEFAULT,
+            overlays: Default::default(),
         }
     }
 }
@@ -163,6 +181,10 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.gb_palettes as u8,
         s.gb_palette.core_name()
     );
+    let mut text = text;
+    for platform in Platform::ALL {
+        text.push_str(&format!("overlay_{}={}\n", platform_key(platform), s.overlay(platform).unwrap_or("")));
+    }
     atomic_write(&state_path(root), text.as_bytes())
 }
 
@@ -192,6 +214,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rewind = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
+    let mut overlays: [Option<String>; 5] = Default::default();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -223,7 +246,13 @@ fn parse(text: &str) -> Option<SlotState> {
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_nes" => shader_nes = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
             "shader_snes" => shader_snes = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
-            _ => {}
+            _ => {
+                // overlay_gb=<file name>: one for each system, empty for off.
+                let system = key.strip_prefix("overlay_").and_then(platform_value);
+                if let Some(platform) = system {
+                    overlays[overlay_slot(platform)] = Some(value.to_string()).filter(|n| crate::overlay_name_ok(n));
+                }
+            }
         }
     }
     let cart = cart?;
@@ -253,6 +282,7 @@ fn parse(text: &str) -> Option<SlotState> {
         rewind: rewind.unwrap_or(fallback.rewind),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
+        overlays,
     })
 }
 

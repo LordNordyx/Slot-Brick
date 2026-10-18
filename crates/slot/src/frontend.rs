@@ -71,6 +71,7 @@ pub struct Frontend {
     clocks: Clocks,
     about: AboutFace,
     quick_clock: QuickClock,
+    overlay_tex: OverlayTex,
     #[cfg(feature = "brick")]
     wifi_tex: Option<TexId>,
     banner_tex: Option<TexId>,
@@ -86,6 +87,92 @@ struct RebuildFaces {
     count: Option<TexId>,
     count_size: (u32, u32),
     shown: Option<usize>,
+}
+
+/// The overlay over the game, read off the UI thread, and each system's Overlay row's words.
+#[derive(Default)]
+struct OverlayTex {
+    picture: Option<TexId>,
+    /// The overlay being read, and where it will come back.
+    reading: Option<(std::path::PathBuf, std::sync::mpsc::Receiver<Option<crate::overlay::Overlay>>)>,
+    /// An overlay that could not be used, so it is not read again every frame.
+    refused: Option<std::path::PathBuf>,
+    texts: [[Option<TexId>; 2]; 5],
+}
+
+/// Each system's Overlay row reads the overlay's name, or Off, made again when it changes.
+fn sync_overlay_texts(app: &mut App, compositor: &mut Compositor, tex: &mut OverlayTex) {
+    if app.quick_menu().is_none() {
+        return;
+    }
+    for (i, platform) in slot_store::Platform::ALL.into_iter().enumerate() {
+        let text = app.overlay_text(platform);
+        if app.overlay_text_shown(platform) == Some(text.as_str()) {
+            continue;
+        }
+        let [dim, lit] = [false, true].map(|lit| quick_value_face(&text, lit));
+        let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
+        let dim = upload(compositor, &mut tex.texts[i][0], dim);
+        let lit = upload(compositor, &mut tex.texts[i][1], lit);
+        app.set_overlay_text_faces(platform, text, [(dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1)]);
+    }
+}
+
+/// The overlay the game wants: read on a thread of its own when it changes, then uploaded and
+/// handed to the app, which fits the game into its window.
+fn sync_overlay(app: &mut App, compositor: &mut Compositor, tex: &mut OverlayTex) {
+    let wanted = app.overlay_wanted();
+    if wanted.as_deref() == app.overlay_loaded() {
+        return;
+    }
+    let Some(wanted) = wanted else {
+        // Out of the game: the next one tries again an overlay that could not be used.
+        app.take_overlay();
+        tex.refused = None;
+        return;
+    };
+    if tex.refused.as_ref() == Some(&wanted) {
+        return;
+    }
+    if tex.reading.as_ref().is_none_or(|(path, _)| *path != wanted) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let path = wanted.clone();
+        let spawned = std::thread::Builder::new()
+            .name("slot-overlay".into())
+            .spawn(move || {
+                let _ = tx.send(crate::overlay::load(&path));
+            });
+        if let Err(e) = spawned {
+            eprintln!("slot: overlay: {e}");
+            tex.refused = Some(wanted);
+            return;
+        }
+        tex.reading = Some((wanted, rx));
+        return;
+    }
+    let Some((path, rx)) = &tex.reading else {
+        return;
+    };
+    let read = match rx.try_recv() {
+        Ok(read) => read,
+        Err(std::sync::mpsc::TryRecvError::Empty) => return,
+        Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+    };
+    let path = path.clone();
+    tex.reading = None;
+    match read {
+        Some(overlay) => {
+            let id = upload_rgba(compositor, &mut tex.picture, overlay.w, overlay.h, &overlay.rgba);
+            eprintln!("slot: overlay {} (window {:?})", path.display(), overlay.window);
+            app.set_overlay(path, id, overlay.window);
+        }
+        None => {
+            // Not a PNG Slot can read, or one with no clear window for the game.
+            eprintln!("slot: overlay: {} is not one Slot can use", path.display());
+            app.take_overlay();
+            tex.refused = Some(path);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -165,6 +252,7 @@ impl Frontend {
             clocks: Clocks::default(),
             about: AboutFace::default(),
             quick_clock: QuickClock::default(),
+            overlay_tex: OverlayTex::default(),
             #[cfg(feature = "brick")]
             wifi_tex: None,
             banner_tex: None,
@@ -530,6 +618,8 @@ impl Frontend {
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
+        sync_overlay_texts(self.session.app_mut(), compositor, &mut self.overlay_tex);
+        sync_overlay(self.session.app_mut(), compositor, &mut self.overlay_tex);
         sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
         sync_label_adjust(self.session.app_mut(), compositor, &mut self.label_adjust_tex);
         sync_peel(self.session.app_mut(), compositor, &mut self.peel_tex);

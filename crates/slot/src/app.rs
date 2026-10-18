@@ -364,6 +364,10 @@ pub struct App {
     clock_faces: Option<(TexId, TexId)>,
     quick_menu_faces: Option<QuickMenuFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
+    /// Each system's overlay name as shown on its Overlay row, and its faces, dim and lit.
+    overlay_texts: [Option<(String, [(TexId, u32, u32); 2])>; 5],
+    /// The overlay laid over the game being played: its file, its picture and its window.
+    overlay: Option<(PathBuf, TexId, [f32; 4])>,
     sticker_face: Option<TexId>,
     wallpaper: Option<TexId>,
     battery_percent: slot_ui::Printed,
@@ -529,6 +533,8 @@ impl App {
             clock_faces: None,
             quick_menu_faces: None,
             quick_clock_faces: None,
+            overlay_texts: Default::default(),
+            overlay: None,
             sticker_face: None,
             wallpaper: None,
             battery_percent: slot_ui::Printed::default(),
@@ -757,7 +763,7 @@ impl App {
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
-            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -1007,7 +1013,63 @@ impl App {
     }
 
     pub fn source_rect(&self) -> [f32; 4] {
-        video_mode::source_rect(self.platform, self.video_mode)
+        match self.overlay_window() {
+            // An overlay decides where the picture goes: into its window.
+            Some(window) => crate::overlay::source_rect(self.platform, window),
+            None => video_mode::source_rect(self.platform, self.video_mode),
+        }
+    }
+
+    /// The overlay the game being played should have over it: the one chosen for its system,
+    /// when it is there.
+    pub fn overlay_wanted(&self) -> Option<PathBuf> {
+        if !matches!(self.phase, Phase::Inserting { .. } | Phase::Playing { .. } | Phase::Polaroids { .. }) {
+            return None;
+        }
+        let name = self.state.overlay(self.platform)?;
+        slot_store::overlay_path(self.root.as_ref()?, self.platform, name)
+    }
+
+    /// The overlay at `path` is up, as `tex`, with the game to go in `window`.
+    pub fn set_overlay(&mut self, path: PathBuf, tex: TexId, window: [f32; 4]) {
+        self.overlay = Some((path, tex, window));
+    }
+
+    /// The overlay up is no longer wanted: its picture can go.
+    pub fn take_overlay(&mut self) -> Option<TexId> {
+        self.overlay.take().map(|(_, tex, _)| tex)
+    }
+
+    pub fn overlay_loaded(&self) -> Option<&Path> {
+        self.overlay.as_ref().map(|(path, _, _)| path.as_path())
+    }
+
+    /// The window of the overlay over the game being played, while there is one.
+    fn overlay_window(&self) -> Option<[f32; 4]> {
+        let (path, _, window) = self.overlay.as_ref()?;
+        (self.overlay_wanted().as_ref() == Some(path)).then_some(*window)
+    }
+
+    fn push_overlay(&self, out: &mut Vec<Draw>) {
+        if let (Some(_), Some((_, tex, _))) = (self.overlay_window(), &self.overlay) {
+            out.push(Draw::Tex { x: 0.0, y: 0.0, w: OUT_W as f32, h: OUT_H as f32, tex: *tex, alpha: 1.0 });
+        }
+    }
+
+    /// How `platform`'s Overlay row reads: the overlay's name, or Off.
+    pub fn overlay_text(&self, platform: Platform) -> String {
+        match self.state.overlay(platform) {
+            Some(name) => name.get(..name.len() - 4).unwrap_or(name).to_string(),
+            None => "Off".to_string(),
+        }
+    }
+
+    pub fn overlay_text_shown(&self, platform: Platform) -> Option<&str> {
+        self.overlay_texts[platform_slot(platform)].as_ref().map(|(text, _)| text.as_str())
+    }
+
+    pub fn set_overlay_text_faces(&mut self, platform: Platform, text: String, faces: [(TexId, u32, u32); 2]) {
+        self.overlay_texts[platform_slot(platform)] = Some((text, faces));
     }
 
     /// L1/R1 switch the picture on consoles without shoulder buttons; on a GBA or SNES
@@ -1054,7 +1116,7 @@ impl App {
             return;
         }
         // Consoles whose L and R are the game's take this shortcut instead.
-        if !matches!(self.platform, Platform::Gba | Platform::Snes) {
+        if !matches!(self.platform, Platform::Gba | Platform::Snes) || self.overlay_window().is_some() {
             self.refuse();
             return;
         }
@@ -1525,6 +1587,10 @@ impl App {
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
             Phase::Playing { .. } => match action {
+                // With an overlay on, the overlay decides the picture's size.
+                Action::GbaDown(Btn::L1 | Btn::R1) if self.slot_owns_the_shoulders() && self.overlay_window().is_some() => {
+                    self.refuse()
+                }
                 Action::GbaDown(Btn::L1) if self.slot_owns_the_shoulders() => {
                     self.set_picture(VideoMode::Stretch)
                 }
@@ -1624,6 +1690,11 @@ impl App {
             | QuickRow::GbShader
             | QuickRow::NesShader
             | QuickRow::SnesShader
+            | QuickRow::GbOverlay
+            | QuickRow::GbcOverlay
+            | QuickRow::GbaOverlay
+            | QuickRow::NesOverlay
+            | QuickRow::SnesOverlay
             | QuickRow::GbPalettes
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
@@ -1638,6 +1709,14 @@ impl App {
             return;
         }
 
+        if let (Some(platform), Some(root)) = (row.overlay_of(), self.root.clone()) {
+            let to = slot_store::step_overlay(&root, platform, self.state.overlay(platform), right);
+            if to.as_deref() == self.state.overlay(platform) {
+                return;
+            }
+            self.state.set_overlay(platform, to);
+            return self.persist();
+        }
         let s = &mut self.state;
         match row {
             QuickRow::FastForward => {
@@ -1685,7 +1764,7 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
-            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
@@ -2467,6 +2546,10 @@ impl App {
                 row: *row,
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
+                texts: QuickRow::ALL.map(|r| {
+                    let at = r.overlay_of().map(platform_slot)?;
+                    self.overlay_texts[at].as_ref().map(|(_, faces)| *faces)
+                }),
                 faces: self.quick_menu_faces.as_ref(),
                 disabled: QuickRow::ALL.map(|r| self.quick_disabled(r)),
             }
@@ -2515,9 +2598,13 @@ impl App {
                 self.chrome(cart, self.seat(), out);
             }
             Phase::Playing { cart } if self.screen < 1.0 => self.chrome(cart, 0.0, out),
-            Phase::Playing { .. } => self.push_game(out),
+            Phase::Playing { .. } => {
+                self.push_game(out);
+                self.push_overlay(out);
+            }
             Phase::Polaroids { .. } => {
                 self.push_game(out);
+                self.push_overlay(out);
                 if let Some(p) = &self.polaroids {
                     p.draw(
                         self.battery,
@@ -5353,4 +5440,9 @@ impl CartMenu {
         self.finish = slot_ui::FINISHES.iter().position(|f| *f == self.own.finish).unwrap_or(0);
         self.shape = 0;
     }
+}
+
+/// Where a system's entry is in the arrays kept one for each system, in Platform::ALL order.
+fn platform_slot(platform: Platform) -> usize {
+    Platform::ALL.iter().position(|p| *p == platform).unwrap_or(0)
 }

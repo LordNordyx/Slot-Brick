@@ -47,6 +47,7 @@ fresh() {
         printf 'slot simulator stand-in cartridge\n' > "$1/card/Slot/Games/$cart"
     done
     python3 -I brick/sim/make-rom.py "$1/card/Slot/Games/GB/Pocket Test.gb"
+    python3 -I brick/sim/make-overlay.py "$1/card/Slot/Overlays/GB/Sim Frame.png"
 }
 
 # Where the cart art and label servers live. Docker looks names up with this machine's DNS;

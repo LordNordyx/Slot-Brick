@@ -141,6 +141,12 @@ still running. Hardcore mode isn't available.
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.
 
+**Overlays:** put your own 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or
+`SNES`, then pick one under **HOME → Screen →** the system **→ Overlay**. The game is fitted into
+the overlay's transparent area; while one is on, the picture size shortcuts do nothing. Slot comes
+with none; mugwomp93's [1024x768 overlays](https://github.com/mugwomp93/1024x768_overlays)
+for GB, GBC and GBA work as they are.
+
 **Auto-sleep:** the Brick sleeps after 5 minutes idle in menus or 15 minutes in a game.
 To turn this off, create an empty file named `Slot/DISABLE_AUTO_SLEEP`.
 

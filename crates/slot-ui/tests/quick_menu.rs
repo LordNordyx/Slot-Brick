@@ -82,10 +82,17 @@ fn the_rows_run_in_the_order_the_user_chose() {
     #[cfg(feature="brick")]
     assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "LEDs", "Wi-Fi", "Cart Art", "RetroAchievements", "Date & Time", "About"]);
     assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES"]);
-    assert_eq!(QuickRow::SCREEN_GB.map(QuickRow::label), ["Shader", "Color Correction", "GB Palettes"]);
-    assert_eq!(QuickRow::SCREEN_GBA.map(QuickRow::label), ["Shader", "Color Correction"]);
-    assert_eq!(QuickRow::SCREEN_NES.map(QuickRow::label), ["Shader"]);
-    assert_eq!(QuickRow::SCREEN_SNES.map(QuickRow::label), ["Shader"]);
+    assert_eq!(
+        QuickRow::SCREEN_GB.map(QuickRow::label),
+        ["Shader", "Color Correction", "GB Palettes", "GB Overlay", "GBC Overlay"]
+    );
+    assert_eq!(QuickRow::SCREEN_GBA.map(QuickRow::label), ["Shader", "Color Correction", "Overlay"]);
+    assert_eq!(QuickRow::SCREEN_NES.map(QuickRow::label), ["Shader", "Overlay"]);
+    assert_eq!(QuickRow::SCREEN_SNES.map(QuickRow::label), ["Shader", "Overlay"]);
+    // Each Overlay row picks the overlay for its own system.
+    use slot_store::Platform;
+    let systems: Vec<_> = QuickRow::ALL.into_iter().filter_map(QuickRow::overlay_of).collect();
+    assert_eq!(systems, [Platform::Gb, Platform::Gbc, Platform::Gba, Platform::Nes, Platform::Snes]);
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
         [

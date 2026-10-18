@@ -11,3 +11,6 @@ dist-brick-*/
 brick/core-src/
 brick/core-build/
 target-sim/
+
+# Overlays kept on this machine only: not ours to publish (see brick/overlays-local/README.md).
+/brick/overlays-local/

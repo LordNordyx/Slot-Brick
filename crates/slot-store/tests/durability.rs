@@ -204,6 +204,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             rewind: true,
             gb_palettes: false,
             gb_palette: GbPalette::DEFAULT,
+            overlays: Default::default(),
         }
     );
 }
@@ -429,4 +430,24 @@ fn colour_correction_saved_as_one_setting_carries_over_to_both_systems() {
     .unwrap();
     let s = read_slot_state(d.path());
     assert_eq!((s.colour_correction_gb, s.colour_correction_gba), (false, true));
+}
+
+#[test]
+fn an_overlay_is_kept_per_system_by_name_and_a_path_is_never_taken_for_one() {
+    use slot_store::Platform;
+    let d = tmp_root();
+    let mut s = SlotState { clock_set: true, ..SlotState::default() };
+    s.set_overlay(Platform::Gb, Some("dmg-1024x768.png".into()));
+    s.set_overlay(Platform::Gba, Some("GBA SP.png".into()));
+    s.set_overlay(Platform::Nes, Some("../../System/slot".into()));
+    assert_eq!(s.overlay(Platform::Nes), None, "a path was taken for an overlay");
+    write_slot_state(d.path(), &s).unwrap();
+    let back = read_slot_state(d.path());
+    assert_eq!(back, s);
+    assert_eq!(back.overlay(Platform::Gb), Some("dmg-1024x768.png"));
+    assert_eq!(back.overlay(Platform::Gbc), None);
+    let known = "cart=Emerald\nbrightness=3\nblue_light=1\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
+    std::fs::write(d.path().join("Config/slot.state"), format!("{known}overlay_snes=../x.png\noverlay_gbc=ok.png\n")).unwrap();
+    let back = read_slot_state(d.path());
+    assert_eq!((back.overlay(Platform::Snes), back.overlay(Platform::Gbc)), (None, Some("ok.png")));
 }

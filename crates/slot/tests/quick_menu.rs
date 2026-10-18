@@ -6,7 +6,7 @@ use common::{
 };
 use slot::app::{App, Phase};
 use slot_input::{Action, Btn};
-use slot_store::{read_slot_state, write_slot_state, Shader, SlotState};
+use slot_store::{read_slot_state, write_slot_state, Platform, Shader, SlotState};
 use slot_ui::{
     edge, Draw, Icon, QuickMenuFaces, QuickRow, QuickValue, TexId, MENU_PAD, OUT_W, QUICK_EDGE,
     QUICK_TOP,
@@ -245,7 +245,13 @@ fn screen_opens_a_page_per_system_each_with_its_own_page_and_b_comes_back_up() {
     }
     press(&mut a, Btn::A);
     assert_eq!(a.quick_menu(), Some(QuickRow::GbShader));
-    for want in [QuickRow::GbColourCorrection, QuickRow::GbPalettes, QuickRow::GbShader] {
+    for want in [
+        QuickRow::GbColourCorrection,
+        QuickRow::GbPalettes,
+        QuickRow::GbOverlay,
+        QuickRow::GbcOverlay,
+        QuickRow::GbShader,
+    ] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(want), "the Game Boy page did not wrap on itself");
     }
@@ -690,4 +696,27 @@ fn wifi_status_finishes_before_a_pending_sleep_request() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     panic!("Pending sleep was not completed after the Wi-Fi worker stopped");
+}
+
+#[test]
+fn an_overlay_row_steps_through_off_and_the_overlays_there_are_and_saves_each() {
+    let (d, mut a, _) = on_carousel();
+    let dir = d.path().join("Overlays/GBA");
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["SP.png", "Logo.png", "notes.txt"] {
+        std::fs::write(dir.join(f), b"x").unwrap();
+    }
+    open_at(&mut a, QuickRow::GbaOverlay);
+    assert_eq!(a.overlay_text(Platform::Gba), "Off");
+    for (btn, want, shown) in [
+        (Btn::Right, Some("Logo.png"), "Logo"),
+        (Btn::Right, Some("SP.png"), "SP"),
+        (Btn::Right, None, "Off"),
+        (Btn::Left, Some("SP.png"), "SP"),
+    ] {
+        press(&mut a, btn);
+        assert_eq!(read_slot_state(d.path()).overlay(Platform::Gba), want, "{btn:?}");
+        assert_eq!(a.overlay_text(Platform::Gba), shown);
+    }
+    assert_eq!(read_slot_state(d.path()).overlay(Platform::Gb), None, "the Game Boy took the GBA's");
 }

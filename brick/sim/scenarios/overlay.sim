@@ -1,0 +1,34 @@
+# An overlay chosen on the Game Boy page goes over Pocket Test, the game fitted into its window,
+# and L1/R1 can no longer change the picture's size while it is on.
+press a
+phase Shelf
+press menu
+phase QuickMenu
+press a       # Screen
+press a       # Game Boy / GBC
+press down
+press down
+press down    # GB Overlay
+press right
+snap menu-overlay
+press b
+press b
+press b
+press b
+phase Shelf
+press l1     # GBA -> SNES -> NES -> GBC -> GB
+wait 1200
+press l1
+wait 1200
+press l1
+wait 1200
+press l1
+press a
+phase Playing 20000
+wait 1000
+snap game-overlay
+press l1
+wait 600
+snap game-overlay-l1
+hold menu 1500   # save state, eject, back to the shelf
+phase Shelf 20000

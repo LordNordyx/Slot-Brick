@@ -40,6 +40,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
 | **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
+| **Overlays** | Lay your own 1024×768 overlay over GB, GBC, GBA, NES or SNES games; the game fits itself into the overlay's window. |
 | **Brick integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down. |
@@ -173,6 +174,17 @@ Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
 - European and Japanese SNES games get the rounder PAL / Super Famicom cart. Slot reads this from the ROM, so ripped ROMs without a region in their name work too.
 - Japanese NES games get the small, coloured Famicom cart. NES ROMs don't say where they were sold, so Slot goes by the name, such as `(Japan)`, and by chips only Famicom carts used. For any other game, choose **Famicom** under `START` → **Shape**.
 - On SNES, `X`, `Y`, `L1`, and `R1` go to the game.
+
+## Overlays
+
+Slot doesn't ship any overlays, but it can use your own:
+
+1. Put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the overlay's fully transparent area.
+2. Open **HOME → Screen**, choose the system, and pick the overlay on its **Overlay** row.
+
+The game is scaled to fill the transparent area without stretching. While an overlay is on, the in-game picture size shortcuts do nothing.
+
+mugwomp93's [1024x768 overlays](https://github.com/mugwomp93/1024x768_overlays) for GB, GBC and GBA work as they are.
 
 ## Stock firmware apps
 

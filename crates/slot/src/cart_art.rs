@@ -639,7 +639,7 @@ fn shrink(rgba: Vec<u8>, w: u32, h: u32, max: u32) -> (Vec<u8>, u32, u32) {
     (out, nw, nh)
 }
 
-fn decode_rgba(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
+pub(crate) fn decode_rgba(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
     let mut dec = png::Decoder::new(bytes);
     dec.set_transformations(png::Transformations::normalize_to_color8());
     dec.set_limits(png::Limits { bytes: 64 << 20 });

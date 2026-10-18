@@ -37,10 +37,15 @@ pub enum QuickRow {
     GbColourCorrection,
     NesShader,
     SnesShader,
+    GbOverlay,
+    GbcOverlay,
+    GbaOverlay,
+    NesOverlay,
+    SnesOverlay,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 31] = [
+    pub const ALL: [QuickRow; 36] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -72,6 +77,11 @@ impl QuickRow {
         QuickRow::GbColourCorrection,
         QuickRow::NesShader,
         QuickRow::SnesShader,
+        QuickRow::GbOverlay,
+        QuickRow::GbcOverlay,
+        QuickRow::GbaOverlay,
+        QuickRow::NesOverlay,
+        QuickRow::SnesOverlay,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -89,10 +99,24 @@ impl QuickRow {
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
-    pub const SCREEN_GB: [QuickRow; 3] = [QuickRow::GbShader, QuickRow::GbColourCorrection, QuickRow::GbPalettes];
-    pub const SCREEN_GBA: [QuickRow; 2] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection];
-    pub const SCREEN_NES: [QuickRow; 1] = [QuickRow::NesShader];
-    pub const SCREEN_SNES: [QuickRow; 1] = [QuickRow::SnesShader];
+    pub const SCREEN_GB: [QuickRow; 5] =
+        [QuickRow::GbShader, QuickRow::GbColourCorrection, QuickRow::GbPalettes, QuickRow::GbOverlay, QuickRow::GbcOverlay];
+    pub const SCREEN_GBA: [QuickRow; 3] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection, QuickRow::GbaOverlay];
+    pub const SCREEN_NES: [QuickRow; 2] = [QuickRow::NesShader, QuickRow::NesOverlay];
+    pub const SCREEN_SNES: [QuickRow; 2] = [QuickRow::SnesShader, QuickRow::SnesOverlay];
+
+    /// The system an Overlay row picks the overlay for.
+    pub fn overlay_of(self) -> Option<slot_store::Platform> {
+        use slot_store::Platform;
+        Some(match self {
+            QuickRow::GbOverlay => Platform::Gb,
+            QuickRow::GbcOverlay => Platform::Gbc,
+            QuickRow::GbaOverlay => Platform::Gba,
+            QuickRow::NesOverlay => Platform::Nes,
+            QuickRow::SnesOverlay => Platform::Snes,
+            _ => return None,
+        })
+    }
 
     pub const GAME: [QuickRow; 6] = [
         QuickRow::FastForward,
@@ -111,10 +135,14 @@ impl QuickRow {
         match self {
             QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => &QuickRow::LIGHTS,
             QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes => &QuickRow::SCREEN,
-            QuickRow::GbShader | QuickRow::GbColourCorrection | QuickRow::GbPalettes => &QuickRow::SCREEN_GB,
-            QuickRow::GbaShader | QuickRow::GbaColourCorrection => &QuickRow::SCREEN_GBA,
-            QuickRow::NesShader => &QuickRow::SCREEN_NES,
-            QuickRow::SnesShader => &QuickRow::SCREEN_SNES,
+            QuickRow::GbShader
+            | QuickRow::GbColourCorrection
+            | QuickRow::GbPalettes
+            | QuickRow::GbOverlay
+            | QuickRow::GbcOverlay => &QuickRow::SCREEN_GB,
+            QuickRow::GbaShader | QuickRow::GbaColourCorrection | QuickRow::GbaOverlay => &QuickRow::SCREEN_GBA,
+            QuickRow::NesShader | QuickRow::NesOverlay => &QuickRow::SCREEN_NES,
+            QuickRow::SnesShader | QuickRow::SnesOverlay => &QuickRow::SCREEN_SNES,
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
@@ -175,6 +203,9 @@ impl QuickRow {
             QuickRow::About => "About",
             QuickRow::GbaShader | QuickRow::GbShader | QuickRow::NesShader | QuickRow::SnesShader => "Shader",
             QuickRow::GbColourCorrection | QuickRow::GbaColourCorrection => "Color Correction",
+            QuickRow::GbOverlay => "GB Overlay",
+            QuickRow::GbcOverlay => "GBC Overlay",
+            QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay => "Overlay",
             QuickRow::ScreenGb => "Game Boy / GBC",
             QuickRow::ScreenGba => "Game Boy Advance",
             QuickRow::ScreenNes => "NES",
@@ -410,6 +441,9 @@ pub struct QuickMenu<'a> {
     pub row: QuickRow,
     pub values: [Option<QuickValue>; QuickRow::ALL.len()],
     pub clock: Option<[(TexId, u32, u32); 2]>,
+    /// Rows whose value is free text rather than one of the QuickValues (an overlay's name):
+    /// its faces, dim and lit.
+    pub texts: [Option<[(TexId, u32, u32); 2]>; QuickRow::ALL.len()],
     pub faces: Option<&'a QuickMenuFaces>,
     /// Rows shown greyed out that do nothing, such as Cart Art and RetroAchievements with Wi-Fi off.
     pub disabled: [bool; QuickRow::ALL.len()],
@@ -444,6 +478,7 @@ impl QuickMenu<'_> {
             }
             let value = match row {
                 QuickRow::DateTime => self.clock.map(|c| c[lit as usize]),
+                _ if self.texts[row.index()].is_some() => self.texts[row.index()].map(|t| t[lit as usize]),
                 _ => self.values[row.index()]
                     .and_then(|v| faces.values.get(v.index()))
                     .map(|v| v[lit as usize]),
