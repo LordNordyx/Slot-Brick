@@ -476,6 +476,7 @@ fn the_gauge_starts_at_the_case_margin() {
         }),
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(1)),
+        None,
         Printed { face: None, w: 40 },
         &mut out,
     );
@@ -499,6 +500,7 @@ fn the_band_prints_the_charge_at_one_margin_and_the_clock_at_the_other() {
         }),
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(1)),
+        None,
         Printed { face: None, w: 40 },
         &mut out,
     );
@@ -546,6 +548,7 @@ fn the_footer_does_not_move_the_gauge_when_the_charge_state_changes() {
         }),
         Printed { face: None, w: 30 },
         None,
+        None,
         Printed { face: None, w: 40 },
         &mut idle,
     );
@@ -557,6 +560,7 @@ fn the_footer_does_not_move_the_gauge_when_the_charge_state_changes() {
         }),
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(2)),
+        None,
         Printed { face: None, w: 40 },
         &mut charging,
     );
@@ -574,6 +578,7 @@ fn the_clock_stays_at_the_right_margin() {
     draw_footer(
         None,
         Printed::default(),
+        None,
         None,
         Printed { face: None, w: 40 },
         &mut out,
@@ -594,6 +599,7 @@ fn a_band_with_no_gauge_still_draws_its_clock() {
     draw_footer(
         None,
         Printed::default(),
+        None,
         None,
         Printed { face: None, w: 40 },
         &mut out,

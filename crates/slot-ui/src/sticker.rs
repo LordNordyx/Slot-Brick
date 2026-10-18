@@ -34,7 +34,7 @@ pub struct StickerFields<'a> {
 }
 
 /// Version of the TrimUI Brick port (kept in step with System/launch.sh).
-pub const PORT_VERSION: &str = "V0.23";
+pub const PORT_VERSION: &str = "V0.40";
 
 pub const CREDITS: [&str; 11] = [
     "AN UNOFFICIAL PORT OF SLOT,",
