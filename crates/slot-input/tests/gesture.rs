@@ -564,3 +564,20 @@ fn brick_menu_x_no_longer_changes_the_picture() {
     assert!(g.feed(RawEvent::Down(Btn::Menu), 0).is_empty());
     assert!(!g.feed(RawEvent::Down(Btn::X), 10).contains(&Action::PictureToggle));
 }
+
+#[test]
+fn brick_home_and_a_shoulder_step_the_overlay_and_cost_the_game_and_the_menu_nothing() {
+    use slot_input::{Action, Btn, Gestures, RawEvent};
+    let mut g = Gestures::brick();
+    assert!(g.feed(RawEvent::Down(Btn::Menu), 0).is_empty());
+    assert_eq!(g.feed(RawEvent::Down(Btn::R1), 10), vec![Action::OverlayNext]);
+    assert!(g.feed(RawEvent::Up(Btn::R1), 30).is_empty(), "the game saw R1 let go");
+    assert_eq!(g.feed(RawEvent::Down(Btn::L1), 40), vec![Action::OverlayPrev]);
+    assert!(g.feed(RawEvent::Up(Btn::L1), 60).is_empty(), "the game saw L1 let go");
+    let out = g.feed(RawEvent::Up(Btn::Menu), 80);
+    assert!(!out.contains(&Action::QuickMenu) && !out.contains(&Action::GameMenu), "Home still opened a menu: {out:?}");
+    // Long held, Home with a shoulder is still not an eject.
+    assert!(g.tick(5000).iter().all(|a| *a != Action::Eject));
+    // L1 alone is the game's again.
+    assert_eq!(g.feed(RawEvent::Down(Btn::L1), 6000), vec![Action::GbaDown(Btn::L1)]);
+}

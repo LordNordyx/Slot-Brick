@@ -124,6 +124,7 @@ The three small buttons on the bottom of the Brick are **HOME** (left, labelled 
 | `SELECT` + `A` or `HOME` + `A` | Next shader |
 | `SELECT` + `X` | **GBA / SNES:** switch between original and full screen; saved per game |
 | `SELECT` + `Y` | Toggle colour correction |
+| `HOME` + `L1` / `R1` | Previous / next overlay for this system |
 | `SELECT` + `L2` / `R2` | **GB:** previous / next colour palette |
 | `SELECT` + `Up` / `Down` | Adjust brightness |
 | `SELECT` + `Left` / `Right` | Adjust the blue light filter |
@@ -182,7 +183,7 @@ Slot doesn't ship any overlays, but it can use your own:
 1. Put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the overlay's fully transparent area.
 2. Open **HOME → Screen**, choose the system, and pick the overlay on its **Overlay** row.
 
-The game is scaled to fill the transparent area without stretching. While an overlay is on, the in-game picture size shortcuts do nothing.
+The game is scaled to fill the transparent area without stretching. While an overlay is on, the in-game picture size shortcuts do nothing. In game, `HOME` + `L1` / `R1` steps through the system's overlays and Off, naming each as it goes on.
 
 mugwomp93's [1024x768 overlays](https://github.com/mugwomp93/1024x768_overlays) for GB, GBC and GBA work as they are.
 

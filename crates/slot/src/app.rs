@@ -1109,6 +1109,30 @@ impl App {
         self.card_failing.store(written.is_err(), Ordering::Relaxed);
     }
 
+    /// Home+L1 / Home+R1: the previous or next overlay for the system being played, named as it
+    /// goes on. With no overlays for it, there is nothing to change to.
+    fn step_overlay_in_game(&mut self, right: bool) {
+        if !matches!(self.phase, Phase::Playing { .. }) || self.game_menu_open() || self.power_menu.is_some() {
+            return;
+        }
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let to = slot_store::step_overlay(&root, self.platform, self.state.overlay(self.platform), right);
+        if to.as_deref() == self.state.overlay(self.platform) {
+            return self.refuse();
+        }
+        self.state.set_overlay(self.platform, to);
+        self.persist();
+        let name = self.overlay_text(self.platform);
+        // Stepping on quickly, the latest name replaces the one before rather than queueing.
+        self.banners.retain(|b| b.0 != "Overlay");
+        if self.banner.as_ref().is_some_and(|b| b.1 == "Overlay") {
+            self.banner = None;
+        }
+        self.announce("Overlay", &name);
+    }
+
     /// Home+X on the Brick: GBA between its true 3:2 shape and 4:3 full screen.
     /// Remembered per game, like the L1/R1 choice for GB/GBC.
     fn toggle_gba_picture(&mut self) {
@@ -1808,6 +1832,10 @@ impl App {
         }
         if action == Action::PictureToggle {
             self.toggle_gba_picture();
+            return true;
+        }
+        if matches!(action, Action::OverlayPrev | Action::OverlayNext) {
+            self.step_overlay_in_game(action == Action::OverlayNext);
             return true;
         }
         if action == Action::MuteToggle {

@@ -3,7 +3,7 @@
 ## Unreleased
 - Screen settings are sorted by system: Game Boy / GBC, Game Boy Advance, NES and SNES each have their own page. NES and SNES shaders can now be set there too.
 - Colour correction is set separately for the Game Boys and the GBA. A setting saved before keeps working for both.
-- Overlays: put your own 1024×768 PNG overlays in `Slot/Overlays/<system>` and pick one on the system's Screen page. The game fits itself into the overlay's window.
+- Overlays: put your own 1024×768 PNG overlays in `Slot/Overlays/<system>` and pick one on the system's Screen page. The game fits itself into the overlay's window. In game, HOME + L1 / R1 switches between them.
 
 ## v0.41
 **New since v0.40:**

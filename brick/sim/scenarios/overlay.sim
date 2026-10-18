@@ -1,5 +1,5 @@
 # An overlay chosen on the Game Boy page goes over Pocket Test, the game fitted into its window,
-# and L1/R1 can no longer change the picture's size while it is on.
+# and L1/R1 can no longer change the picture's size while it is on. Home+R1 steps it in game.
 press a
 phase Shelf
 press menu
@@ -30,5 +30,16 @@ snap game-overlay
 press l1
 wait 600
 snap game-overlay-l1
+# Home+R1 in game: the next overlay, which after the only one there is, is Off; then back on.
+down menu
+press r1
+up menu
+wait 600
+snap game-overlay-off
+down menu
+press r1
+up menu
+wait 600
+snap game-overlay-back
 hold menu 1500   # save state, eject, back to the shelf
 phase Shelf 20000

@@ -45,6 +45,9 @@ pub enum Action {
     LedToggle,
     /// Brick Home+X: switch the GBA picture between 3:2 and full-screen 4:3.
     PictureToggle,
+    /// Brick Home+L1 / Home+R1: the previous / next overlay for the system being played.
+    OverlayPrev,
+    OverlayNext,
     PowerPress,
     PowerTap,
     PowerHold,
@@ -169,6 +172,16 @@ impl Gestures {
     }
 
     fn down(&mut self, b: Btn, now: Millis) -> Vec<Action> {
+        if self.home_chords && self.menu_down_at.is_some() && matches!(b, Btn::L1 | Btn::R1) {
+            let (bit, action) = match b {
+                Btn::L1 => (HOME_L1, Action::OverlayPrev),
+                _ => (HOME_R1, Action::OverlayNext),
+            };
+            if self.chord_held & bit != 0 { return Vec::new(); }
+            self.chord_held |= bit;
+            self.menu_eject_fired = true; // consume Home: no tap menu or hold eject
+            return vec![action];
+        }
         if self.home_chords && self.menu_down_at.is_some() && matches!(b, Btn::A | Btn::B) {
             let (bit, action) = match b {
                 Btn::A => (512, Action::ShaderNext),
@@ -214,6 +227,12 @@ impl Gestures {
         if b == Btn::X && self.chord_held & HOME_X != 0 {
             self.chord_held &= !HOME_X;
             return Vec::new();
+        }
+        for (button, bit) in [(Btn::L1, HOME_L1), (Btn::R1, HOME_R1)] {
+            if b == button && self.chord_held & bit != 0 {
+                self.chord_held &= !bit;
+                return Vec::new();
+            }
         }
         if let Some((bit, _)) = chord(b) {
             if self.chord_held & bit != 0 {
@@ -438,6 +457,9 @@ impl Gestures {
 
 /// Held-bit for the Brick's picture shortcut on X (X has no shared chord).
 const HOME_X: u16 = 2048;
+/// Held-bits for Home+L1 and Home+R1, the overlay shortcuts.
+const HOME_L1: u16 = 4096;
+const HOME_R1: u16 = 8192;
 
 fn chord(b: Btn) -> Option<(u16, Action)> {
     Some(match b {
