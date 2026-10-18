@@ -9,6 +9,72 @@ use slot_input::{Action, Btn};
 use slot_power::LedState;
 use slot_ui::PowerChoice;
 
+#[cfg(feature = "sim")]
+#[test]
+fn brick_led_failures_retry_without_blocking_platform_or_spamming_logs() {
+    use std::{fs, process::Command};
+
+    if std::env::var_os("SLOT_LED_FAILURE_TEST").is_none() {
+        let hw = tempfile::tempdir().unwrap();
+        let output = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "brick_led_failures_retry_without_blocking_platform_or_spamming_logs", "--nocapture"])
+            .env("SLOT_LED_FAILURE_TEST", "1")
+            .env("SLOT_HW_ROOT", hw.path())
+            .output().unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{}\n{stderr}", String::from_utf8_lossy(&output.stdout));
+        assert_eq!(stderr.matches("slot: battery LEDs:").count(), 3);
+        return;
+    }
+
+    let sys = slot_power::hw("/sys/class/led_anim");
+    fs::create_dir_all(&sys).unwrap();
+    for name in ["max_scale", "max_scale_f1f2", "max_scale_lr", "effect_enable"] {
+        fs::write(sys.join(name), "0\n").unwrap();
+    }
+    for zone in ["m", "f1", "f2", "lr"] {
+        for prefix in ["effect_rgb_hex", "effect_cycles", "effect_duration", "effect"] {
+            fs::write(sys.join(format!("{prefix}_{zone}")), "0\n").unwrap();
+        }
+    }
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let (mut a, charge, percent, led, writes) = app_playing_with_led(d.path(), "Emerald");
+    a.tick_ms(10_000);
+    assert_eq!(led.load(Ordering::Relaxed), 1);
+
+    let trigger = sys.join("effect_f1");
+    fs::remove_file(&trigger).unwrap();
+    charge.store(2, Ordering::Relaxed);
+    a.tick_ms(11_000);
+    assert_eq!(led.load(Ordering::Relaxed), 3);
+    let after_change = writes.load(Ordering::Relaxed);
+    a.tick_ms(12_000);
+    a.tick_ms(13_000);
+    assert_eq!(writes.load(Ordering::Relaxed), after_change);
+
+    charge.store(1, Ordering::Relaxed);
+    a.tick_ms(14_000);
+    assert_eq!(led.load(Ordering::Relaxed), 1);
+    fs::write(&trigger, "0\n").unwrap();
+    let before_retry = writes.load(Ordering::Relaxed);
+    a.tick_ms(15_000);
+    assert_eq!(fs::read_to_string(&trigger).unwrap().trim(), "4");
+    assert_eq!(writes.load(Ordering::Relaxed), before_retry);
+
+    fs::remove_file(&trigger).unwrap();
+    percent.store(10, Ordering::Relaxed);
+    a.tick_ms(20_000);
+    assert_eq!(led.load(Ordering::Relaxed), 5);
+    fs::write(&trigger, "0\n").unwrap();
+    a.tick_ms(21_000);
+    assert_eq!(fs::read_to_string(&trigger).unwrap().trim(), "5");
+    assert_eq!(fs::read_to_string(sys.join("effect_rgb_hex_f1")).unwrap().trim(), "FF0000");
+
+    fs::remove_file(&trigger).unwrap();
+    a.on_battery(slot_power::Battery { percent: 5, charge: slot_power::Charge::Discharging });
+    assert_eq!(led.load(Ordering::Relaxed), 0);
+}
+
 #[test]
 fn the_fast_tick_actually_reaches_the_platforms_set_led() {
     let d = tmp_root_with_carts(&["Emerald"]);
@@ -38,31 +104,32 @@ fn a_flat_battery_that_is_not_charging_reads_low() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let (mut a, charge, percent) = app_playing_with_charge(d.path(), "Emerald");
     charge.store(1, Ordering::Relaxed);
-    percent.store(10, Ordering::Relaxed);
+    percent.store(13, Ordering::Relaxed);
     a.tick_ms(10_000);
     assert_eq!(a.led_state(), LedState::Low);
 }
 
 #[test]
-fn the_low_threshold_is_twenty_percent_not_just_a_number_comfortably_below_it() {
+fn low_battery_warning_starts_at_the_platform_threshold() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let (mut a, charge, percent) = app_playing_with_charge(d.path(), "Emerald");
     charge.store(1, Ordering::Relaxed);
 
-    percent.store(20, Ordering::Relaxed);
+    let threshold = if cfg!(feature = "brick") { 15 } else { 20 };
+    percent.store(threshold, Ordering::Relaxed);
     a.tick_ms(10_000);
     assert_eq!(
         a.led_state(),
         LedState::Low,
-        "20% is still at the threshold"
+        "the threshold must trigger the warning"
     );
 
-    percent.store(21, Ordering::Relaxed);
+    percent.store(threshold + 1, Ordering::Relaxed);
     a.tick_ms(20_000);
     assert_eq!(
         a.led_state(),
         LedState::Running,
-        "21% is one point above the threshold"
+        "one point above the threshold must not trigger the warning"
     );
 }
 
@@ -71,6 +138,37 @@ fn no_reading_yet_reads_running_not_off() {
     let d = tmp_root_with_carts(&["Emerald"]);
     let a = app_playing_in(d.path(), "Emerald");
     assert_eq!(a.led_state(), LedState::Running);
+}
+
+#[cfg(feature = "brick")]
+#[test]
+fn brick_changes_warning_at_fifteen_and_ten_percent_and_clears_on_charge() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let (mut a, charge, percent, led, _) = app_playing_with_led(d.path(), "Emerald");
+    charge.store(1, Ordering::Relaxed);
+    let mut now = 0;
+    for (percent_value, state, code) in [
+        (16, LedState::Running, 1),
+        (15, LedState::Low, 2),
+        (11, LedState::Low, 2),
+        (10, LedState::VeryLow, 5),
+        (9, LedState::VeryLow, 5),
+        (11, LedState::Low, 2),
+        (16, LedState::Running, 1),
+        (10, LedState::VeryLow, 5),
+    ] {
+        percent.store(percent_value, Ordering::Relaxed);
+        now += 10_000;
+        a.tick_ms(now);
+        assert_eq!(a.led_state(), state);
+        assert_eq!(led.load(Ordering::Relaxed), code);
+    }
+    charge.store(2, Ordering::Relaxed);
+    a.tick_ms(now + 1_000);
+    assert_eq!(led.load(Ordering::Relaxed), 3);
+    charge.store(1, Ordering::Relaxed);
+    a.tick_ms(now + 2_000);
+    assert_eq!(led.load(Ordering::Relaxed), 5);
 }
 
 #[test]

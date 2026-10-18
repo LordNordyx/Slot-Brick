@@ -290,6 +290,7 @@ pub fn led_code(state: LedState) -> u8 {
         LedState::Off => 0,
         LedState::Running => 1,
         LedState::Low => 2,
+        LedState::VeryLow => 5,
         LedState::Charging => 3,
         LedState::Charged => 4,
     }
