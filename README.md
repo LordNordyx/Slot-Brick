@@ -225,8 +225,9 @@ Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release
 needs write access, so only maintainers can start one. Before tagging:
 
 1. Put the version at the top of [`brick/README.md`](brick/README.md) — it is what the card
-   says it is — and in `brick/card/Apps/Slot/config.json`, `brick/card/Slot/System/launch.sh`
-   and `brick/card/Slot/System/diagnose.sh`.
+   says it is — and in `brick/card/Apps/Slot/config.json`, `brick/card/Slot/System/launch.sh`,
+   `brick/card/Slot/System/diagnose.sh` and `PORT_VERSION` in `crates/slot-ui/src/sticker.rs`
+   (the About screen).
 2. Move the `## Unreleased` notes in [`brick/CHANGELOG.md`](brick/CHANGELOG.md) under a
    `## vX.Y` heading. Those notes become the release's text, so write them for players.
 3. `git tag vX.Y && git push origin vX.Y`, with the tag on `main`.
@@ -240,6 +241,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | Project / contributor | Contribution |
 | :--- | :--- |
 | [Brandon T. Kowalski](https://github.com/BrandonKowalski/slot) | Original Slot. frontend and Cart Studio |
+| [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 
 ## AI Disclosure
 This port was developed with assistance from [Claude Opus](https://claude.ai/). 

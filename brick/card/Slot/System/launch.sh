@@ -12,7 +12,7 @@ else
     exec > /tmp/slot.log 2>&1
     echo 'WARNING: SD card is not writable'
 fi
-printf 'slot Brick v0.40\n'
+printf 'slot Brick v0.41\n'
 date
 uname -a
 # Keep inherited NextUI libraries ahead of the stock fallback.

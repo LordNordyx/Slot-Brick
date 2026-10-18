@@ -1,5 +1,11 @@
 # Changelog — Slot. for TrimUI Brick
 
+## v0.41
+**New since v0.40:**
+- Choosing a label now ends with it peeling onto the cart like a sticker, on every cart. On GBA carts the front closes for it, then opens again.
+- Low-battery warning on the F1/F2 lights: steady red at 15% or below, blinking at 10% or below, even with the lights turned off. Thanks to @wargenng!
+- Fixed: the About screen showed the wrong version.
+
 ## v0.40
 **New since v0.23:**
 - Wifi status icon on the shelf footer. Icons may change.
