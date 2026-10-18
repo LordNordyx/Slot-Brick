@@ -143,7 +143,8 @@ fn the_cards_setting_reaches_the_core_through_the_session() {
         std::fs::copy(&dylib, d.path().join("System/mgba_libretro.dylib")).expect("plant a core");
         let state = SlotState {
             clock_set: true,
-            colour_correction: colour,
+            colour_correction_gb: colour,
+            colour_correction_gba: colour,
             ..SlotState::default()
         };
         write_slot_state(d.path(), &state).expect("write slot.state");

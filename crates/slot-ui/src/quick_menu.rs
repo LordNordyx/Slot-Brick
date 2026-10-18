@@ -14,7 +14,7 @@ pub enum QuickRow {
     About,
     GbaShader,
     GbShader,
-    ColourCorrection,
+    GbaColourCorrection,
     Game,
     EjectSave,
     Turbo,
@@ -30,10 +30,17 @@ pub enum QuickRow {
     Wifi,
     CartArt,
     Achievements,
+    ScreenGb,
+    ScreenGba,
+    ScreenNes,
+    ScreenSnes,
+    GbColourCorrection,
+    NesShader,
+    SnesShader,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 24] = [
+    pub const ALL: [QuickRow; 31] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -42,7 +49,7 @@ impl QuickRow {
         QuickRow::About,
         QuickRow::GbaShader,
         QuickRow::GbShader,
-        QuickRow::ColourCorrection,
+        QuickRow::GbaColourCorrection,
         QuickRow::Game,
         QuickRow::EjectSave,
         QuickRow::Turbo,
@@ -58,6 +65,13 @@ impl QuickRow {
         QuickRow::Wifi,
         QuickRow::CartArt,
         QuickRow::Achievements,
+        QuickRow::ScreenGb,
+        QuickRow::ScreenGba,
+        QuickRow::ScreenNes,
+        QuickRow::ScreenSnes,
+        QuickRow::GbColourCorrection,
+        QuickRow::NesShader,
+        QuickRow::SnesShader,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -73,12 +87,12 @@ impl QuickRow {
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
     pub fn led_setting(self) -> bool { Self::LIGHTS.contains(&self) }
 
-    pub const SCREEN: [QuickRow; 4] = [
-        QuickRow::GbaShader,
-        QuickRow::GbShader,
-        QuickRow::ColourCorrection,
-        QuickRow::GbPalettes,
-    ];
+    /// Screen: a page for each system, holding that system's own picture settings.
+    pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
+    pub const SCREEN_GB: [QuickRow; 3] = [QuickRow::GbShader, QuickRow::GbColourCorrection, QuickRow::GbPalettes];
+    pub const SCREEN_GBA: [QuickRow; 2] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection];
+    pub const SCREEN_NES: [QuickRow; 1] = [QuickRow::NesShader];
+    pub const SCREEN_SNES: [QuickRow; 1] = [QuickRow::SnesShader];
 
     pub const GAME: [QuickRow; 6] = [
         QuickRow::FastForward,
@@ -96,10 +110,11 @@ impl QuickRow {
     pub fn page(self) -> &'static [QuickRow] {
         match self {
             QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => &QuickRow::LIGHTS,
-            QuickRow::GbaShader
-            | QuickRow::GbShader
-            | QuickRow::ColourCorrection
-            | QuickRow::GbPalettes => &QuickRow::SCREEN,
+            QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes => &QuickRow::SCREEN,
+            QuickRow::GbShader | QuickRow::GbColourCorrection | QuickRow::GbPalettes => &QuickRow::SCREEN_GB,
+            QuickRow::GbaShader | QuickRow::GbaColourCorrection => &QuickRow::SCREEN_GBA,
+            QuickRow::NesShader => &QuickRow::SCREEN_NES,
+            QuickRow::SnesShader => &QuickRow::SCREEN_SNES,
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
@@ -113,7 +128,11 @@ impl QuickRow {
     pub fn parent(self) -> Option<QuickRow> {
         match self.page()[0] {
             QuickRow::LedMode => Some(QuickRow::Lights),
-            QuickRow::GbaShader => Some(QuickRow::Screen),
+            QuickRow::ScreenGb => Some(QuickRow::Screen),
+            QuickRow::GbShader => Some(QuickRow::ScreenGb),
+            QuickRow::GbaShader => Some(QuickRow::ScreenGba),
+            QuickRow::NesShader => Some(QuickRow::ScreenNes),
+            QuickRow::SnesShader => Some(QuickRow::ScreenSnes),
             QuickRow::FastForward => Some(QuickRow::Game),
             _ => None,
         }
@@ -123,6 +142,10 @@ impl QuickRow {
         match self {
             QuickRow::Lights => Some(QuickRow::LIGHTS[0]),
             QuickRow::Screen => Some(QuickRow::SCREEN[0]),
+            QuickRow::ScreenGb => Some(QuickRow::SCREEN_GB[0]),
+            QuickRow::ScreenGba => Some(QuickRow::SCREEN_GBA[0]),
+            QuickRow::ScreenNes => Some(QuickRow::SCREEN_NES[0]),
+            QuickRow::ScreenSnes => Some(QuickRow::SCREEN_SNES[0]),
             QuickRow::Game => Some(QuickRow::GAME[0]),
             _ => None,
         }
@@ -150,9 +173,12 @@ impl QuickRow {
             QuickRow::Rumble => "Rumble",
             QuickRow::DateTime => "Date & Time",
             QuickRow::About => "About",
-            QuickRow::GbaShader => "GBA Shader",
-            QuickRow::GbShader => "GB / GBC Shader",
-            QuickRow::ColourCorrection => "Color Correction",
+            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::NesShader | QuickRow::SnesShader => "Shader",
+            QuickRow::GbColourCorrection | QuickRow::GbaColourCorrection => "Color Correction",
+            QuickRow::ScreenGb => "Game Boy / GBC",
+            QuickRow::ScreenGba => "Game Boy Advance",
+            QuickRow::ScreenNes => "NES",
+            QuickRow::ScreenSnes => "SNES",
             QuickRow::Game => "Gameplay",
             QuickRow::EjectSave => "Auto Save on Eject",
             QuickRow::Turbo => "Turbo Buttons",
@@ -165,6 +191,7 @@ impl QuickRow {
         matches!(
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements
+                | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes
         )
     }
 

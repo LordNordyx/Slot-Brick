@@ -6,6 +6,22 @@ phase QuickMenu
 snap menu
 press a
 snap menu-screen
+# Screen holds a page per system, each with that system's own settings.
+press a
+snap menu-screen-gb
+press b
+press down
+press a
+snap menu-screen-gba
+press b
+press down
+press a
+snap menu-screen-nes
+press b
+press down
+press a
+snap menu-screen-snes
+press b
 press b
 press down
 press a

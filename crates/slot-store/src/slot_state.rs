@@ -30,7 +30,9 @@ pub struct SlotState {
     pub rumble: bool,
     pub ff_speed: u8,
     pub ff_sound: bool,
-    pub colour_correction: bool,
+    /// Colour correction, one for the Game Boys (GB and GBC) and one for the GBA.
+    pub colour_correction_gb: bool,
+    pub colour_correction_gba: bool,
     pub shader_gba: Shader,
     pub shader_gb: Shader,
     pub shader_nes: Shader,
@@ -106,7 +108,8 @@ impl Default for SlotState {
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
-            colour_correction: false,
+            colour_correction_gb: false,
+            colour_correction_gba: false,
             shader_gba: Shader::Grid,
             shader_gb: Shader::Simpletex,
             shader_nes: Shader::Off,
@@ -134,7 +137,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -148,7 +151,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.rumble as u8,
         s.ff_speed,
         s.ff_sound as u8,
-        s.colour_correction as u8,
+        s.colour_correction_gb as u8,
+        s.colour_correction_gba as u8,
         s.shader_gba.name(),
         s.shader_gb.name(),
         s.shader_nes.name(),
@@ -177,6 +181,8 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut colour_correction = None;
+    let mut colour_correction_gb = None;
+    let mut colour_correction_gba = None;
     let mut shader_gba = None;
     let mut shader_gb = None;
     let mut shader_nes = None;
@@ -204,7 +210,10 @@ fn parse(text: &str) -> Option<SlotState> {
             "rumble" => rumble = flag(value),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
+            // Before it was one setting for all three: it carries over to both.
             "colour_correction" => colour_correction = flag(value),
+            "colour_correction_gb" => colour_correction_gb = flag(value),
+            "colour_correction_gba" => colour_correction_gba = flag(value),
             "shader_gba" => shader_gba = Shader::parse(value).filter(|s| Shader::GBA.contains(s)),
             "eject_save" => eject_save = flag(value),
             "turbo" => turbo = flag(value),
@@ -233,7 +242,8 @@ fn parse(text: &str) -> Option<SlotState> {
         rumble: rumble.unwrap_or(fallback.rumble),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),
         ff_sound: ff_sound.unwrap_or(fallback.ff_sound),
-        colour_correction: colour_correction.unwrap_or(fallback.colour_correction),
+        colour_correction_gb: colour_correction_gb.or(colour_correction).unwrap_or(fallback.colour_correction_gb),
+        colour_correction_gba: colour_correction_gba.or(colour_correction).unwrap_or(fallback.colour_correction_gba),
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),
         shader_gb: shader_gb.unwrap_or(fallback.shader_gb),
         shader_nes: shader_nes.unwrap_or(fallback.shader_nes),

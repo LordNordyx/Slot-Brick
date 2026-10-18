@@ -164,7 +164,7 @@ fn a_first_boot_rumbles_and_fast_forwards_silently_at_the_default() {
     assert!(s.rumble, "boots with the motor off");
     assert_eq!(s.ff_speed, FF_SPEED_DEFAULT);
     assert!(!s.ff_sound, "boots with fast forward audible");
-    assert!(!s.colour_correction, "boots with the picture tinted");
+    assert!(!s.colour_correction_gb && !s.colour_correction_gba, "boots with the picture tinted");
     assert_eq!(s.shader_gba, Shader::Grid);
     assert_eq!(s.shader_gb, Shader::Simpletex);
 }
@@ -193,7 +193,8 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
-            colour_correction: false,
+            colour_correction_gb: false,
+            colour_correction_gba: false,
             shader_gba: Shader::Grid,
             shader_gb: Shader::Simpletex,
             shader_nes: Shader::Off,
@@ -215,7 +216,8 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         rumble: false,
         ff_speed: 2,
         ff_sound: true,
-        colour_correction: true,
+        colour_correction_gb: true,
+        colour_correction_gba: false,
         shader_gba: Shader::Dot,
         shader_gb: Shader::Off,
         shader_nes: Shader::Off,
@@ -234,7 +236,8 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         "rumble=0",
         "ff_speed=2",
         "ff_sound=1",
-        "colour_correction=1",
+        "colour_correction_gb=1",
+        "colour_correction_gba=0",
         "shader_gba=dot",
         "shader_gb=off",
         "eject_save=0",
@@ -291,6 +294,7 @@ fn an_out_of_range_setting_falls_back_to_its_default() {
         "colour_correction=2\n",
         "colour_correction=\n",
         "colour_correction=Auto\n",
+        "colour_correction_gb=2\ncolour_correction_gba=on\n",
         "ff_speed=5\n",
         "ff_speed=7\n",
         "ff_speed=8\n",
@@ -299,8 +303,8 @@ fn an_out_of_range_setting_falls_back_to_its_default() {
         std::fs::write(d.path().join("Config/slot.state"), format!("{known}{bad}")).unwrap();
         let s = read_slot_state(d.path());
         assert_eq!(
-            (s.rumble, s.ff_speed, s.ff_sound, s.colour_correction),
-            (true, FF_SPEED_DEFAULT, false, false),
+            (s.rumble, s.ff_speed, s.ff_sound, s.colour_correction_gb, s.colour_correction_gba),
+            (true, FF_SPEED_DEFAULT, false, false, false),
             "accepted {bad:?}"
         );
         assert_eq!(
@@ -407,4 +411,22 @@ fn a_missing_or_unknown_palette_falls_back_to_dmg_green() {
         assert!(!s.gb_palettes, "{bad:?} turned palettes on");
         assert_eq!(s.gb_palette, GbPalette::DEFAULT, "{bad:?}");
     }
+}
+
+#[test]
+fn colour_correction_saved_as_one_setting_carries_over_to_both_systems() {
+    // Before it was split, one line set it for the Game Boys and the GBA together.
+    let d = tmp_root();
+    let known = "cart=Emerald\nbrightness=3\nblue_light=1\nvolume=40\nmuted=0\nclock_set=1\nutc_offset_min=0\n";
+    std::fs::write(d.path().join("Config/slot.state"), format!("{known}colour_correction=1\n")).unwrap();
+    let s = read_slot_state(d.path());
+    assert_eq!((s.colour_correction_gb, s.colour_correction_gba), (true, true));
+    // Once split, each keeps its own, whatever the old line says.
+    std::fs::write(
+        d.path().join("Config/slot.state"),
+        format!("{known}colour_correction=1\ncolour_correction_gb=0\ncolour_correction_gba=1\n"),
+    )
+    .unwrap();
+    let s = read_slot_state(d.path());
+    assert_eq!((s.colour_correction_gb, s.colour_correction_gba), (false, true));
 }

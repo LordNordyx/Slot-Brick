@@ -81,15 +81,11 @@ fn the_rows_run_in_the_order_the_user_chose() {
     assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Date & Time", "About"]);
     #[cfg(feature="brick")]
     assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "LEDs", "Wi-Fi", "Cart Art", "RetroAchievements", "Date & Time", "About"]);
-    assert_eq!(
-        QuickRow::SCREEN.map(QuickRow::label),
-        [
-            "GBA Shader",
-            "GB / GBC Shader",
-            "Color Correction",
-            "GB Palettes"
-        ]
-    );
+    assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES"]);
+    assert_eq!(QuickRow::SCREEN_GB.map(QuickRow::label), ["Shader", "Color Correction", "GB Palettes"]);
+    assert_eq!(QuickRow::SCREEN_GBA.map(QuickRow::label), ["Shader", "Color Correction"]);
+    assert_eq!(QuickRow::SCREEN_NES.map(QuickRow::label), ["Shader"]);
+    assert_eq!(QuickRow::SCREEN_SNES.map(QuickRow::label), ["Shader"]);
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
         [
@@ -112,12 +108,20 @@ fn the_rows_run_in_the_order_the_user_chose() {
             QuickRow::Lights,
             QuickRow::Wifi,
             QuickRow::CartArt,
-            QuickRow::Achievements
+            QuickRow::Achievements,
+            QuickRow::ScreenGb,
+            QuickRow::ScreenGba,
+            QuickRow::ScreenNes,
+            QuickRow::ScreenSnes
         ]
     );
     for page in [
         &QuickRow::MAIN[..],
         &QuickRow::SCREEN[..],
+        &QuickRow::SCREEN_GB[..],
+        &QuickRow::SCREEN_GBA[..],
+        &QuickRow::SCREEN_NES[..],
+        &QuickRow::SCREEN_SNES[..],
         &QuickRow::GAME[..],
     ] {
         for &row in page {

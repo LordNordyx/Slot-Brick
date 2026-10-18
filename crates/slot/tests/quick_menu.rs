@@ -42,14 +42,20 @@ fn press(a: &mut App, btn: Btn) {
 }
 
 fn open_at(a: &mut App, row: QuickRow) {
-    a.apply(Action::QuickMenu);
-    let parent = row.parent();
-    for _ in 0..parent.unwrap_or(row).position() {
-        press(a, Btn::Down);
+    // From the menu closed, down through each page on the way: Screen, then a system, then the row.
+    while a.quick_menu().is_some() {
+        press(a, Btn::B);
     }
-    if parent.is_some() {
-        press(a, Btn::A);
-        for _ in 0..row.position() {
+    a.apply(Action::QuickMenu);
+    let mut path = vec![row];
+    while let Some(up) = path.last().and_then(|r| r.parent()) {
+        path.push(up);
+    }
+    for (i, step) in path.iter().rev().enumerate() {
+        if i > 0 {
+            press(a, Btn::A);
+        }
+        for _ in 0..step.position() {
             press(a, Btn::Down);
         }
     }
@@ -174,16 +180,13 @@ fn rumble_and_fast_forward_sound_flip_on_either_arrow_and_save() {
 }
 
 #[test]
-fn colour_correction_flips_on_either_arrow_and_saves() {
+fn colour_correction_flips_on_either_arrow_and_saves_for_its_own_system_only() {
     let (d, mut a, _) = on_carousel();
-    open_at(&mut a, QuickRow::ColourCorrection);
-    assert!(
-        !a.colour_correction(),
-        "the row did not open on the default, which is off"
-    );
+    open_at(&mut a, QuickRow::GbaColourCorrection);
     assert_eq!(
-        a.quick_value(QuickRow::ColourCorrection),
-        Some(QuickValue::Off)
+        a.quick_value(QuickRow::GbaColourCorrection),
+        Some(QuickValue::Off),
+        "the row did not open on the default, which is off"
     );
     for (btn, want) in [
         (Btn::Right, true),
@@ -192,17 +195,18 @@ fn colour_correction_flips_on_either_arrow_and_saves() {
         (Btn::Right, false),
     ] {
         press(&mut a, btn);
-        assert_eq!(a.colour_correction(), want, "{btn:?}");
+        let s = read_slot_state(d.path());
+        assert_eq!(s.colour_correction_gba, want, "{btn:?} never reached the card");
+        assert!(!s.colour_correction_gb, "{btn:?} changed the Game Boys' too");
         assert_eq!(
-            read_slot_state(d.path()).colour_correction,
-            want,
-            "{btn:?} never reached the card"
-        );
-        assert_eq!(
-            a.quick_value(QuickRow::ColourCorrection),
+            a.quick_value(QuickRow::GbaColourCorrection),
             Some(QuickValue::flag(want))
         );
     }
+    open_at(&mut a, QuickRow::GbColourCorrection);
+    press(&mut a, Btn::Right);
+    let s = read_slot_state(d.path());
+    assert_eq!((s.colour_correction_gb, s.colour_correction_gba), (true, false));
 }
 
 #[test]
@@ -230,28 +234,53 @@ fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
 }
 
 #[test]
-fn screen_opens_a_page_of_its_own_and_b_comes_back_to_it() {
+fn screen_opens_a_page_per_system_each_with_its_own_page_and_b_comes_back_up() {
     let (_d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Screen);
     press(&mut a, Btn::A);
-    assert_eq!(a.quick_menu(), Some(QuickRow::GbaShader));
-    for want in [
-        QuickRow::GbShader,
-        QuickRow::ColourCorrection,
-        QuickRow::GbPalettes,
-        QuickRow::GbaShader,
+    assert_eq!(a.quick_menu(), Some(QuickRow::ScreenGb));
+    for want in [QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes, QuickRow::ScreenGb] {
+        press(&mut a, Btn::Down);
+        assert_eq!(a.quick_menu(), Some(want), "the page did not wrap on itself");
+    }
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), Some(QuickRow::GbShader));
+    for want in [QuickRow::GbColourCorrection, QuickRow::GbPalettes, QuickRow::GbShader] {
+        press(&mut a, Btn::Down);
+        assert_eq!(a.quick_menu(), Some(want), "the Game Boy page did not wrap on itself");
+    }
+    press(&mut a, Btn::B);
+    assert_eq!(a.quick_menu(), Some(QuickRow::ScreenGb));
+    for (system, first) in [
+        (QuickRow::ScreenGba, QuickRow::GbaShader),
+        (QuickRow::ScreenNes, QuickRow::NesShader),
+        (QuickRow::ScreenSnes, QuickRow::SnesShader),
     ] {
         press(&mut a, Btn::Down);
-        assert_eq!(
-            a.quick_menu(),
-            Some(want),
-            "the page did not wrap on itself"
-        );
+        assert_eq!(a.quick_menu(), Some(system));
+        press(&mut a, Btn::A);
+        assert_eq!(a.quick_menu(), Some(first));
+        press(&mut a, Btn::B);
+        assert_eq!(a.quick_menu(), Some(system), "B did not come back to {system:?}");
     }
     press(&mut a, Btn::B);
     assert_eq!(a.quick_menu(), Some(QuickRow::Screen));
     press(&mut a, Btn::B);
     assert_eq!(a.quick_menu(), None);
+}
+
+#[test]
+fn nes_and_snes_shaders_are_set_from_their_own_pages() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::NesShader);
+    assert_eq!(a.quick_value(QuickRow::NesShader), Some(QuickValue::Off));
+    press(&mut a, Btn::Right);
+    assert_eq!(read_slot_state(d.path()).shader_nes, Shader::Grid);
+    assert_eq!(read_slot_state(d.path()).shader_snes, Shader::Off, "the SNES took the NES one");
+    open_at(&mut a, QuickRow::SnesShader);
+    press(&mut a, Btn::Left);
+    assert_eq!(read_slot_state(d.path()).shader_snes, Shader::Grid);
+    assert_eq!(a.quick_value(QuickRow::SnesShader), Some(QuickValue::Grid));
 }
 
 #[test]
@@ -280,7 +309,7 @@ fn each_platform_keeps_its_own_shader_wraps_and_starts_on_grid_and_simpletex() {
         );
     }
     assert_eq!(read_slot_state(d.path()).shader_gb, Shader::Simpletex);
-    press(&mut a, Btn::Down);
+    open_at(&mut a, QuickRow::GbShader);
     press(&mut a, Btn::Left);
     assert_eq!(read_slot_state(d.path()).shader_gb, Shader::Grid);
     assert_eq!(read_slot_state(d.path()).shader_gba, Shader::Off);
@@ -289,10 +318,10 @@ fn each_platform_keeps_its_own_shader_wraps_and_starts_on_grid_and_simpletex() {
 #[test]
 fn colour_correction_leaves_the_settings_around_it_alone() {
     let (d, mut a, _) = on_carousel();
-    open_at(&mut a, QuickRow::ColourCorrection);
+    open_at(&mut a, QuickRow::GbaColourCorrection);
     press(&mut a, Btn::Right);
     let s = read_slot_state(d.path());
-    assert!(s.colour_correction, "the row never took");
+    assert!(s.colour_correction_gba, "the row never took");
     assert_eq!(
         (s.ff_speed, s.ff_sound, s.rumble),
         (

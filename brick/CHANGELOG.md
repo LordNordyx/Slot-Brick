@@ -1,5 +1,9 @@
 # Changelog — Slot. for TrimUI Brick
 
+## Unreleased
+- Screen settings are sorted by system: Game Boy / GBC, Game Boy Advance, NES and SNES each have their own page. NES and SNES shaders can now be set there too.
+- Colour correction is set separately for the Game Boys and the GBA. A setting saved before keeps working for both.
+
 ## v0.41
 **New since v0.40:**
 - Choosing a label now ends with it peeling onto the cart like a sticker, on every cart. On GBA carts the front closes for it, then opens again.

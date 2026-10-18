@@ -746,15 +746,18 @@ impl App {
         match row {
             QuickRow::FastForward => QuickValue::speed(self.state.ff_speed),
             QuickRow::FastForwardSound => Some(QuickValue::flag(self.state.ff_sound)),
-            QuickRow::ColourCorrection => Some(QuickValue::flag(self.state.colour_correction)),
+            QuickRow::GbColourCorrection => Some(QuickValue::flag(self.state.colour_correction_gb)),
+            QuickRow::GbaColourCorrection => Some(QuickValue::flag(self.state.colour_correction_gba)),
             QuickRow::GbPalettes => Some(QuickValue::flag(self.state.gb_palettes)),
             QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
+            QuickRow::NesShader => Some(shader_value(self.state.shader_nes)),
+            QuickRow::SnesShader => Some(shader_value(self.state.shader_snes)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
-            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -1234,8 +1237,14 @@ impl App {
         }
     }
 
+    /// Colour correction for the system being played: the Game Boys share one, the GBA has its
+    /// own, and a NES or SNES has no LCD colour to correct.
     pub fn colour_correction(&self) -> bool {
-        self.state.colour_correction
+        match self.platform {
+            Platform::Gb | Platform::Gbc => self.state.colour_correction_gb,
+            Platform::Gba => self.state.colour_correction_gba,
+            Platform::Nes | Platform::Snes => false,
+        }
     }
 
     pub fn powering_off(&self) -> bool {
@@ -1593,7 +1602,13 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
-            QuickRow::Screen | QuickRow::Game | QuickRow::Lights => {
+            QuickRow::Screen
+            | QuickRow::ScreenGb
+            | QuickRow::ScreenGba
+            | QuickRow::ScreenNes
+            | QuickRow::ScreenSnes
+            | QuickRow::Game
+            | QuickRow::Lights => {
                 if let Some(row) = row.child() {
                     self.phase = Phase::QuickMenu { row };
                 }
@@ -1603,9 +1618,12 @@ impl App {
             | QuickRow::Rewind
             | QuickRow::FastForward
             | QuickRow::FastForwardSound
-            | QuickRow::ColourCorrection
+            | QuickRow::GbColourCorrection
+            | QuickRow::GbaColourCorrection
             | QuickRow::GbaShader
             | QuickRow::GbShader
+            | QuickRow::NesShader
+            | QuickRow::SnesShader
             | QuickRow::GbPalettes
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
@@ -1630,9 +1648,15 @@ impl App {
                 s.ff_speed = to;
             }
             QuickRow::FastForwardSound => s.ff_sound = !s.ff_sound,
-            QuickRow::ColourCorrection => {
-                s.colour_correction = !s.colour_correction;
-                self.colour_pending = Some(s.colour_correction);
+            QuickRow::GbColourCorrection | QuickRow::GbaColourCorrection => {
+                let gba = row == QuickRow::GbaColourCorrection;
+                let on = if gba { &mut s.colour_correction_gba } else { &mut s.colour_correction_gb };
+                *on = !*on;
+                // Only the system being played changes the picture now; the other waits for
+                // its next game.
+                if matches!(self.platform, Platform::Gba) == gba {
+                    self.colour_pending = Some(*on);
+                }
             }
             QuickRow::GbaShader => {
                 let to = s.shader_gba.step(&Shader::GBA, right);
@@ -1648,12 +1672,20 @@ impl App {
                 }
                 s.shader_gb = to;
             }
+            QuickRow::NesShader | QuickRow::SnesShader => {
+                let shader = if row == QuickRow::NesShader { &mut s.shader_nes } else { &mut s.shader_snes };
+                let to = shader.step(&Shader::NES, right);
+                if to == *shader {
+                    return;
+                }
+                *shader = to;
+            }
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
-            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
@@ -1726,8 +1758,12 @@ impl App {
                 self.refuse();
                 return true;
             }
-            self.change_setting(QuickRow::ColourCorrection, true);
-            let said = match self.state.colour_correction {
+            let row = match self.platform {
+                Platform::Gba => QuickRow::GbaColourCorrection,
+                _ => QuickRow::GbColourCorrection,
+            };
+            self.change_setting(row, true);
+            let said = match self.colour_correction() {
                 true => Toast::ColourOn,
                 false => Toast::ColourOff,
             };

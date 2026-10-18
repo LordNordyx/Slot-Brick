@@ -204,7 +204,7 @@ fn the_screen_page_sets_gb_palettes_in_line_with_the_rows_above() {
         [0x4d, 0x4d, 0x57],
         "the bar is not on GB Palettes"
     );
-    for row in QuickRow::SCREEN {
+    for row in QuickRow::SCREEN_GB {
         let top = (QUICK_TOP + QUICK_PITCH * row.position() as f32) as usize;
         let label = inked(&px, 0..360, top);
         let first = *label.first().expect("a row with no label");
