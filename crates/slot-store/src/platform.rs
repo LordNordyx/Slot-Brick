@@ -24,6 +24,17 @@ impl Platform {
         }
     }
 
+    /// Where the platform is in Platform::ALL, for arrays kept one per platform.
+    pub fn index(self) -> usize {
+        match self {
+            Platform::Gba => 0,
+            Platform::Gb => 1,
+            Platform::Gbc => 2,
+            Platform::Nes => 3,
+            Platform::Snes => 4,
+        }
+    }
+
     pub fn dir_name(self) -> &'static str {
         match self {
             Platform::Gba => "GBA",

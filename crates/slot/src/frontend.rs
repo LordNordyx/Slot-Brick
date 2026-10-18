@@ -97,7 +97,7 @@ struct OverlayTex {
     reading: Option<(std::path::PathBuf, std::sync::mpsc::Receiver<Option<crate::overlay::Overlay>>)>,
     /// An overlay that could not be used, so it is not read again every frame.
     refused: Option<std::path::PathBuf>,
-    texts: [[Option<TexId>; 2]; 5],
+    texts: [[Option<TexId>; 2]; slot_store::Platform::ALL.len()],
 }
 
 /// Each system's Overlay row reads the overlay's name, or Off, made again when it changes.
@@ -105,11 +105,11 @@ fn sync_overlay_texts(app: &mut App, compositor: &mut Compositor, tex: &mut Over
     if app.quick_menu().is_none() {
         return;
     }
-    for (i, platform) in slot_store::Platform::ALL.into_iter().enumerate() {
-        let text = app.overlay_text(platform);
-        if app.overlay_text_shown(platform) == Some(text.as_str()) {
+    for platform in slot_store::Platform::ALL {
+        if app.overlay_text_shown(platform) == Some(app.overlay_text(platform)) {
             continue;
         }
+        let (i, text) = (platform.index(), app.overlay_text(platform).to_string());
         let [dim, lit] = [false, true].map(|lit| quick_value_face(&text, lit));
         let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
         let dim = upload(compositor, &mut tex.texts[i][0], dim);

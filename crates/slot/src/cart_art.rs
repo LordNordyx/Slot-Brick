@@ -927,12 +927,15 @@ fn crc32_file(path: &Path) -> std::io::Result<u32> {
     }
 }
 
+/// The widest or tallest picture read from the card, for labels and overlays alike.
+pub(crate) const PICTURE_SIDE_MAX: u32 = 4096;
+
 fn is_png(bytes: &[u8]) -> bool {
     let mut dec = png::Decoder::new(bytes);
     dec.set_limits(png::Limits { bytes: 64 << 20 });
     dec.read_info().is_ok_and(|r| {
         let info = r.info();
-        info.width > 0 && info.height > 0 && info.width <= 4096 && info.height <= 4096
+        info.width > 0 && info.height > 0 && info.width <= PICTURE_SIDE_MAX && info.height <= PICTURE_SIDE_MAX
     })
 }
 

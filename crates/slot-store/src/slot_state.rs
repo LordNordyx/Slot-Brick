@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use crate::atomic::atomic_write;
@@ -44,21 +45,17 @@ pub struct SlotState {
     pub gb_palette: GbPalette,
     /// The overlay chosen for each system, by file name in Overlays/<system>, in the order of
     /// Platform::ALL; None is off.
-    pub overlays: [Option<String>; 5],
+    pub overlays: [Option<String>; Platform::ALL.len()],
 }
 
 impl SlotState {
     pub fn overlay(&self, platform: Platform) -> Option<&str> {
-        self.overlays[overlay_slot(platform)].as_deref()
+        self.overlays[platform.index()].as_deref()
     }
 
     pub fn set_overlay(&mut self, platform: Platform, name: Option<String>) {
-        self.overlays[overlay_slot(platform)] = name.filter(|n| crate::overlay_name_ok(n));
+        self.overlays[platform.index()] = name.filter(|n| crate::overlay_name_ok(n));
     }
-}
-
-fn overlay_slot(platform: Platform) -> usize {
-    Platform::ALL.iter().position(|p| *p == platform).unwrap_or(0)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -183,7 +180,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     );
     let mut text = text;
     for platform in Platform::ALL {
-        text.push_str(&format!("overlay_{}={}\n", platform_key(platform), s.overlay(platform).unwrap_or("")));
+        let _ = writeln!(text, "overlay_{}={}", platform_key(platform), s.overlay(platform).unwrap_or(""));
     }
     atomic_write(&state_path(root), text.as_bytes())
 }
@@ -214,7 +211,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut rewind = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
-    let mut overlays: [Option<String>; 5] = Default::default();
+    let mut overlays: [Option<String>; Platform::ALL.len()] = Default::default();
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -250,7 +247,7 @@ fn parse(text: &str) -> Option<SlotState> {
                 // overlay_gb=<file name>: one for each system, empty for off.
                 let system = key.strip_prefix("overlay_").and_then(platform_value);
                 if let Some(platform) = system {
-                    overlays[overlay_slot(platform)] = Some(value.to_string()).filter(|n| crate::overlay_name_ok(n));
+                    overlays[platform.index()] = Some(value.to_string()).filter(|n| crate::overlay_name_ok(n));
                 }
             }
         }

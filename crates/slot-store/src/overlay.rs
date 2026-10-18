@@ -25,23 +25,13 @@ pub fn overlays_dir(root: &Path, platform: Platform) -> PathBuf {
 
 /// The overlays there are for `platform`, in name order.
 pub fn overlays(root: &Path, platform: Platform) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(overlays_dir(root, platform)) else {
-        return Vec::new();
-    };
-    let mut names: Vec<String> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-        .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|n| overlay_name_ok(n))
+    let dir = overlays_dir(root, platform);
+    let mut names: Vec<(String, String)> = crate::listing(&dir)
+        .into_iter()
+        .filter(|(_, name)| overlay_name_ok(name) && dir.join(name).is_file())
         .collect();
-    names.sort_by_key(|n| n.to_lowercase());
-    names
-}
-
-/// Where the overlay called `name` is for `platform`, when it is a name one may be and is there.
-pub fn overlay_path(root: &Path, platform: Platform, name: &str) -> Option<PathBuf> {
-    let path = overlays_dir(root, platform).join(name);
-    (overlay_name_ok(name) && path.is_file()).then_some(path)
+    names.sort();
+    names.into_iter().map(|(_, name)| name).collect()
 }
 
 /// The next choice from `now` among Off (None) and the overlays there are, either way round.
@@ -84,8 +74,5 @@ mod tests {
         assert_eq!(step(Some("b.png"), true), None, "it comes round to Off");
         assert_eq!(step(None, false).as_deref(), Some("b.png"));
         assert_eq!(step(Some("gone.png"), true).as_deref(), Some("A.png"), "a missing one counts as Off");
-        assert_eq!(overlay_path(d.path(), Platform::Gb, "A.png"), Some(dir.join("A.png")));
-        assert_eq!(overlay_path(d.path(), Platform::Gb, "../GB/A.png"), None);
-        assert_eq!(overlay_path(d.path(), Platform::Gb, "gone.png"), None);
     }
 }

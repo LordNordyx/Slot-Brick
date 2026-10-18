@@ -4,9 +4,8 @@ use std::path::Path;
 
 use slot_store::Platform;
 
-/// The largest overlay file read, and the largest picture: a screen-sized PNG is far smaller.
+/// The largest overlay file read: a screen-sized PNG is far smaller.
 const FILE_MAX: u64 = 16 << 20;
-const SIDE_MAX: u32 = 4096;
 /// A window smaller than this share of the picture is not one a game could be shown in.
 const WINDOW_MIN: f32 = 0.05;
 
@@ -24,7 +23,7 @@ pub fn load(path: &Path) -> Option<Overlay> {
         return None;
     }
     let (rgba, w, h) = crate::cart_art::decode_rgba(&std::fs::read(path).ok()?)?;
-    if w == 0 || h == 0 || w > SIDE_MAX || h > SIDE_MAX {
+    if w == 0 || h == 0 || w > crate::cart_art::PICTURE_SIDE_MAX || h > crate::cart_art::PICTURE_SIDE_MAX {
         return None;
     }
     let window = window(&rgba, w, h)?;

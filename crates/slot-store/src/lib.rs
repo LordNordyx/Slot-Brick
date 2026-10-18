@@ -24,7 +24,7 @@ pub use core::{
 };
 pub use gb_palette::GbPalette;
 pub use gba::{header_clean, header_code, header_title, header_title_code};
-pub use overlay::{overlay_name_ok, overlay_path, overlays, overlays_dir, step_overlay, OVERLAYS_DIR};
+pub use overlay::{overlay_name_ok, overlays, overlays_dir, step_overlay, OVERLAYS_DIR};
 pub use platform::Platform;
 pub use ring::{StateEntry, StateRing, RING_MAX};
 pub use scan::{initial, is_hidden, labels_of, listing, scan, sort_key, Cart, StoreError, FAMICOM_LABELS};

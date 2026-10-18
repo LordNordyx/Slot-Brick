@@ -365,7 +365,7 @@ pub struct App {
     quick_menu_faces: Option<QuickMenuFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     /// Each system's overlay name as shown on its Overlay row, and its faces, dim and lit.
-    overlay_texts: [Option<(String, [(TexId, u32, u32); 2])>; 5],
+    overlay_texts: [Option<(String, [(TexId, u32, u32); 2])>; Platform::ALL.len()],
     /// The overlay laid over the game being played: its file, its picture and its window.
     overlay: Option<(PathBuf, TexId, [f32; 4])>,
     sticker_face: Option<TexId>,
@@ -1020,14 +1020,14 @@ impl App {
         }
     }
 
-    /// The overlay the game being played should have over it: the one chosen for its system,
-    /// when it is there.
+    /// The overlay the game being played should have over it: the one chosen for its system.
+    /// Asked every frame, so it never looks at the card: one that is missing simply fails to load.
     pub fn overlay_wanted(&self) -> Option<PathBuf> {
         if !matches!(self.phase, Phase::Inserting { .. } | Phase::Playing { .. } | Phase::Polaroids { .. }) {
             return None;
         }
         let name = self.state.overlay(self.platform)?;
-        slot_store::overlay_path(self.root.as_ref()?, self.platform, name)
+        Some(slot_store::overlays_dir(self.root.as_ref()?, self.platform).join(name))
     }
 
     /// The overlay at `path` is up, as `tex`, with the game to go in `window`.
@@ -1035,41 +1035,60 @@ impl App {
         self.overlay = Some((path, tex, window));
     }
 
-    /// The overlay up is no longer wanted: its picture can go.
-    pub fn take_overlay(&mut self) -> Option<TexId> {
-        self.overlay.take().map(|(_, tex, _)| tex)
+    /// The overlay up is no longer wanted.
+    pub fn take_overlay(&mut self) {
+        self.overlay = None;
     }
 
     pub fn overlay_loaded(&self) -> Option<&Path> {
         self.overlay.as_ref().map(|(path, _, _)| path.as_path())
     }
 
-    /// The window of the overlay over the game being played, while there is one.
+    /// The overlay over the game being played, while there is one: its picture and window.
+    fn overlay_up(&self) -> Option<(TexId, [f32; 4])> {
+        let (path, tex, window) = self.overlay.as_ref()?;
+        (self.overlay_wanted().as_ref() == Some(path)).then_some((*tex, *window))
+    }
+
     fn overlay_window(&self) -> Option<[f32; 4]> {
-        let (path, _, window) = self.overlay.as_ref()?;
-        (self.overlay_wanted().as_ref() == Some(path)).then_some(*window)
+        self.overlay_up().map(|(_, window)| window)
     }
 
     fn push_overlay(&self, out: &mut Vec<Draw>) {
-        if let (Some(_), Some((_, tex, _))) = (self.overlay_window(), &self.overlay) {
-            out.push(Draw::Tex { x: 0.0, y: 0.0, w: OUT_W as f32, h: OUT_H as f32, tex: *tex, alpha: 1.0 });
+        if let Some((tex, _)) = self.overlay_up() {
+            out.push(Draw::Tex { x: 0.0, y: 0.0, w: OUT_W as f32, h: OUT_H as f32, tex, alpha: 1.0 });
         }
     }
 
-    /// How `platform`'s Overlay row reads: the overlay's name, or Off.
-    pub fn overlay_text(&self, platform: Platform) -> String {
+    /// How `platform`'s Overlay row reads: the overlay's name without ".png", or Off.
+    pub fn overlay_text(&self, platform: Platform) -> &str {
         match self.state.overlay(platform) {
-            Some(name) => name.get(..name.len() - 4).unwrap_or(name).to_string(),
-            None => "Off".to_string(),
+            Some(name) => name.get(..name.len() - 4).unwrap_or(name),
+            None => "Off",
         }
     }
 
     pub fn overlay_text_shown(&self, platform: Platform) -> Option<&str> {
-        self.overlay_texts[platform_slot(platform)].as_ref().map(|(text, _)| text.as_str())
+        self.overlay_texts[platform.index()].as_ref().map(|(text, _)| text.as_str())
     }
 
     pub fn set_overlay_text_faces(&mut self, platform: Platform, text: String, faces: [(TexId, u32, u32); 2]) {
-        self.overlay_texts[platform_slot(platform)] = Some((text, faces));
+        self.overlay_texts[platform.index()] = Some((text, faces));
+    }
+
+    /// The previous or next overlay for `platform`, from Off through those there are. False
+    /// when there is nothing to change to.
+    fn step_overlay(&mut self, platform: Platform, right: bool) -> bool {
+        let Some(root) = self.root.clone() else {
+            return false;
+        };
+        let to = slot_store::step_overlay(&root, platform, self.state.overlay(platform), right);
+        if to.as_deref() == self.state.overlay(platform) {
+            return false;
+        }
+        self.state.set_overlay(platform, to);
+        self.persist();
+        true
     }
 
     /// L1/R1 switch the picture on consoles without shoulder buttons; on a GBA or SNES
@@ -1094,19 +1113,26 @@ impl App {
         }
     }
 
-    fn set_picture(&mut self, mode: VideoMode) {
+    /// The picture's size, remembered for the game. With an overlay on, the overlay decides
+    /// it: refused, and false.
+    fn set_picture(&mut self, mode: VideoMode) -> bool {
+        if self.overlay_window().is_some() {
+            self.refuse();
+            return false;
+        }
         if self.video_mode == mode {
-            return;
+            return true;
         }
         self.video_mode = mode;
         let (Some(root), Phase::Playing { cart }) = (self.root.clone(), &self.phase) else {
-            return;
+            return true;
         };
         let written = video_mode::write_video_mode(&root, cart, mode);
         if let Err(e) = &written {
             eprintln!("slot: video: could not write video_mode.ini: {e}");
         }
         self.card_failing.store(written.is_err(), Ordering::Relaxed);
+        true
     }
 
     /// Home+L1 / Home+R1: the previous or next overlay for the system being played, named as it
@@ -1115,22 +1141,12 @@ impl App {
         if !matches!(self.phase, Phase::Playing { .. }) || self.game_menu_open() || self.power_menu.is_some() {
             return;
         }
-        let Some(root) = self.root.clone() else {
-            return;
-        };
-        let to = slot_store::step_overlay(&root, self.platform, self.state.overlay(self.platform), right);
-        if to.as_deref() == self.state.overlay(self.platform) {
+        if !self.step_overlay(self.platform, right) {
             return self.refuse();
         }
-        self.state.set_overlay(self.platform, to);
-        self.persist();
-        let name = self.overlay_text(self.platform);
+        let name = self.overlay_text(self.platform).to_string();
         // Stepping on quickly, the latest name replaces the one before rather than queueing.
-        self.banners.retain(|b| b.0 != "Overlay");
-        if self.banner.as_ref().is_some_and(|b| b.1 == "Overlay") {
-            self.banner = None;
-        }
-        self.announce("Overlay", &name);
+        self.announce_replacing("Overlay", &name);
     }
 
     /// Home+X on the Brick: GBA between its true 3:2 shape and 4:3 full screen.
@@ -1140,7 +1156,7 @@ impl App {
             return;
         }
         // Consoles whose L and R are the game's take this shortcut instead.
-        if !matches!(self.platform, Platform::Gba | Platform::Snes) || self.overlay_window().is_some() {
+        if !matches!(self.platform, Platform::Gba | Platform::Snes) {
             self.refuse();
             return;
         }
@@ -1148,8 +1164,9 @@ impl App {
             VideoMode::Actual => (VideoMode::Stretch, Toast::PictureFull),
             VideoMode::Stretch => (VideoMode::Actual, Toast::PictureOriginal),
         };
-        self.set_picture(to);
-        self.hud.toast(said, self.now());
+        if self.set_picture(to) {
+            self.hud.toast(said, self.now());
+        }
     }
 
     pub fn set_link_loaded(&mut self, serial: &'static str) {
@@ -1611,15 +1628,11 @@ impl App {
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
             Phase::Playing { .. } => match action {
-                // With an overlay on, the overlay decides the picture's size.
-                Action::GbaDown(Btn::L1 | Btn::R1) if self.slot_owns_the_shoulders() && self.overlay_window().is_some() => {
-                    self.refuse()
-                }
                 Action::GbaDown(Btn::L1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Stretch)
+                    self.set_picture(VideoMode::Stretch);
                 }
                 Action::GbaDown(Btn::R1) if self.slot_owns_the_shoulders() => {
-                    self.set_picture(VideoMode::Actual)
+                    self.set_picture(VideoMode::Actual);
                 }
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
@@ -1733,13 +1746,9 @@ impl App {
             return;
         }
 
-        if let (Some(platform), Some(root)) = (row.overlay_of(), self.root.clone()) {
-            let to = slot_store::step_overlay(&root, platform, self.state.overlay(platform), right);
-            if to.as_deref() == self.state.overlay(platform) {
-                return;
-            }
-            self.state.set_overlay(platform, to);
-            return self.persist();
+        if let Some(platform) = row.overlay_of() {
+            self.step_overlay(platform, right);
+            return;
         }
         let s = &mut self.state;
         match row {
@@ -2451,6 +2460,16 @@ impl App {
         self.announce_with(title, detail, None);
     }
 
+    /// A toast that takes the place of any other with the same title, showing or waiting, so a
+    /// setting stepped through quickly says only where it ended up.
+    pub fn announce_replacing(&mut self, title: &str, detail: &str) {
+        self.banners.retain(|b| b.0 != title);
+        if self.banner.as_ref().is_some_and(|b| b.1 == title) {
+            self.banner = None;
+        }
+        self.announce(title, detail);
+    }
+
     /// A toast with an image on its left (a badge, cached at `badge` or on its way there).
     pub fn announce_with(&mut self, title: &str, detail: &str, badge: Option<std::path::PathBuf>) {
         self.banners.push_back((title.to_string(), detail.to_string(), badge, self.now()));
@@ -2575,7 +2594,7 @@ impl App {
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
                 texts: QuickRow::ALL.map(|r| {
-                    let at = r.overlay_of().map(platform_slot)?;
+                    let at = r.overlay_of()?.index();
                     self.overlay_texts[at].as_ref().map(|(_, faces)| *faces)
                 }),
                 faces: self.quick_menu_faces.as_ref(),
@@ -5470,7 +5489,3 @@ impl CartMenu {
     }
 }
 
-/// Where a system's entry is in the arrays kept one for each system, in Platform::ALL order.
-fn platform_slot(platform: Platform) -> usize {
-    Platform::ALL.iter().position(|p| *p == platform).unwrap_or(0)
-}
