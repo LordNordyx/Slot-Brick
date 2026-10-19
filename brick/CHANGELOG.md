@@ -4,6 +4,8 @@
 - Overlays for every system come with Slot: KrutzOtrem's *Vanilla* set for GB, GBC and GBA and *CRT* set for NES and SNES, made for the Brick. Thanks to @KrutzOtrem!
 - Overlays with a grid or tint over the game (such as KrutzOtrem's LCD and DMG grids) now work: the game fills the part of the overlay that isn't fully opaque, at the size the overlay was drawn for.
 - An overlay name too long for its row is shortened, and scrolls slowly while the row is selected.
+- Gameplay → Auto Save: save the game every 1, 5 or 10 minutes, or never. It was every minute.
+- Gameplay → Low Battery Shutdown: save and shut down at 3%, 5% or 10% battery, or never. It was 5%.
 
 ## v0.42
 **New since v0.41:**

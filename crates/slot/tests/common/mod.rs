@@ -511,6 +511,19 @@ pub fn app_in_switcher(root: &Path, stem: &str) -> App {
     a
 }
 
+pub fn app_playing_with_state(root: &Path, snapshot: Box<dyn Snapshot>, state: SlotState) -> App {
+    seated(
+        root,
+        snapshot,
+        SlotState {
+            cart: Some("Emerald".to_string()),
+            clock_set: true,
+            utc_offset_min: 0,
+            ..state
+        },
+    )
+}
+
 pub fn app_playing_with_volume(root: &Path, volume: u8) -> App {
     seated(
         root,

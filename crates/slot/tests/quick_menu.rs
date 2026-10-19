@@ -234,6 +234,30 @@ fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
 }
 
 #[test]
+fn the_game_page_steps_the_autosave_and_the_low_battery_shutdown_and_saves_each() {
+    let (d, mut a, _) = on_carousel();
+    let card = |d: &TempDir| {
+        let s = read_slot_state(d.path());
+        (s.autosave_min, s.battery_shutdown)
+    };
+    assert_eq!(card(&d), (1, 5));
+    open_at(&mut a, QuickRow::AutoSave);
+    press(&mut a, Btn::Right);
+    assert_eq!(card(&d), (5, 5));
+    assert_eq!(a.quick_value(QuickRow::AutoSave), Some(QuickValue::Min5));
+    press(&mut a, Btn::Left);
+    press(&mut a, Btn::Left);
+    assert_eq!(card(&d), (0, 5));
+    assert_eq!(a.quick_value(QuickRow::AutoSave), Some(QuickValue::Off));
+    press(&mut a, Btn::Down);
+    press(&mut a, Btn::Right);
+    assert_eq!(card(&d), (0, 10));
+    press(&mut a, Btn::Right);
+    assert_eq!(card(&d), (0, 0));
+    assert_eq!(a.quick_value(QuickRow::BatteryShutdown), Some(QuickValue::Off));
+}
+
+#[test]
 fn screen_opens_a_page_per_system_each_with_its_own_page_and_b_comes_back_up() {
     let (_d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Screen);

@@ -10,7 +10,7 @@ use slot_retro::LinkChannel;
 use slot_store::{
     format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Outline, Platform,
     Shader, ShellChoice, ShellFinish, SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX,
-    BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
+    AUTOSAVE_MINS, BATTERY_SHUTDOWNS, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
     VOLUME_MAX,
 };
 use slot_ui::{
@@ -46,10 +46,7 @@ const POWER_OFF_S: f32 = 0.16;
 
 const VOLUME_STEP: u8 = 5;
 
-const AUTOSAVE_MS: Millis = 60_000;
 const CARD_CHECK_MS: Millis = 2_000;
-
-const BATTERY_CRITICAL: u8 = 5;
 
 const BATTERY_POLL_MS: Millis = 10_000;
 
@@ -552,7 +549,7 @@ impl App {
             power: None,
             dozed_at: 0,
             woke_on_press: false,
-            autosave_at: AUTOSAVE_MS,
+            autosave_at: 0,
             pending_save: None,
             battery_at: BATTERY_POLL_MS,
             charge_at: CHARGE_POLL_MS,
@@ -580,6 +577,7 @@ impl App {
         #[cfg(feature = "brick")]
         { app.brick_leds = Some(crate::brick_led::BrickLeds::open(root)); }
         app.state = read_slot_state(root);
+        app.autosave_at = app.autosave_ms();
         if app.state.clock_set {
             app.start();
         } else {
@@ -761,6 +759,8 @@ impl App {
             QuickRow::SnesShader => Some(shader_value(self.state.shader_snes)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
+            QuickRow::AutoSave => QuickValue::minutes(self.state.autosave_min),
+            QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
             QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
@@ -1717,6 +1717,8 @@ impl App {
                 }
             }
             QuickRow::EjectSave
+            | QuickRow::AutoSave
+            | QuickRow::BatteryShutdown
             | QuickRow::Turbo
             | QuickRow::Rewind
             | QuickRow::FastForward
@@ -1794,6 +1796,11 @@ impl App {
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
+            QuickRow::AutoSave => {
+                s.autosave_min = step(&AUTOSAVE_MINS, s.autosave_min, right);
+                self.autosave_at = self.now() + self.autosave_ms();
+            }
+            QuickRow::BatteryShutdown => s.battery_shutdown = step(&BATTERY_SHUTDOWNS, s.battery_shutdown, right),
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
@@ -2234,7 +2241,7 @@ impl App {
         if self.doze_expired() {
             self.on_doze_timeout();
         }
-        if self.now() >= self.autosave_at {
+        if self.state.autosave_min != 0 && self.now() >= self.autosave_at {
             self.autosave();
         }
         if self.now() >= self.card_check_at {
@@ -4475,7 +4482,8 @@ impl App {
     }
 
     pub fn on_battery(&mut self, b: Battery) {
-        if b.percent > BATTERY_CRITICAL || self.powering_off {
+        let at = self.state.battery_shutdown;
+        if at == 0 || b.percent > at || self.powering_off {
             return;
         }
         if matches!(b.charge, Charge::Charging | Charge::Full) {
@@ -4502,8 +4510,12 @@ impl App {
         }
     }
 
+    fn autosave_ms(&self) -> Millis {
+        self.state.autosave_min as Millis * 60_000
+    }
+
     fn autosave(&mut self) {
-        self.autosave_at = self.now() + AUTOSAVE_MS;
+        self.autosave_at = self.now() + self.autosave_ms();
         self.settle_saves();
         let (Some(root), Some(snapshot), Some(cart)) = (&self.root, &self.snapshot, self.seated())
         else {
@@ -4542,7 +4554,7 @@ impl App {
 
     pub fn flush_resume(&mut self) {
         self.settle_saves();
-        self.autosave_at = self.now() + AUTOSAVE_MS;
+        self.autosave_at = self.now() + self.autosave_ms();
         let (Some(root), Some(snapshot), Some(cart)) = (&self.root, &self.snapshot, self.seated())
         else {
             return;
@@ -4873,9 +4885,13 @@ fn shader_value(shader: Shader) -> QuickValue {
 }
 
 fn ff_next(from: u8, right: bool) -> u8 {
-    let n = FF_SPEEDS.len();
-    let at = FF_SPEEDS.iter().position(|&v| v == from).unwrap_or(0);
-    FF_SPEEDS[if right {
+    step(&FF_SPEEDS, from, right)
+}
+
+fn step(choices: &[u8], from: u8, right: bool) -> u8 {
+    let n = choices.len();
+    let at = choices.iter().position(|&v| v == from).unwrap_or(0);
+    choices[if right {
         (at + 1) % n
     } else {
         (at + n - 1) % n
