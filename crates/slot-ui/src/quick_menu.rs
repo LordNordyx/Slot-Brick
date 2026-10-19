@@ -42,10 +42,12 @@ pub enum QuickRow {
     GbaOverlay,
     NesOverlay,
     SnesOverlay,
+    AutoSave,
+    BatteryShutdown,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 36] = [
+    pub const ALL: [QuickRow; 38] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -82,6 +84,8 @@ impl QuickRow {
         QuickRow::GbaOverlay,
         QuickRow::NesOverlay,
         QuickRow::SnesOverlay,
+        QuickRow::AutoSave,
+        QuickRow::BatteryShutdown,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -118,13 +122,15 @@ impl QuickRow {
         })
     }
 
-    pub const GAME: [QuickRow; 6] = [
+    pub const GAME: [QuickRow; 8] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
         QuickRow::Turbo,
         QuickRow::Rumble,
         QuickRow::EjectSave,
+        QuickRow::AutoSave,
+        QuickRow::BatteryShutdown,
     ];
 
     pub fn index(self) -> usize {
@@ -148,7 +154,9 @@ impl QuickRow {
             | QuickRow::Rewind
             | QuickRow::Turbo
             | QuickRow::Rumble
-            | QuickRow::EjectSave => &QuickRow::GAME,
+            | QuickRow::EjectSave
+            | QuickRow::AutoSave
+            | QuickRow::BatteryShutdown => &QuickRow::GAME,
             _ => &QuickRow::MAIN,
         }
     }
@@ -212,6 +220,8 @@ impl QuickRow {
             QuickRow::ScreenSnes => "SNES",
             QuickRow::Game => "Gameplay",
             QuickRow::EjectSave => "Auto Save on Eject",
+            QuickRow::AutoSave => "Auto Save",
+            QuickRow::BatteryShutdown => "Low Battery Shutdown",
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
             QuickRow::GbPalettes => "GB Palettes",
@@ -262,10 +272,16 @@ pub enum QuickValue {
     Steady,
     Breathe,
     Unavailable,
+    Min1,
+    Min5,
+    Min10,
+    Percent3,
+    Percent5,
+    Percent10,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 23] = [
+    pub const ALL: [QuickValue; 29] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -289,6 +305,12 @@ impl QuickValue {
         QuickValue::Steady,
         QuickValue::Breathe,
         QuickValue::Unavailable,
+        QuickValue::Min1,
+        QuickValue::Min5,
+        QuickValue::Min10,
+        QuickValue::Percent3,
+        QuickValue::Percent5,
+        QuickValue::Percent10,
     ];
 
     pub fn index(self) -> usize {
@@ -320,7 +342,12 @@ impl QuickValue {
             QuickValue::Steady => "Steady",
             QuickValue::Breathe => "Breathe",
             QuickValue::Unavailable => "Unavailable",
-
+            QuickValue::Min1 => "1 min",
+            QuickValue::Min5 => "5 min",
+            QuickValue::Min10 => "10 min",
+            QuickValue::Percent3 => "3%",
+            QuickValue::Percent5 => "5%",
+            QuickValue::Percent10 => "10%",
         }
     }
 
@@ -330,6 +357,28 @@ impl QuickValue {
             3 => Some(QuickValue::Speed3),
             4 => Some(QuickValue::Speed4),
             6 => Some(QuickValue::Speed6),
+            _ => None,
+        }
+    }
+
+    /// An autosave interval in minutes, 0 for off.
+    pub fn minutes(min: u8) -> Option<QuickValue> {
+        match min {
+            0 => Some(QuickValue::Off),
+            1 => Some(QuickValue::Min1),
+            5 => Some(QuickValue::Min5),
+            10 => Some(QuickValue::Min10),
+            _ => None,
+        }
+    }
+
+    /// A battery percent, 0 for off.
+    pub fn percent(pct: u8) -> Option<QuickValue> {
+        match pct {
+            0 => Some(QuickValue::Off),
+            3 => Some(QuickValue::Percent3),
+            5 => Some(QuickValue::Percent5),
+            10 => Some(QuickValue::Percent10),
             _ => None,
         }
     }

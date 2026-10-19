@@ -16,6 +16,14 @@ pub const FF_SPEEDS: [u8; 4] = [2, 3, 4, 6];
 
 pub const FF_SPEED_DEFAULT: u8 = 6;
 
+/// Minutes between autosaves in game; 0 is off.
+pub const AUTOSAVE_MINS: [u8; 4] = [0, 1, 5, 10];
+pub const AUTOSAVE_MIN_DEFAULT: u8 = 1;
+
+/// The battery percent at which Slot saves and shuts down; 0 is off.
+pub const BATTERY_SHUTDOWNS: [u8; 4] = [0, 3, 5, 10];
+pub const BATTERY_SHUTDOWN_DEFAULT: u8 = 5;
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SlotState {
     pub cart: Option<String>,
@@ -39,6 +47,8 @@ pub struct SlotState {
     pub shader_nes: Shader,
     pub shader_snes: Shader,
     pub eject_save: bool,
+    pub autosave_min: u8,
+    pub battery_shutdown: u8,
     pub turbo: bool,
     pub rewind: bool,
     pub gb_palettes: bool,
@@ -129,6 +139,8 @@ impl Default for SlotState {
             shader_nes: Shader::Off,
             shader_snes: Shader::Off,
             eject_save: true,
+            autosave_min: AUTOSAVE_MIN_DEFAULT,
+            battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,
             turbo: true,
             rewind: true,
             gb_palettes: false,
@@ -152,7 +164,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nautosave_min={}\nbattery_shutdown={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -173,6 +185,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.shader_nes.name(),
         s.shader_snes.name(),
         s.eject_save as u8,
+        s.autosave_min,
+        s.battery_shutdown,
         s.turbo as u8,
         s.rewind as u8,
         s.gb_palettes as u8,
@@ -207,6 +221,8 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shader_nes = None;
     let mut shader_snes = None;
     let mut eject_save = None;
+    let mut autosave_min = None;
+    let mut battery_shutdown = None;
     let mut turbo = None;
     let mut rewind = None;
     let mut gb_palettes = None;
@@ -236,6 +252,8 @@ fn parse(text: &str) -> Option<SlotState> {
             "colour_correction_gba" => colour_correction_gba = flag(value),
             "shader_gba" => shader_gba = Shader::parse(value).filter(|s| Shader::GBA.contains(s)),
             "eject_save" => eject_save = flag(value),
+            "autosave_min" => autosave_min = choice(value, &AUTOSAVE_MINS),
+            "battery_shutdown" => battery_shutdown = choice(value, &BATTERY_SHUTDOWNS),
             "turbo" => turbo = flag(value),
             "rewind" => rewind = flag(value),
             "gb_palettes" => gb_palettes = flag(value),
@@ -275,6 +293,8 @@ fn parse(text: &str) -> Option<SlotState> {
         shader_nes: shader_nes.unwrap_or(fallback.shader_nes),
         shader_snes: shader_snes.unwrap_or(fallback.shader_snes),
         eject_save: eject_save.unwrap_or(fallback.eject_save),
+        autosave_min: autosave_min.unwrap_or(fallback.autosave_min),
+        battery_shutdown: battery_shutdown.unwrap_or(fallback.battery_shutdown),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
@@ -301,7 +321,11 @@ fn offset(value: &str) -> Option<i16> {
 }
 
 fn ff_speed_value(value: &str) -> Option<u8> {
-    value.parse().ok().filter(|n| FF_SPEEDS.contains(n))
+    choice(value, &FF_SPEEDS)
+}
+
+fn choice(value: &str, choices: &[u8]) -> Option<u8> {
+    value.parse().ok().filter(|n| choices.contains(n))
 }
 
 fn level(value: &str, max: u8) -> Option<u8> {

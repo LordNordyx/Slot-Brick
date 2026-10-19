@@ -3,13 +3,13 @@ mod common;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use common::{app_playing_in, app_playing_with, tmp_root_with_carts};
+use common::{app_playing_in, app_playing_with, app_playing_with_state, tmp_root_with_carts, StubSnapshot};
 use slot::app::Phase;
 use slot::persist;
 use slot::persist::Snapshot;
 use slot_input::{Action, Btn};
 use slot_power::{Battery, Charge, LedState};
-use slot_store::{read_slot_state, Core, Platform, StateRing};
+use slot_store::{read_slot_state, Core, Platform, SlotState, StateRing};
 
 fn unknown(percent: u8) -> Battery {
     Battery {
@@ -187,6 +187,42 @@ fn a_flush_resets_the_autosave_clock() {
     );
     a.tick_ms(90_000);
     assert_eq!(flushes.load(Ordering::Relaxed), 2);
+}
+
+#[test]
+fn the_autosave_follows_its_setting() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let (snapshot, flushes) = counting();
+    let five = SlotState { autosave_min: 5, ..SlotState::default() };
+    let mut a = app_playing_with_state(d.path(), snapshot, five);
+    a.tick_ms(299_999);
+    assert_eq!(flushes.load(Ordering::Relaxed), 0, "five minutes, not one");
+    a.tick_ms(300_000);
+    assert_eq!(flushes.load(Ordering::Relaxed), 1);
+
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let (snapshot, flushes) = counting();
+    let off = SlotState { autosave_min: 0, ..SlotState::default() };
+    let mut a = app_playing_with_state(d.path(), snapshot, off);
+    a.tick_ms(3_600_000);
+    assert_eq!(flushes.load(Ordering::Relaxed), 0, "autosave off still wrote");
+}
+
+#[test]
+fn the_low_battery_shutdown_follows_its_setting() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let off = SlotState { battery_shutdown: 0, ..SlotState::default() };
+    let mut a = app_playing_with_state(d.path(), StubSnapshot::boxed(), off);
+    a.on_battery(unknown(0));
+    assert!(!a.powering_off(), "shut down with the shutdown off");
+
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let ten = SlotState { battery_shutdown: 10, ..SlotState::default() };
+    let mut a = app_playing_with_state(d.path(), StubSnapshot::boxed(), ten);
+    a.on_battery(unknown(11));
+    assert!(!a.powering_off());
+    a.on_battery(unknown(10));
+    assert!(a.powering_off(), "kept playing at its own threshold");
 }
 
 fn counting() -> (Box<dyn Snapshot>, Arc<AtomicUsize>) {

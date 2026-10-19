@@ -101,7 +101,9 @@ fn the_rows_run_in_the_order_the_user_chose() {
             "Rewind",
             "Turbo Buttons",
             "Rumble",
-            "Auto Save on Eject"
+            "Auto Save on Eject",
+            "Auto Save",
+            "Low Battery Shutdown"
         ]
     );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
@@ -151,8 +153,17 @@ fn the_values_read_as_the_menu_prints_them() {
             "LCD3x",
             "Grid",
             "Dot",
-            "Simpletex", "Stock", "Low", "Medium", "High", "White", "Blue", "Green", "Amber", "Red", "Purple", "Steady", "Breathe", "Unavailable"
+            "Simpletex", "Stock", "Low", "Medium", "High", "White", "Blue", "Green", "Amber", "Red", "Purple", "Steady", "Breathe", "Unavailable",
+            "1 min", "5 min", "10 min", "3%", "5%", "10%"
         ]
+    );
+    assert_eq!(
+        slot_store::AUTOSAVE_MINS.map(QuickValue::minutes),
+        [Some(QuickValue::Off), Some(QuickValue::Min1), Some(QuickValue::Min5), Some(QuickValue::Min10)]
+    );
+    assert_eq!(
+        slot_store::BATTERY_SHUTDOWNS.map(QuickValue::percent),
+        [Some(QuickValue::Off), Some(QuickValue::Percent3), Some(QuickValue::Percent5), Some(QuickValue::Percent10)]
     );
     assert_eq!(QuickValue::flag(true), QuickValue::On);
     assert_eq!(QuickValue::flag(false), QuickValue::Off);
