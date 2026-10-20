@@ -36,6 +36,7 @@ pub mod root;
 pub mod session;
 pub mod state_writer;
 pub mod thumb;
+pub mod update;
 pub mod video_mode;
 pub mod wallpaper;
 
@@ -47,6 +48,9 @@ pub mod brick_power;
 
 #[cfg(feature = "brick")]
 pub mod brick_wifi;
+
+#[cfg(feature = "brick")]
+pub mod brick_update;
 
 #[cfg(feature = "brick")]
 pub mod brick_link;

@@ -931,6 +931,19 @@ impl Frontend {
     pub fn poweroff(&mut self) {
         self.session.app_mut().poweroff();
     }
+
+    pub fn updating(&self) -> bool {
+        self.session.app().updating()
+    }
+
+    /// An update is swapped in: saves settled, Slot ends for launch.sh to start the new one.
+    #[cfg(feature = "brick")]
+    pub fn exit_for_update(&mut self) {
+        self.session.app_mut().settle_saves();
+        self.session.app().restore_brick_leds();
+        let _ = std::process::Command::new("sync").status();
+        std::process::exit(crate::update::EXIT_UPDATED);
+    }
 }
 
 fn menu_faces<'a>(

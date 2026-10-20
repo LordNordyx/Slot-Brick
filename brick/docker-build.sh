@@ -17,6 +17,7 @@ rm -rf "$OUT"
 # in .docker-cache between runs.
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD":/src -w /src \
     -e HOME=/tmp -e CARGO_HOME=/src/.docker-cache/cargo -e CORES="$CORES" -e OUT="$OUT" \
+    -e SLOT_CHANNEL="${SLOT_CHANNEL:-}" \
     "$IMAGE" sh -euc '
         [ "$CORES" = 0 ] || sh brick/build-cores.sh
         sh brick/build-frontend.sh

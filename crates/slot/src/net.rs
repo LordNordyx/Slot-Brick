@@ -76,17 +76,7 @@ pub fn send(req: &Request) -> Result<Response, String> {
     if !(plain(req.method) && plain(req.server) && plain(req.path) && req.path.starts_with('/')) {
         return Err("bad request address".into());
     }
-    let addrs: Vec<_> = req
-        .server
-        .to_socket_addrs()
-        .map_err(|_| format!("cannot look up {host} (no internet?)"))?
-        .collect();
-    let tcp = addrs
-        .iter()
-        .find_map(|a| TcpStream::connect_timeout(a, Duration::from_secs(8)).ok())
-        .ok_or_else(|| format!("cannot connect to {host}"))?;
-    let _ = tcp.set_read_timeout(Some(Duration::from_secs(20)));
-    let _ = tcp.set_write_timeout(Some(Duration::from_secs(8)));
+    let tcp = dial(req.server)?;
     let mut text = format!(
         "{} {} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: {}\r\nConnection: close\r\n",
         req.method,
@@ -116,6 +106,121 @@ pub fn send(req: &Request) -> Result<Response, String> {
         read_all(tcp, cap).map_err(|e| format!("download failed: {e}"))?
     };
     parse(&raw, req.limit)
+}
+
+fn dial(server: &str) -> Result<TcpStream, String> {
+    let host = host_of(server);
+    let addrs: Vec<_> = server
+        .to_socket_addrs()
+        .map_err(|_| format!("cannot look up {host} (no internet?)"))?
+        .collect();
+    let tcp = addrs
+        .iter()
+        .find_map(|a| TcpStream::connect_timeout(a, Duration::from_secs(8)).ok())
+        .ok_or_else(|| format!("cannot connect to {host}"))?;
+    let _ = tcp.set_read_timeout(Some(Duration::from_secs(20)));
+    let _ = tcp.set_write_timeout(Some(Duration::from_secs(8)));
+    Ok(tcp)
+}
+
+/// A body being downloaded: its length, if the server said, and the bytes as they come.
+pub struct Body {
+    pub len: Option<u64>,
+    pub reader: Box<dyn Read + Send>,
+}
+
+/// GET `url`, following redirects (a GitHub download is one, to its file server), with the
+/// body left to be read as it arrives rather than held in memory. Only a 200 is a body.
+pub fn get_stream(url: &str) -> Result<Body, String> {
+    let mut url = url.to_string();
+    for _ in 0..5 {
+        let (tls, server, path) = split_url(&url).ok_or("bad download address")?;
+        let (status, head, reader) = open_get(tls, &server, &path)?;
+        let reply = Response { status, head, body: Vec::new() };
+        match status {
+            200 => {
+                let len = reply.header("content-length").and_then(|v| v.parse().ok());
+                return Ok(Body { len, reader });
+            }
+            301 | 302 | 303 | 307 | 308 => {
+                let to = reply.header("location").ok_or("bad redirect from server")?;
+                url = match to.starts_with('/') {
+                    true => format!("{}://{server}{to}", if tls { "https" } else { "http" }),
+                    false => to,
+                };
+            }
+            _ => return Err(format!("server said {status}")),
+        }
+    }
+    Err("too many redirects".into())
+}
+
+/// GET `url` whole, following redirects; at most `limit` bytes.
+pub fn get(url: &str, limit: usize) -> Result<Vec<u8>, String> {
+    let body = get_stream(url)?;
+    if body.len.is_some_and(|n| n > limit as u64) {
+        return Err("reply too large".into());
+    }
+    let mut out = Vec::new();
+    match body.reader.take(limit as u64 + 1).read_to_end(&mut out) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof && !out.is_empty() => {}
+        Err(e) => return Err(format!("download failed: {e}")),
+    }
+    if out.len() > limit {
+        return Err("reply too large".into());
+    }
+    if body.len.is_some_and(|n| (out.len() as u64) < n) {
+        return Err("download cut short".into());
+    }
+    Ok(out)
+}
+
+/// Sends a GET and reads up to the end of its headers: the status, the headers, and the
+/// connection, at the body's first byte.
+fn open_get(tls: bool, server: &str, path: &str) -> Result<(u16, String, Box<dyn Read + Send>), String> {
+    let host = host_of(server);
+    if !(plain(server) && plain(path) && path.starts_with('/')) {
+        return Err("bad request address".into());
+    }
+    let tcp = dial(server)?;
+    let text = format!(
+        "GET {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: {}\r\nConnection: close\r\n\r\n",
+        user_agent()
+    );
+    let mut stream: Box<dyn Read + Send> = if tls {
+        let name = rustls::pki_types::ServerName::try_from(host.to_string())
+            .map_err(|_| format!("bad host name {host}"))?;
+        let conn = rustls::ClientConnection::new(tls_config(), name).map_err(|e| e.to_string())?;
+        let mut stream = rustls::StreamOwned::new(conn, tcp);
+        stream.write_all(text.as_bytes()).map_err(|e| tls_error(&e))?;
+        Box::new(stream)
+    } else {
+        let mut tcp = tcp;
+        tcp.write_all(text.as_bytes()).map_err(|e| format!("send failed: {e}"))?;
+        Box::new(tcp)
+    };
+    // A byte at a time, so nothing of the body is read here: the caller reads all of it.
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        if head.len() > 64 * 1024 {
+            return Err("bad reply from server".into());
+        }
+        match stream.read(&mut byte) {
+            Ok(1) => head.push(byte[0]),
+            Ok(_) => return Err("bad reply from server".into()),
+            Err(e) if tls => return Err(tls_error(&e)),
+            Err(e) => return Err(format!("download failed: {e}")),
+        }
+    }
+    let head = String::from_utf8_lossy(&head[..head.len() - 4]).into_owned();
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .ok_or("bad reply from server")?;
+    Ok((status, head, stream))
 }
 
 /// To the end of the stream. A server that closes TLS without a close_notify

@@ -45,6 +45,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under Gameplay → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
+| **Updates** | Update Slot from the menu over Wi-Fi: signed and checked, with your games, saves and settings left alone. |
 | **Wireless connectivity** | Wi-Fi, with its status shown beside the clock, and an experimental two-player link over Wi-Fi. |
 | **Startup handling** | Support for slow-mounting SD cards. See the known startup issue below. |
 
@@ -233,8 +234,12 @@ Brick and Brick Hammer code is gated behind the `brick` Cargo feature.
 
 ### Making a release
 
-Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release. Pushing a tag
-needs write access, so only maintainers can start one. Before tagging:
+Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release, with
+`update.txt` and `update.txt.sig` beside the zip: what **HOME → Update** finds the release by.
+`update.txt` is signed with the release key, kept in the `UPDATE_SIGNING_KEY` repository
+secret (an Ed25519 private key, PEM); its public half is in `crates/slot/src/update.rs`, and
+Slot installs nothing it doesn't verify. Without the secret, a release refuses to build.
+Pushing a tag needs write access, so only maintainers can start one. Before tagging:
 
 1. Put the version at the top of [`brick/README.md`](brick/README.md) — it is what the card
    says it is — and in `brick/card/Apps/Slot/config.json`, `brick/card/Slot/System/launch.sh`,

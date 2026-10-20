@@ -129,6 +129,11 @@ pub fn run() {
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
+    // An update that a power cut stopped halfway is finished before anything else.
+    #[cfg(feature = "brick")]
+    if slot::update::resume(&slot::update::card_of(&root)) {
+        std::process::exit(slot::update::EXIT_UPDATED);
+    }
     #[cfg(feature = "sim")]
     if let Err(e) = slot::sim::populate() {
         eprintln!("slot: sim: stand-in hardware: {e}");
@@ -215,6 +220,11 @@ pub fn run() {
             #[cfg(feature = "brick")]
             cpu.restore();
             frontend.restart();
+        }
+        #[cfg(feature = "brick")]
+        if frontend.updating() {
+            cpu.restore();
+            frontend.exit_for_update();
         }
         if frontend.powering_off() {
             #[cfg(feature = "brick")]
@@ -311,6 +321,8 @@ pub fn run() {
         if !drawn {
             drawn = true;
             trace_first_frame();
+            #[cfg(feature = "brick")]
+            slot::update::settle(&slot::update::card_of(&root));
             #[cfg(feature = "brick")]
             if let Some(path) = std::env::var_os("SLOT_READY_FILE") {
                 if let Err(e) = std::fs::write(path, "first frame displayed\n") {

@@ -290,32 +290,40 @@ enum RaDone{LoggedIn(Result<(ra::Account,ra::Profile)>),Checked(Result<ra::Profi
 fn profile_line(p:&ra::Profile)->String{format!("Connected in {} ms: {}, {} points ({} softcore)",p.ms,p.user,p.score,p.softcore)}
 /// The overlay behind HOME > Wi-Fi, Cart Art and RetroAchievements: `list` is set for
 /// Cart Art, `ra` for RetroAchievements.
-pub struct WifiMenu{worker:Option<Worker>,pub face:Option<TexId>,pub dirty:bool,on:bool,status:String,networks:Vec<Network>,row:usize,keyboard:Option<Keyboard>,refreshed:Instant,art:Option<ArtJob>,fetched:Vec<Fetched>,list:Option<ArtList>,ra:Option<RaScreen>,query:Option<Option<String>>}
+pub struct WifiMenu{worker:Option<Worker>,pub face:Option<TexId>,pub dirty:bool,on:bool,status:String,networks:Vec<Network>,row:usize,keyboard:Option<Keyboard>,refreshed:Instant,art:Option<ArtJob>,fetched:Vec<Fetched>,list:Option<ArtList>,ra:Option<RaScreen>,query:Option<Option<String>>,update:Option<crate::brick_update::UpdateScreen>}
 impl WifiMenu{
-    pub fn new()->Self{let mut s=Self{worker:None,face:None,dirty:true,on:supplicant_up(),status:"Checking Wi-Fi...".into(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:None};s.start(Job::Open);s}
+    pub fn new()->Self{let mut s=Self{worker:None,face:None,dirty:true,on:supplicant_up(),status:"Checking Wi-Fi...".into(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:None,update:None};s.start(Job::Open);s}
     /// The keyboard alone, to type what to search labels for: `name` to start from. Closes
     /// when done (START) or left (B); take_label_query then says which.
     pub fn label_query(name:&str)->Self{
         Self{worker:None,face:None,dirty:true,on:true,status:"Type part of a game's name".into(),networks:Vec::new(),row:0,
             keyboard:Some(Keyboard{target:KeyTarget::LabelQuery,secret:false,password:name.chars().take(64).collect(),key:0,page:0,typed:None}),
-            refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:Some(None)}
+            refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:Some(None),update:None}
     }
     /// What was typed to search labels for, once START closed the keyboard.
     pub fn take_label_query(&mut self)->Option<String>{self.query.as_mut()?.take()}
     pub fn cart_art()->Self{
         let list=ArtList::load();
         let status=format!("{} games have a label. A on one twice deletes it",list.games.len());
-        Self{worker:None,face:None,dirty:true,on:true,status,networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:Some(list),ra:None,query:None}
+        Self{worker:None,face:None,dirty:true,on:true,status,networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:Some(list),ra:None,query:None,update:None}
     }
+    pub fn update(root:&Path)->Self{
+        let mut s=Self::cart_art_free();s.update=Some(crate::brick_update::UpdateScreen::open(root));s
+    }
+    fn cart_art_free()->Self{Self{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:None,update:None}}
+    /// The update is in: Slot should end and start again.
+    pub fn take_restart(&mut self)->bool{self.update.as_mut().is_some_and(|u|u.take_restart())}
+    pub fn set_battery(&mut self,battery:Option<(u8,bool)>){if let Some(u)=&mut self.update{u.battery=battery;}}
     pub fn achievements()->Self{
         let account=ra::load(&card_root());
         let status=match &account{Some(a)=>format!("Logged in as {}",a.user),None=>"Log in with your RetroAchievements account".into()};
-        Self{worker:None,face:None,dirty:true,on:true,status,networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:Some(RaScreen{account,user:String::new(),password:String::new(),job:None,test:None}),query:None}
+        Self{worker:None,face:None,dirty:true,on:true,status,networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:Some(RaScreen{account,user:String::new(),password:String::new(),job:None,test:None}),query:None,update:None}
     }
-    pub fn busy(&self)->bool{self.worker.is_some() || self.art.is_some() || self.ra.as_ref().is_some_and(|r|r.job.is_some())}
+    pub fn busy(&self)->bool{self.update.as_ref().is_some_and(|u|u.busy()) || self.worker.is_some() || self.art.is_some() || self.ra.as_ref().is_some_and(|r|r.job.is_some())}
     pub fn cancel(&mut self){
         if let Some(w)=&self.worker{w.cancel.store(true,Ordering::Relaxed);}
         if let Some(a)=&self.art{a.cancel();}
+        if let Some(u)=&mut self.update{u.cancel();self.dirty=true;return}
         // A reply that comes back after this is dropped unread, so nothing gets saved.
         if let Some(r)=&mut self.ra{if r.job.take().is_some(){self.status="Cancelled".into();self.dirty=true;return}}
         if self.busy(){self.status="Cancelling...".into();self.dirty=true;}
@@ -348,6 +356,7 @@ impl WifiMenu{
         thread::spawn(move||{let _=tx.send(run(job,&token));});self.worker=Some(Worker{rx,cancel});self.dirty=true;
     }
     pub fn poll(&mut self){
+        if let Some(u)=&mut self.update{if u.poll(){self.dirty=true;}return}
         self.poll_art();
         self.poll_ra();
         if let Some(w)=&self.worker{match w.rx.try_recv(){
@@ -362,6 +371,7 @@ impl WifiMenu{
         if self.list.is_none() && self.ra.is_none() && !self.busy() && self.keyboard.is_none() && self.refreshed.elapsed()>every{self.start(Job::Status);}
     }
     pub fn input(&mut self,a:Action)->bool{
+        if let Some(u)=&mut self.update{self.dirty=true;return u.input(a)}
         if self.busy(){if matches!(a,Action::GbaDown(Btn::B)){self.cancel();}return false}
         if !matches!(a,Action::GbaDown(_)|Action::ShelfLeft|Action::ShelfRight|Action::Insert){return false}
         self.dirty=true;
@@ -500,7 +510,20 @@ impl WifiMenu{
         p.text(if self.busy(){"B CANCEL"}else if self.row==0{"B BACK    A GET ART    LEFT/RIGHT STYLE"}else if list.armed.is_some(){"B KEEP    A DELETE LABEL"}else{"B BACK    A DELETE LABEL"},24,430,592,20.0);
         UndoFace{rgba:p.rgba,w:640,h:480}
     }
+    fn render_update(&self,u:&crate::brick_update::UpdateScreen)->UndoFace{
+        let mut p=Painter::new();p.text("UPDATE",32,24,576,30.0);p.text(&u.status,32,66,576,18.0);
+        let rows=u.lines();
+        for (i,label) in rows.iter().enumerate(){let y=110+i*41;if i==u.row(){p.rect(0,y,640,38,slot_ui::edge());}p.text(label,32,y+1,576,23.0);}
+        let (have,notes)=u.about();let mut y=110+rows.len()*41+10;
+        p.text(&have,32,y,576,18.0);y+=34;
+        let lines:Vec<String>=notes.iter().flat_map(|n|wrap(n,576,17.0)).collect();
+        let room=(420-y)/24;
+        for (i,line) in lines.iter().take(room).enumerate(){let more=i+1==room && lines.len()>room;p.text(if more{"..."}else{line},32,y+i*24,576,17.0);}
+        p.text(u.legend(),24,430,592,20.0);
+        UndoFace{rgba:p.rgba,w:640,h:480}
+    }
     pub fn render(&self)->UndoFace{
+        if let Some(u)=&self.update{return self.render_update(u)}
         if self.keyboard.is_none(){
             if let Some(list)=&self.list{return self.render_art(list)}
             if let Some(ra)=&self.ra{return self.render_ra(ra)}
@@ -518,6 +541,16 @@ impl WifiMenu{
             }p.text(if self.busy(){"B CANCEL"}else{"B BACK    A SELECT    X EDIT PASSWORD"},24,430,592,20.0);
         }UndoFace{rgba:p.rgba,w:640,h:480}
     }
+}
+/// `text` in lines no wider than `w` at `px`, broken between words.
+fn wrap(text:&str,w:usize,px:f32)->Vec<String>{
+    let Some(font)=slot_ui::text::label_font()else{return vec![text.to_string()]};
+    let mut lines=Vec::new();let mut line=String::new();
+    for word in text.split_whitespace(){
+        let next=if line.is_empty(){word.to_string()}else{format!("{line} {word}")};
+        if !line.is_empty() && slot_ui::text::line_width(font,&next,px,0.0)>w as f32{lines.push(std::mem::replace(&mut line,word.to_string()));}else{line=next;}
+    }
+    if !line.is_empty(){lines.push(line);}lines
 }
 struct Painter{rgba:Vec<u8>}
 impl Painter{
@@ -609,7 +642,7 @@ impl Painter{
         assert_eq!(masked(&k),"Benni");
     }
     #[test]fn ra_screen_types_the_login_and_needs_both_fields(){
-        let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:Some(RaScreen{account:None,user:String::new(),password:String::new(),job:None,test:None}),query:None};
+        let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:Some(RaScreen{account:None,user:String::new(),password:String::new(),job:None,test:None}),query:None,update:None};
         m.input(Action::GbaDown(Btn::A));assert!(m.keyboard.as_ref().is_some_and(|k|!k.secret));
         // q w e on the letter row
         m.input(Action::GbaDown(Btn::Down));for _ in 0..3{m.input(Action::GbaDown(Btn::A));m.input(Action::GbaDown(Btn::Right));}
@@ -627,7 +660,7 @@ impl Painter{
         assert_eq!(cached_badge(&dir),Some(dir.join("System/Cache/Badges/a.png")));
         assert_eq!(cached_badge(&dir.join("nowhere")),None);let _=fs::remove_dir_all(&dir);
         let account=ra::Account{user:"Benni".into(),token:"t".into()};
-        let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:Some(RaScreen{account:Some(account),user:String::new(),password:String::new(),job:None,test:None}),query:None};
+        let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:Some(RaScreen{account:Some(account),user:String::new(),password:String::new(),job:None,test:None}),query:None,update:None};
         m.input(Action::GbaDown(Btn::Up));assert_eq!(m.row,3,"four rows when logged in, wrapping to LOG OUT");
         m.input(Action::GbaDown(Btn::Up));assert_eq!(m.row,2);
         assert!(m.take_test_unlock().is_none());
@@ -648,7 +681,7 @@ impl Painter{
     #[test]fn art_screen_deletes_only_after_a_second_a(){
         let d=tempfile::tempdir().unwrap();let label=d.path().join("Emerald.png");fs::write(&label,b"png").unwrap();
         let games=vec![(Platform::Gba,"Emerald".to_string(),label.clone(),false),(Platform::Gb,"Tetris".to_string(),d.path().join("Tetris.png"),false)];
-        let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:Some(ArtList{games,armed:None}),ra:None,query:None};
+        let mut m=WifiMenu{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:Some(ArtList{games,armed:None}),ra:None,query:None,update:None};
         m.input(Action::GbaDown(Btn::Down));m.input(Action::GbaDown(Btn::A));
         assert!(label.exists(),"first A only asks");
         if let Ok(path)=std::env::var("SLOT_ART_PREVIEW"){let f=m.render();let mut e=png::Encoder::new(fs::File::create(path).unwrap(),640,480);e.set_color(png::ColorType::Rgba);e.set_depth(png::BitDepth::Eight);e.write_header().unwrap().write_image_data(&f.rgba).unwrap();}
@@ -658,7 +691,7 @@ impl Painter{
         assert_eq!(m.list.as_ref().unwrap().games.len(),1);
         assert!(m.input(Action::GbaDown(Btn::B)),"B closes once nothing is armed");
     }
-    #[test]fn render_fixture(){let s=WifiMenu{worker:None,face:None,dirty:true,on:true,status:"Password is case sensitive".into(),networks:Vec::new(),row:0,keyboard:Some(Keyboard{target:KeyTarget::Wifi(network()),secret:true,password:"Test".into(),key:0,page:0,typed:Some(Instant::now())}),refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:None};
+    #[test]fn render_fixture(){let s=WifiMenu{worker:None,face:None,dirty:true,on:true,status:"Password is case sensitive".into(),networks:Vec::new(),row:0,keyboard:Some(Keyboard{target:KeyTarget::Wifi(network()),secret:true,password:"Test".into(),key:0,page:0,typed:Some(Instant::now())}),refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:None,update:None};
         let mut s=s;
         // SLOT_WIFI_PREVIEW=<dir>: one picture per keyboard page.
         for page in 0..KEYS.len(){

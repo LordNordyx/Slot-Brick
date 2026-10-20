@@ -40,11 +40,23 @@ jobs:
           key: brick-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/bootlogo-tool/Cargo.lock', 'brick/Dockerfile') }}
           restore-keys: brick-
 
+      # A Dev build knows it is one, so its Update screen compares commits, not versions.
       - name: Build the card
+        env:
+          SLOT_CHANNEL: dev
         run: sh brick/docker-build.sh
 
       - name: Zip the card
         run: python3 brick/zip-card.py dist-brick slot-brick-dev-sd-card.zip
+
+      # update.txt, signed when the release key is set: what Slot's Update screen finds and
+      # checks the zip by.
+      - name: Describe and sign the update
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          version=$(head -1 brick/README.md | grep -o 'v[0-9][0-9.]*')
+          bash brick/update-manifest.sh dev "$version" slot-brick-dev-sd-card.zip update
 
       - name: Replace the Dev build release
         env:
@@ -53,5 +65,5 @@ jobs:
         run: |
           bash brick/dev-notes.sh > notes.md
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
-          gh release create dev slot-brick-dev-sd-card.zip \
+          gh release create dev slot-brick-dev-sd-card.zip update/update.txt* \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease

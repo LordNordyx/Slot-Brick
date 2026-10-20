@@ -43,7 +43,7 @@ doesn't flash anything to the device.
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
-| `HOME`           | Menu (settings, LEDs, Wi-Fi, Cart Art, RetroAchievements, About) |
+| `HOME`           | Menu (settings, LEDs, Wi-Fi, Cart Art, RetroAchievements, Update, About) |
 
 ### In game
 
@@ -138,6 +138,14 @@ fast-forward stay allowed): a small toast slides into the top-right corner with 
 game has when it starts, and with each unlock and its badge as it happens. A game's badges
 are fetched when it starts and kept in `Slot/System/Cache/Badges`. Unlocks made offline are sent once the Brick is back online, while the game is
 still running. Hardcore mode isn't available.
+
+**Update:** **HOME → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
+and shows what is new in it. Choose INSTALL, then press A again: Slot downloads it, checks it,
+puts it in place and starts again. It needs 20% battery or a charger. Only Slot's own files
+are replaced (`Slot/System`, the `Apps` it came with, `.slot-boot`, the bundled overlays and
+this README); your games, saves, states, labels, BIOS files, settings and wallpapers are left
+as they are. Every update is signed, and one whose signature or checksum doesn't match is
+never installed. If the new version doesn't start, the previous one is put back.
 
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.

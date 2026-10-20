@@ -47,3 +47,10 @@ builds and publishes. Every merge to `main` also replaces the `dev` pre-release.
   it and adds the binaries. Bundled third-party assets (e.g. KrutzOtrem's overlays in
   `brick/card/Slot/Overlays/`) need their licence in `licenses/` and a credit in both READMEs.
 - `brick/overlays-local/` is git-ignored and never reaches a published card.
+- HOME → Update replaces only the paths `update::ours` (`crates/slot/src/update.rs`) lists.
+  A new folder of Slot's own on the card must be added there, or updates won't carry it; never
+  add a path that holds the player's files (Games, Saves, States, Labels, BIOS, Config,
+  Wallpapers, `Apps/BootLogo/Image`).
+- Releases carry `update.txt` and `update.txt.sig`, signed in CI with the `UPDATE_SIGNING_KEY`
+  secret. A change to `update.txt`'s format must keep old Slots able to read it, or bump its
+  header line (`slot-update 1`), which old Slots then refuse.

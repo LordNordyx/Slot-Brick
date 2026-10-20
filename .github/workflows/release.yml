@@ -36,8 +36,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
+          HAS_KEY: ${{ secrets.UPDATE_SIGNING_KEY != '' }}
         run: |
           set -eu
+          # Without the release key, Slot's Update screen would refuse the release.
+          if [ "$HAS_KEY" != true ]; then
+              echo "::error::the UPDATE_SIGNING_KEY secret is not set"
+              exit 1
+          fi
           case "$TAG" in
               v[0-9]*) ;;
               *) echo "::error::$TAG is not a vX.Y tag"; exit 1 ;;
@@ -111,6 +117,13 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: python3 brick/zip-card.py dist-brick "slot-brick-$TAG-sd-card.zip"
 
+      # update.txt, signed: what Slot's Update screen finds and checks the zip by.
+      - name: Describe and sign the update
+        env:
+          TAG: ${{ github.ref_name }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: bash brick/update-manifest.sh release "$TAG" "slot-brick-$TAG-sd-card.zip" update
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -118,5 +131,5 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           bash brick/release-notes.sh "$TAG" > notes.md
-          gh release create "$TAG" "slot-brick-$TAG-sd-card.zip" \
+          gh release create "$TAG" "slot-brick-$TAG-sd-card.zip" update/update.txt update/update.txt.sig \
             --title "$TAG" --notes-file notes.md --verify-tag
