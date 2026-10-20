@@ -55,10 +55,14 @@ pub enum QuickRow {
     System,
     AutoClock,
     LedSticks,
+    Library,
+    LibrarySort,
+    LibraryShow,
+    LibraryPlayTime,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 42] = [
+    pub const ALL: [QuickRow; 46] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -101,15 +105,19 @@ impl QuickRow {
         QuickRow::System,
         QuickRow::AutoClock,
         QuickRow::LedSticks,
+        QuickRow::Library,
+        QuickRow::LibrarySort,
+        QuickRow::LibraryShow,
+        QuickRow::LibraryPlayTime,
     ];
 
     #[cfg(not(feature = "brick"))]
-    pub const MAIN: [QuickRow; 3] = [QuickRow::Screen, QuickRow::Game, QuickRow::System];
+    pub const MAIN: [QuickRow; 4] = [QuickRow::Screen, QuickRow::Game, QuickRow::Library, QuickRow::System];
     #[cfg(not(feature = "brick"))]
     pub const SYSTEM: [QuickRow; 2] = [QuickRow::DateTime, QuickRow::About];
 
     #[cfg(feature = "brick")]
-    pub const MAIN: [QuickRow; 7] = [QuickRow::Screen,QuickRow::Game,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::System];
+    pub const MAIN: [QuickRow; 8] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::System];
     /// System: the Brick's lights, its clock, and what Slot is.
     #[cfg(feature = "brick")]
     pub const SYSTEM: [QuickRow; 4] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::AutoClock,QuickRow::About];
@@ -124,6 +132,9 @@ impl QuickRow {
         }
     }
     pub fn led_setting(self) -> bool { Self::LIGHTS_PRO.contains(&self) }
+
+    /// Library: how the shelves are ordered, and whether they hold only the favorites.
+    pub const LIBRARY: [QuickRow; 3] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryPlayTime];
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
@@ -182,6 +193,7 @@ impl QuickRow {
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown => &QuickRow::GAME,
             QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::About => &QuickRow::SYSTEM,
+            QuickRow::LibrarySort | QuickRow::LibraryShow | QuickRow::LibraryPlayTime => &QuickRow::LIBRARY,
             _ => &QuickRow::MAIN,
         }
     }
@@ -195,6 +207,7 @@ impl QuickRow {
             QuickRow::NesShader => Some(QuickRow::ScreenNes),
             QuickRow::SnesShader => Some(QuickRow::ScreenSnes),
             QuickRow::FastForward => Some(QuickRow::Game),
+            QuickRow::LibrarySort => Some(QuickRow::Library),
             first if first == QuickRow::SYSTEM[0] => Some(QuickRow::System),
             _ => None,
         }
@@ -210,6 +223,7 @@ impl QuickRow {
             QuickRow::ScreenSnes => Some(QuickRow::SCREEN_SNES[0]),
             QuickRow::Game => Some(QuickRow::GAME[0]),
             QuickRow::System => Some(QuickRow::SYSTEM[0]),
+            QuickRow::Library => Some(QuickRow::LIBRARY[0]),
             _ => None,
         }
     }
@@ -234,6 +248,10 @@ impl QuickRow {
             QuickRow::LedColor => "Color",
             QuickRow::LedEffect => "Effect",
             QuickRow::LedSticks => "Sticks",
+            QuickRow::Library => "Library",
+            QuickRow::LibrarySort => "Sort By",
+            QuickRow::LibraryShow => "Show",
+            QuickRow::LibraryPlayTime => "Play Time",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Screen",
@@ -262,7 +280,7 @@ impl QuickRow {
     pub fn opens(self) -> bool {
         matches!(
             self,
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System
+            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes
         )
     }
@@ -309,10 +327,17 @@ pub enum QuickValue {
     Percent3,
     Percent5,
     Percent10,
+    SortAz,
+    SortRecent,
+    SortMost,
+    AllGames,
+    Favorites,
+    Minutes,
+    Hours,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 29] = [
+    pub const ALL: [QuickValue; 36] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -342,6 +367,13 @@ impl QuickValue {
         QuickValue::Percent3,
         QuickValue::Percent5,
         QuickValue::Percent10,
+        QuickValue::SortAz,
+        QuickValue::SortRecent,
+        QuickValue::SortMost,
+        QuickValue::AllGames,
+        QuickValue::Favorites,
+        QuickValue::Minutes,
+        QuickValue::Hours,
     ];
 
     pub fn index(self) -> usize {
@@ -379,6 +411,13 @@ impl QuickValue {
             QuickValue::Percent3 => "3%",
             QuickValue::Percent5 => "5%",
             QuickValue::Percent10 => "10%",
+            QuickValue::SortAz => "A–Z",
+            QuickValue::SortRecent => "Last Played",
+            QuickValue::SortMost => "Most Played",
+            QuickValue::AllGames => "All Games",
+            QuickValue::Favorites => "Favorites",
+            QuickValue::Minutes => "Minutes",
+            QuickValue::Hours => "Hours",
         }
     }
 

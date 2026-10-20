@@ -191,6 +191,9 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             clock_set: true,
             utc_offset_min: -300,
             auto_clock: true,
+            library_sort: slot_store::LibrarySort::Az,
+            favorites_only: false,
+            play_time_hours: false,
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
@@ -218,6 +221,9 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
     let s = SlotState {
         clock_set: true,
         auto_clock: false,
+        library_sort: slot_store::LibrarySort::MostPlayed,
+        favorites_only: true,
+        play_time_hours: true,
         rumble: false,
         ff_speed: 2,
         ff_sound: true,
@@ -241,6 +247,9 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
     let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     for line in [
         "auto_clock=0",
+        "library_sort=most",
+        "favorites_only=1",
+        "play_time_hours=1",
         "rumble=0",
         "ff_speed=2",
         "ff_sound=1",

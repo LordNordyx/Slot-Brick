@@ -27,6 +27,11 @@ const INK: [f32; 4] = [
     1.0,
 ];
 
+/// Where the gauge and its percent end, drawn from `x`: what goes beside them starts there.
+pub fn gauge_end(x: f32, percent: Printed) -> f32 {
+    x + BOLT_W + BOLT_GAP + GAUGE_W + NUB_W + GAP + percent.w as f32
+}
+
 pub fn draw_gauge(
     x: f32,
     y: f32,

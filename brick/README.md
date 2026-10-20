@@ -43,7 +43,9 @@ doesn't flash anything to the device.
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
-| `HOME`           | Menu (Screen, Gameplay, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, Auto Clock, About) |
+| `Y`              | Favorite: a star on the cart, or off again |
+| `SELECT`         | Sort: A–Z, last played, most played     |
+| `HOME`           | Menu (Screen, Gameplay, Library, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, Auto Clock, About) |
 
 ### In game
 
@@ -138,6 +140,12 @@ fast-forward stay allowed): a small toast slides into the top-right corner with 
 game has when it starts, and with each unlock and its badge as it happens. A game's badges
 are fetched when it starts and kept in `Slot/System/Cache/Badges`. Unlocks made offline are sent once the Brick is back online, while the game is
 still running. Hardcore mode isn't available.
+
+**Library:** beside the battery, the shelf shows how long you have played the selected game: in minutes, or in hours and minutes (**HOME → Library → Play Time**). `Y` stars a game as a
+favorite. `SELECT` sorts the shelves A–Z, by the game played last,
+or by the most played, and names the order in the slot; **HOME → Library** has the same order
+(**Sort By**) and **Show: Favorites**, which leaves only your favorites on the shelves (all games,
+while you have none). Play time, last played and favorites are kept in `Slot/Config/library.txt`.
 
 **Update:** **HOME → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
 and shows what is new in it. Choose INSTALL, then press A again: Slot downloads it, checks it,
