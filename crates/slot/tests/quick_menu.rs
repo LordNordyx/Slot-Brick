@@ -118,7 +118,7 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     press(&mut a, Btn::Up);
     assert_eq!(
         a.quick_menu(),
-        Some(QuickRow::About),
+        QuickRow::MAIN.last().copied(),
         "up from the top did not wrap to the bottom"
     );
     for want in QuickRow::MAIN.into_iter().chain([QuickRow::MAIN[0]]) {
@@ -593,13 +593,11 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         drawn(&out, value(QuickValue::On, false)),
         "rumble's ON is not grey"
     );
-    press(&mut a, Btn::B);
+    open_at(&mut a, QuickRow::About);
     let out = frame(&a);
     assert!(drawn(&out, 500), "the date and time is not grey");
 
-    for _ in QuickRow::Game.position()..QuickRow::DateTime.position() {
-        press(&mut a, Btn::Down);
-    }
+    press(&mut a, Btn::Up);
     let out = frame(&a);
     assert!(
         !drawn(&out, 300) && !drawn(&out, 301),

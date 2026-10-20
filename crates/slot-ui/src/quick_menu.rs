@@ -45,10 +45,11 @@ pub enum QuickRow {
     AutoSave,
     BatteryShutdown,
     Update,
+    System,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 39] = [
+    pub const ALL: [QuickRow; 40] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -88,18 +89,19 @@ impl QuickRow {
         QuickRow::AutoSave,
         QuickRow::BatteryShutdown,
         QuickRow::Update,
+        QuickRow::System,
     ];
 
     #[cfg(not(feature = "brick"))]
-    pub const MAIN: [QuickRow; 4] = [
-        QuickRow::Screen,
-        QuickRow::Game,
-        QuickRow::DateTime,
-        QuickRow::About,
-    ];
+    pub const MAIN: [QuickRow; 3] = [QuickRow::Screen, QuickRow::Game, QuickRow::System];
+    #[cfg(not(feature = "brick"))]
+    pub const SYSTEM: [QuickRow; 2] = [QuickRow::DateTime, QuickRow::About];
 
     #[cfg(feature = "brick")]
-    pub const MAIN: [QuickRow; 9] = [QuickRow::Screen,QuickRow::Game,QuickRow::Lights,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::DateTime,QuickRow::About];
+    pub const MAIN: [QuickRow; 7] = [QuickRow::Screen,QuickRow::Game,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::System];
+    /// System: the Brick's lights, its clock, and what Slot is.
+    #[cfg(feature = "brick")]
+    pub const SYSTEM: [QuickRow; 3] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::About];
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
     pub fn led_setting(self) -> bool { Self::LIGHTS.contains(&self) }
 
@@ -159,6 +161,7 @@ impl QuickRow {
             | QuickRow::EjectSave
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown => &QuickRow::GAME,
+            QuickRow::Lights | QuickRow::DateTime | QuickRow::About => &QuickRow::SYSTEM,
             _ => &QuickRow::MAIN,
         }
     }
@@ -172,6 +175,7 @@ impl QuickRow {
             QuickRow::NesShader => Some(QuickRow::ScreenNes),
             QuickRow::SnesShader => Some(QuickRow::ScreenSnes),
             QuickRow::FastForward => Some(QuickRow::Game),
+            first if first == QuickRow::SYSTEM[0] => Some(QuickRow::System),
             _ => None,
         }
     }
@@ -185,6 +189,7 @@ impl QuickRow {
             QuickRow::ScreenNes => Some(QuickRow::SCREEN_NES[0]),
             QuickRow::ScreenSnes => Some(QuickRow::SCREEN_SNES[0]),
             QuickRow::Game => Some(QuickRow::GAME[0]),
+            QuickRow::System => Some(QuickRow::SYSTEM[0]),
             _ => None,
         }
     }
@@ -199,6 +204,7 @@ impl QuickRow {
             QuickRow::CartArt => "Cart Art",
             QuickRow::Achievements => "RetroAchievements",
             QuickRow::Update => "Update",
+            QuickRow::System => "System",
             QuickRow::Lights => "LEDs",
             QuickRow::LedMode => "Lights",
             QuickRow::LedTop => "Top Bar",
@@ -234,7 +240,7 @@ impl QuickRow {
     pub fn opens(self) -> bool {
         matches!(
             self,
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update
+            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes
         )
     }

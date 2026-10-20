@@ -27,14 +27,14 @@ press down
 press a
 snap menu-gameplay
 press b
-press down
-press down
-press down
-press down
-press down
+press up
+press up      # System: LEDs, Date & Time and About
+press a
+snap menu-system
 press down
 press a
 snap menu-date-time
+press b
 press b
 press b
 phase Shelf

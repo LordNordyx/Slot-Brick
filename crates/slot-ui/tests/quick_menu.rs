@@ -78,9 +78,13 @@ fn the_fast_forward_row_offers_the_four_ceilings_the_card_can_hold() {
 #[test]
 fn the_rows_run_in_the_order_the_user_chose() {
     #[cfg(not(feature="brick"))]
-    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Date & Time", "About"]);
+    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "System"]);
+    #[cfg(not(feature="brick"))]
+    assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["Date & Time", "About"]);
     #[cfg(feature="brick")]
-    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "LEDs", "Wi-Fi", "Cart Art", "RetroAchievements", "Update", "Date & Time", "About"]);
+    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Wi-Fi", "Cart Art", "RetroAchievements", "Update", "System"]);
+    #[cfg(feature="brick")]
+    assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["LEDs", "Date & Time", "About"]);
     assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES"]);
     assert_eq!(
         QuickRow::SCREEN_GB.map(QuickRow::label),
@@ -122,11 +126,13 @@ fn the_rows_run_in_the_order_the_user_chose() {
             QuickRow::ScreenGba,
             QuickRow::ScreenNes,
             QuickRow::ScreenSnes,
-            QuickRow::Update
+            QuickRow::Update,
+            QuickRow::System
         ]
     );
     for page in [
         &QuickRow::MAIN[..],
+        &QuickRow::SYSTEM[..],
         &QuickRow::SCREEN[..],
         &QuickRow::SCREEN_GB[..],
         &QuickRow::SCREEN_GBA[..],

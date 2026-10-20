@@ -43,7 +43,7 @@ doesn't flash anything to the device.
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
-| `HOME`           | Menu (settings, LEDs, Wi-Fi, Cart Art, RetroAchievements, Update, About) |
+| `HOME`           | Menu (Screen, Gameplay, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, About) |
 
 ### In game
 

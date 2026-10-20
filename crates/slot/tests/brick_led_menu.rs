@@ -6,8 +6,9 @@ use slot_ui::{QuickRow, QuickValue};
 fn led_page_uses_existing_navigation_and_handles_missing_hardware() {
     let mut app=App::new(Vec::new());
     app.apply(Action::QuickMenu);
-    app.apply(Action::GbaDown(Btn::Down));
-    app.apply(Action::GbaDown(Btn::Down));
+    app.apply(Action::GbaDown(Btn::Up));
+    assert_eq!(app.quick_menu(),Some(QuickRow::System));
+    app.apply(Action::GbaDown(Btn::A));
     assert_eq!(app.quick_menu(),Some(QuickRow::Lights));
     app.apply(Action::GbaDown(Btn::A));
     assert_eq!(app.quick_menu(),Some(QuickRow::LedMode));
@@ -17,6 +18,8 @@ fn led_page_uses_existing_navigation_and_handles_missing_hardware() {
     assert_eq!(app.quick_menu(),Some(QuickRow::LedEffect));
     app.apply(Action::GbaDown(Btn::B));
     assert_eq!(app.quick_menu(),Some(QuickRow::Lights));
+    app.apply(Action::GbaDown(Btn::B));
+    assert_eq!(app.quick_menu(),Some(QuickRow::System));
     app.apply(Action::GbaDown(Btn::B));
     assert_eq!(app.quick_menu(),None);
 }

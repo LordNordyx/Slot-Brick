@@ -4,12 +4,8 @@ press a
 phase Shelf
 press menu
 phase QuickMenu
-press down
-press down
-press down
-press down
-press down
-press down    # Update
+press up
+press up      # Update
 snap menu-update-offline
 press b
 phase Shelf
@@ -17,12 +13,8 @@ set online 1
 wait 400
 press menu
 phase QuickMenu
-press down
-press down
-press down
-press down
-press down
-press down    # Update
+press up
+press up      # Update
 press a
 wait 1000
 snap update-found

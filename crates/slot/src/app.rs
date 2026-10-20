@@ -766,7 +766,7 @@ impl App {
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -1722,6 +1722,7 @@ impl App {
             | QuickRow::ScreenNes
             | QuickRow::ScreenSnes
             | QuickRow::Game
+            | QuickRow::System
             | QuickRow::Lights => {
                 if let Some(row) = row.child() {
                     self.phase = Phase::QuickMenu { row };
@@ -1815,7 +1816,7 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
