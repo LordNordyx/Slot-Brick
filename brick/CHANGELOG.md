@@ -1,5 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
+## Unreleased
+
 ## v0.43
 **New since v0.42:**
 - Overlays for every system come with Slot: KrutzOtrem's *Vanilla* set for GB, GBC and GBA and *CRT* set for NES and SNES, made for the Brick. Thanks to @KrutzOtrem!

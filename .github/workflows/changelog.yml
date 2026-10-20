@@ -1,0 +1,29 @@
+# Every pull request that changes what is on the card must say so in brick/CHANGELOG.md, under
+# "## Unreleased": those lines are the Dev build's notes and, at the next tag, the release's.
+# A change players will not notice takes the no-changelog label instead.
+name: Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # Pinned to commits, so a moved tag cannot change what runs.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          # The base branch too, to compare with.
+          fetch-depth: 0
+
+      - name: Check the changelog
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: bash brick/changelog-check.sh "$BASE"
