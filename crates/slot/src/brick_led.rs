@@ -5,9 +5,32 @@ use slot_ui::{QuickRow as Row, QuickValue as Value};
 const FILE: &str = "Config/brick_leds.ini";
 const COLORS: [&str; 6] = ["FFFFFF", "0000FF", "00FF00", "FF8000", "FF0000", "8000FF"];
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Settings { mode: u8, top: u8, buttons: u8, triggers: u8, color: u8, effect: u8 }
+struct Settings { mode: u8, top: u8, buttons: u8, triggers: u8, sticks: u8, color: u8, effect: u8 }
 impl Default for Settings {
-    fn default() -> Self { Self { mode: 2, top: 1, buttons: 1, triggers: 1, color: 0, effect: 0 } }
+    fn default() -> Self { Self { mode: 2, top: 1, buttons: 1, triggers: 1, sticks: 1, color: 0, effect: 0 } }
+}
+/// The driver's zones, and the brightness file each one's level goes to, as NextUI maps them.
+/// The Brick: top bar `m`, F1/F2 `f1` `f2`, the triggers `lr`. The Brick Pro: the same, but
+/// `lr` is its sticks' rings, and the triggers are `rear`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Layout { pro: bool }
+impl Layout {
+    fn zones(self) -> &'static [&'static str] { if self.pro { &["m","f1","f2","lr","rear"] } else { &["m","f1","f2","lr"] } }
+    fn scales(self) -> &'static [&'static str] { if self.pro { &["max_scale","max_scale_f1f2","max_scale_lr","max_scale_rear"] } else { &["max_scale","max_scale_f1f2","max_scale_lr"] } }
+    /// Each brightness file and the setting that sets it.
+    fn levels(self, s: Settings) -> Vec<(&'static str, u8)> {
+        let mut levels=vec![("max_scale",s.top),("max_scale_f1f2",s.buttons)];
+        if self.pro { levels.extend([("max_scale_lr",s.sticks),("max_scale_rear",s.triggers)]) } else { levels.push(("max_scale_lr",s.triggers)) }
+        levels
+    }
+    fn names(self) -> Vec<String> {
+        let mut names: Vec<String>=self.scales().iter().map(|n|n.to_string()).collect();
+        for zone in self.zones() {
+            for prefix in ["effect_rgb_hex", "effect_cycles", "effect_duration", "effect"] { names.push(format!("{prefix}_{zone}")); }
+        }
+        names.push("effect_enable".into()); names
+    }
+    fn of_this_brick() -> Self { Self { pro: slot_power::model()==slot_power::Model::BrickPro } }
 }
 impl Settings {
     fn read(text: &str) -> Self {
@@ -17,18 +40,18 @@ impl Settings {
             let Ok(n)=value.trim().parse::<u8>() else { continue };
             match key.trim() {
                 "mode" if n<=2 => s.mode=if n==0 {2} else {n}, "top" if n<=3 => s.top=n,
-                "buttons" if n<=3 => s.buttons=n, "triggers" if n<=3 => s.triggers=n,
+                "buttons" if n<=3 => s.buttons=n, "triggers" if n<=3 => s.triggers=n, "sticks" if n<=3 => s.sticks=n,
                 "color" if n<6 => s.color=n, "effect" if n<2 => s.effect=n, _=>{}
             }
         }
         s
     }
-    fn text(self) -> String { format!("mode={}\ntop={}\nbuttons={}\ntriggers={}\ncolor={}\neffect={}\n",self.mode,self.top,self.buttons,self.triggers,self.color,self.effect) }
+    fn text(self) -> String { format!("mode={}\ntop={}\nbuttons={}\ntriggers={}\nsticks={}\ncolor={}\neffect={}\n",self.mode,self.top,self.buttons,self.triggers,self.sticks,self.color,self.effect) }
     fn step(&mut self, row: Row, right: bool) {
         if row==Row::LedMode { self.mode=if self.mode==1 {2} else {1}; return; }
         let (v,n)=match row {
             Row::LedMode => (&mut self.mode,3), Row::LedTop => (&mut self.top,4),
-            Row::LedButtons => (&mut self.buttons,4), Row::LedTriggers => (&mut self.triggers,4),
+            Row::LedButtons => (&mut self.buttons,4), Row::LedTriggers => (&mut self.triggers,4), Row::LedSticks => (&mut self.sticks,4),
             Row::LedColor => (&mut self.color,6), Row::LedEffect => (&mut self.effect,2), _=>return
         };
         *v=(*v+if right {1} else {n-1})%n;
@@ -45,21 +68,15 @@ fn write_command(out: &mut impl Write, name: &str, value: &str) -> io::Result<()
     }
     Ok(())
 }
-pub struct BrickLeds { root: PathBuf, sys: PathBuf, settings: Settings, original: Vec<(String,String)>, sleeping: Option<Vec<(String,String)>>, previous_mode: Option<u8>, power_state: LedState, available: bool, #[cfg(test)] applied_brightness: std::cell::RefCell<Vec<(String,String)>> }
+pub struct BrickLeds { root: PathBuf, sys: PathBuf, layout: Layout, settings: Settings, original: Vec<(String,String)>, sleeping: Option<Vec<(String,String)>>, previous_mode: Option<u8>, power_state: LedState, available: bool, #[cfg(test)] applied_brightness: std::cell::RefCell<Vec<(String,String)>> }
 impl BrickLeds {
-    pub fn open(root: &Path) -> Self { Self::open_in(root,&slot_power::hw("/sys/class/led_anim")) }
-    fn names() -> Vec<String> {
-        let mut names=vec!["max_scale".into(),"max_scale_f1f2".into(),"max_scale_lr".into()];
-        for zone in ["m","f1","f2","lr"] {
-            for prefix in ["effect_rgb_hex", "effect_cycles", "effect_duration", "effect"] { names.push(format!("{prefix}_{zone}")); }
-        }
-        names.push("effect_enable".into()); names
-    }
-    fn open_in(root: &Path, sys: &Path) -> Self {
-        let original: Vec<_>=Self::names().into_iter().filter_map(|name| fs::read_to_string(sys.join(&name)).ok().map(|v|(name,v.trim().to_owned()))).collect();
-        let available=original.len()==Self::names().len();
+    pub fn open(root: &Path) -> Self { Self::open_in(root,&slot_power::hw("/sys/class/led_anim"),Layout::of_this_brick()) }
+    fn names(&self) -> Vec<String> { self.layout.names() }
+    fn open_in(root: &Path, sys: &Path, layout: Layout) -> Self {
+        let original: Vec<_>=layout.names().into_iter().filter_map(|name| fs::read_to_string(sys.join(&name)).ok().map(|v|(name,v.trim().to_owned()))).collect();
+        let available=original.len()==layout.names().len();
         let settings=Settings::read(&fs::read_to_string(root.join(FILE)).unwrap_or_default());
-        let mut this=Self {root:root.into(),sys:sys.into(),settings,original,sleeping:None,previous_mode:None,power_state:LedState::Running,available, #[cfg(test)] applied_brightness: Default::default()};
+        let mut this=Self {root:root.into(),sys:sys.into(),layout,settings,original,sleeping:None,previous_mode:None,power_state:LedState::Running,available, #[cfg(test)] applied_brightness: Default::default()};
         if available && settings.mode!=0 {
             if let Err(e)=this.apply(settings) { eprintln!("slot: LED startup: {e}"); let _=this.restore(); this.available=false; }
         }
@@ -72,7 +89,7 @@ impl BrickLeds {
         write_command(&mut f, name, value)?;
         // Model the driver latching brightness when an effect is triggered.
         #[cfg(test)]
-        if let Some(scale)=match name { "effect_m"=>Some("max_scale"), "effect_f1"|"effect_f2"=>Some("max_scale_f1f2"), "effect_lr"=>Some("max_scale_lr"), _=>None } {
+        if let Some(scale)=match name { "effect_m"=>Some("max_scale"), "effect_f1"|"effect_f2"=>Some("max_scale_f1f2"), "effect_lr"=>Some("max_scale_lr"), "effect_rear"=>Some("max_scale_rear"), _=>None } {
             self.applied_brightness.borrow_mut().push((name.into(),fs::read_to_string(self.sys.join(scale))?.trim().into()));
         }
         Ok(())
@@ -90,7 +107,7 @@ impl BrickLeds {
     }
     pub fn sleep(&mut self) -> io::Result<()> {
         if !self.available || self.sleeping.is_some() { return Ok(()) }
-        let snapshot = Self::names().into_iter().map(|name| {
+        let snapshot = self.names().into_iter().map(|name| {
             fs::read_to_string(self.sys.join(&name)).map(|v|(name,v.trim().to_owned()))
         }).collect::<io::Result<Vec<_>>>()?;
         self.sleeping = Some(snapshot);
@@ -114,7 +131,7 @@ impl BrickLeds {
     fn restore_values(&self, values: &[(String,String)]) -> io::Result<()> {
         if !self.available { return Ok(()) }
         // effect_<zone> is the apply trigger: restore all parameters first.
-        let is_trigger=|name: &str| matches!(name,"effect_m"|"effect_f1"|"effect_f2"|"effect_lr");
+        let is_trigger=|name: &str| self.layout.zones().iter().any(|zone| name.strip_prefix("effect_")==Some(zone));
         for (name,value) in values.iter().filter(|(n,_)| !is_trigger(n)) { self.write(name,value)?; }
         for (name,value) in values.iter().filter(|(n,_)| is_trigger(n)) { self.write(name,value)?; }
         Ok(())
@@ -124,12 +141,12 @@ impl BrickLeds {
         let warning = matches!(self.power_state, LedState::Low | LedState::VeryLow) && self.sleeping.is_none();
         let off = s.mode == 1 || self.power_state == LedState::Off;
         self.write("effect_enable","1")?;
-        for (name,level) in [("max_scale",s.top),("max_scale_f1f2",s.buttons),("max_scale_lr",s.triggers)] {
+        for (name,level) in self.layout.levels(s) {
             let brightness = if warning && name == "max_scale_f1f2" { 20 }
                 else if off { 0 } else { u32::from(level) * 20 };
             self.write(name,&brightness.to_string())?;
         }
-        for zone in ["m","f1","f2","lr"] {
+        for &zone in self.layout.zones() {
             let alarm = warning && matches!(zone, "f1" | "f2");
             let blink = alarm && self.power_state == LedState::VeryLow;
             self.write(&format!("effect_rgb_hex_{zone}"),if alarm { "FF0000" } else { COLORS[s.color as usize] })?;
@@ -149,7 +166,7 @@ impl BrickLeds {
         }
         if let Ok(mut log)=fs::OpenOptions::new().create(true).append(true).open(path) {
             let _=writeln!(log,"v0.7 {action}: {:?}",self.settings);
-            for name in Self::names().into_iter().chain(["effect_names".into()]) {
+            for name in self.names().into_iter().chain(["effect_names".into()]) {
                 let value=fs::read_to_string(self.sys.join(&name)).unwrap_or_else(|e|format!("error: {e}"));
                 let _=writeln!(log,"{name}={}",value.trim());
             }
@@ -162,6 +179,7 @@ impl BrickLeds {
         Some(match row {
             Row::LedMode => if s.mode==1 {Value::Off} else {Value::On},
             Row::LedTop => brightness(s.top), Row::LedButtons => brightness(s.buttons), Row::LedTriggers => brightness(s.triggers),
+            Row::LedSticks if self.layout.pro => brightness(s.sticks),
             Row::LedColor => [Value::White,Value::Blue,Value::Green,Value::Amber,Value::Red,Value::Purple][s.color as usize],
             Row::LedEffect => [Value::Steady,Value::Breathe][s.effect as usize], _=>return None
         })
@@ -189,12 +207,34 @@ impl BrickLeds {
 }
 #[cfg(test)] mod tests {
     use super::*;
+    const BRICK: Layout = Layout { pro: false };
+    const PRO: Layout = Layout { pro: true };
+    #[test] fn on_the_brick_pro_triggers_go_to_the_rear_and_sticks_to_lr() {
+        let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
+        for name in PRO.names() {fs::write(sys.join(name),"7\n").unwrap();}
+        let mut leds=BrickLeds::open_in(t.path(),&sys,PRO);
+        assert_eq!(leds.value(Row::LedSticks),Some(Value::Low));
+        leds.change(Row::LedTriggers,true).unwrap();
+        leds.change(Row::LedSticks,true).unwrap();leds.change(Row::LedSticks,true).unwrap();
+        let read=|n:&str| fs::read_to_string(sys.join(n)).unwrap().trim().to_owned();
+        assert_eq!((read("max_scale_rear"),read("max_scale_lr"),read("max_scale")),("40".into(),"60".into(),"20".into()));
+        assert_eq!(read("effect_rear"),"4");
+        leds.change(Row::LedColor,true).unwrap();
+        assert_eq!(read("effect_rgb_hex_rear"),"0000FF");
+        let again=BrickLeds::open_in(t.path(),&sys,PRO);assert_eq!(again.value(Row::LedSticks),Some(Value::High));
+        leds.restore().unwrap();assert_eq!(read("max_scale_rear"),"7");
+        // A Brick has no stick lights to set, and a Brick Pro without its rear zone has no LEDs.
+        let brick=BrickLeds::open_in(t.path(),&sys,BRICK);assert_eq!(brick.value(Row::LedSticks),None);
+        let t2=tempfile::tempdir().unwrap();let sys2=t2.path().join("sys");fs::create_dir(&sys2).unwrap();
+        for name in BRICK.names() {fs::write(sys2.join(name),"7\n").unwrap();}
+        assert_eq!(BrickLeds::open_in(t2.path(),&sys2,PRO).value(Row::LedMode),Some(Value::Unavailable));
+    }
     fn battery_leds() -> (tempfile::TempDir, PathBuf, BrickLeds) {
         let t = tempfile::tempdir().unwrap();
         let sys = t.path().join("sys");
         fs::create_dir(&sys).unwrap();
-        for name in BrickLeds::names() { fs::write(sys.join(name), "7\n").unwrap(); }
-        let leds = BrickLeds::open_in(t.path(), &sys);
+        for name in BRICK.names() { fs::write(sys.join(name), "7\n").unwrap(); }
+        let leds = BrickLeds::open_in(t.path(), &sys, BRICK);
         (t, sys, leds)
     }
     fn read(sys: &Path, name: &str) -> String {
@@ -297,8 +337,8 @@ impl BrickLeds {
     #[test] fn shortcut_toggle_preserves_settings_and_sleep_stays_off() {
         for mode in [0,2] {
             let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
-            for name in BrickLeds::names() {fs::write(sys.join(name),"7\n").unwrap();}
-            let mut leds=BrickLeds::open_in(t.path(),&sys);
+            for name in BRICK.names() {fs::write(sys.join(name),"7\n").unwrap();}
+            let mut leds=BrickLeds::open_in(t.path(),&sys,BRICK);
             if mode==2 {leds.change(Row::LedColor,true).unwrap();leds.change(Row::LedEffect,true).unwrap();}
             let before=leds.settings;
             leds.toggle().unwrap();assert_eq!(leds.settings.mode,1);
@@ -313,10 +353,10 @@ impl BrickLeds {
     #[test] fn sleep_restores_stock_off_and_custom_without_saving() {
         for mode in 0..3 {
             let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
-            for name in BrickLeds::names() {fs::write(sys.join(name),"7\n").unwrap();}
-            let mut leds=BrickLeds::open_in(t.path(),&sys);
+            for name in BRICK.names() {fs::write(sys.join(name),"7\n").unwrap();}
+            let mut leds=BrickLeds::open_in(t.path(),&sys,BRICK);
             for _ in 0..mode {leds.change(Row::LedMode,true).unwrap();}
-            let read=|| BrickLeds::names().into_iter().map(|n|fs::read_to_string(sys.join(n)).unwrap().trim().to_owned()).collect::<Vec<_>>();
+            let read=|| BRICK.names().into_iter().map(|n|fs::read_to_string(sys.join(n)).unwrap().trim().to_owned()).collect::<Vec<_>>();
             let before=read();let config=fs::read(t.path().join(FILE)).ok();
             leds.sleep().unwrap();leds.sleep().unwrap();
             for n in ["max_scale","max_scale_f1f2","max_scale_lr","effect_enable"] {assert_eq!(fs::read_to_string(sys.join(n)).unwrap().trim(),"0");}
@@ -328,8 +368,8 @@ impl BrickLeds {
     }
     #[test] fn sysfs_mapping_persistence_and_restore() {
         let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
-        for name in BrickLeds::names() {fs::write(sys.join(name),"7\n").unwrap();}
-        let mut leds=BrickLeds::open_in(t.path(),&sys);
+        for name in BRICK.names() {fs::write(sys.join(name),"7\n").unwrap();}
+        let mut leds=BrickLeds::open_in(t.path(),&sys,BRICK);
         assert_eq!(fs::read_to_string(sys.join("max_scale")).unwrap(),"20\n");
         leds.change(Row::LedMode,true).unwrap(); // Stock -> Off
         for name in ["max_scale","max_scale_f1f2","max_scale_lr"] {assert_eq!(fs::read_to_string(sys.join(name)).unwrap(),"0\n");}
@@ -345,13 +385,13 @@ impl BrickLeds {
         assert_eq!(leds.value(Row::LedMode),Some(Value::Off));
         assert_eq!(fs::read_to_string(sys.join("max_scale")).unwrap(),"0\n");
         leds.change(Row::LedMode,false).unwrap(); // Stock -> On
-        let again=BrickLeds::open_in(t.path(),&sys);assert_eq!(again.value(Row::LedColor),Some(Value::Blue));
+        let again=BrickLeds::open_in(t.path(),&sys,BRICK);assert_eq!(again.value(Row::LedColor),Some(Value::Blue));
         assert_eq!(fs::read_to_string(sys.join("max_scale")).unwrap(),"40\n");
     }
     #[test] fn effect_triggers_latch_brightness_on_off_and_restore() {
         let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
-        for name in BrickLeds::names() {fs::write(sys.join(name),"7\n").unwrap();}
-        let mut leds=BrickLeds::open_in(t.path(),&sys);
+        for name in BRICK.names() {fs::write(sys.join(name),"7\n").unwrap();}
+        let mut leds=BrickLeds::open_in(t.path(),&sys,BRICK);
         let check=|leds: &BrickLeds, expected: [&str;4]| {
             let values=leds.applied_brightness.replace(Vec::new());
             assert_eq!(values, ["effect_m","effect_f1","effect_f2","effect_lr"].into_iter().zip(expected).map(|(n,v)|(n.to_owned(),v.to_owned())).collect::<Vec<_>>());
@@ -396,7 +436,7 @@ impl BrickLeds {
         assert_eq!(Settings::read("mode=1").mode,1);
     }
     #[test] fn missing_hardware_and_invalid_settings_are_safe() {
-        let t=tempfile::tempdir().unwrap();let mut leds=BrickLeds::open_in(t.path(),&t.path().join("missing"));
+        let t=tempfile::tempdir().unwrap();let mut leds=BrickLeds::open_in(t.path(),&t.path().join("missing"),BRICK);
         assert_eq!(leds.value(Row::LedMode),Some(Value::Unavailable));assert!(leds.change(Row::LedMode,true).is_err());
         assert!(!t.path().join("missing").exists());
         assert_eq!(Settings::read("mode=99\ncolor=255\ntop=-1\neffect=oops"),Settings::default());

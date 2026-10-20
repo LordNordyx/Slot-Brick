@@ -6,6 +6,7 @@
 #        brick/sim.sh update [NAME...] the same, writing the screenshots as the new goldens
 #        brick/sim.sh unit             the sim build's own unit tests
 #        brick/sim.sh stop             stop a running `serve`
+# MODEL=pro makes it a Brick Pro (serve); scenarios named pro-*.sim always run as one.
 # Screenshots land in target-sim/out/<scenario>/, with NAME.diff.png marking what changed.
 set -eu
 cd "$(dirname "$0")/.."
@@ -89,7 +90,8 @@ run_scenarios() {
         name=$(basename "$script" .sim)
         run="$SIM/run/$name"
         fresh "$run"
-        if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" \
+        model=; case "$name" in pro-*) model=pro ;; esac
+        if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" -e SLOT_SIM_MODEL="$model" \
             -e SLOT_SIM_TIME="$SIM_TIME" -e SLOT_SIM_SCRIPT="/src/$script" \
             -e SLOT_UPDATE_URL="file:///src/$run/releases" -e SLOT_NTP_SERVER= -e SLOT_SIM_VERSION=v0.1 \
             -e SLOT_SIM_OUT="/src/$SIM/out" -e SLOT_SIM_GOLDEN=/src/brick/sim/golden \
@@ -117,7 +119,7 @@ case "$cmd" in
         # art_hosts prints flags that are meant to be split into words.
         # shellcheck disable=SC2046
         docker_run --name "$NAME" $(art_hosts) -p "127.0.0.1:$port:$port" \
-            -e SLOT_ROOT="/src/$live/card/Slot" -e SLOT_HW_ROOT="/src/$live/hw" \
+            -e SLOT_ROOT="/src/$live/card/Slot" -e SLOT_HW_ROOT="/src/$live/hw" -e SLOT_SIM_MODEL="${MODEL:-}" \
             -e SLOT_SIM_HTTP="0.0.0.0:$port" ${SLOT_SIM_TIME:+-e SLOT_SIM_TIME="$SLOT_SIM_TIME"} \
             -e SLOT_UPDATE_URL="${SLOT_UPDATE_URL:-file:///src/$live/releases}" \
             "$IMAGE" "$BIN"

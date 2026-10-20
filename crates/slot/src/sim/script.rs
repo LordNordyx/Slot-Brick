@@ -11,6 +11,8 @@
 //!   with GOLDEN/NAME.png (or replace it, with SLOT_SIM_UPDATE=1)
 //! - `set KNOB VALUE`                 battery 0-100, charging 0/1, mute 0/1, online 0/1
 //! - `led FILE VALUE`                 the LED driver file FILE must now hold VALUE
+//! - `stick DIR [ms]`                 the Brick Pro's left stick pushed up, down, left or right
+//!   for ms (80), then let go (only a Brick Pro, SLOT_SIM_MODEL=pro, takes any notice)
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -126,6 +128,13 @@ impl Step<'_> {
             "hold" => self
                 .shared
                 .press(btn(1)?, ms(words.get(2), SETTLE)?.as_millis() as u64),
+            "stick" => {
+                let (x, y) = words
+                    .get(1)
+                    .and_then(|w| super::parse_stick(w))
+                    .ok_or("needs up, down, left or right")?;
+                self.shared.flick(x, y, ms(words.get(2), Duration::from_millis(80))?.as_millis() as u64);
+            }
             "down" => self.shared.push(RawEvent::Down(btn(1)?)),
             "up" => self.shared.push(RawEvent::Up(btn(1)?)),
             "wait" => std::thread::sleep(ms(words.get(1), SETTLE)?),

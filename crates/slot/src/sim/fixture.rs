@@ -13,10 +13,18 @@ const CPUFREQ: &str = "/sys/devices/system/cpu/cpu0/cpufreq";
 const MUTE: &str = "/sys/class/gpio/gpio243/value";
 const ROUTE: &str = "/proc/net/route";
 const BACKLIGHT: &str = "/sim/backlight";
+/// The firmware's menu program, which names the model (see `slot_power::model`).
+const MAIN_UI: &str = "/usr/trimui/bin/MainUI";
+
+/// SLOT_SIM_MODEL=pro: a Brick Pro.
+fn pro() -> bool {
+    std::env::var("SLOT_SIM_MODEL").is_ok_and(|m| m == "pro")
+}
 
 const ROUTE_HEADER: &str =
     "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n";
 
+/// The LED driver's files: the Brick Pro's has a rear zone (its triggers) too.
 fn led_files() -> Vec<(String, &'static str)> {
     let mut files = vec![
         ("max_scale".to_string(), "60"),
@@ -24,7 +32,11 @@ fn led_files() -> Vec<(String, &'static str)> {
         ("max_scale_lr".to_string(), "60"),
         ("effect_enable".to_string(), "0"),
     ];
-    for zone in ["m", "f1", "f2", "lr"] {
+    let zones: &[&str] = if pro() { &["m", "f1", "f2", "lr", "rear"] } else { &["m", "f1", "f2", "lr"] };
+    if pro() {
+        files.push(("max_scale_rear".to_string(), "60"));
+    }
+    for &zone in zones {
         files.push((format!("effect_rgb_hex_{zone}"), "FFFFFF"));
         files.push((format!("effect_cycles_{zone}"), "0"));
         files.push((format!("effect_duration_{zone}"), "1000"));
@@ -66,6 +78,14 @@ pub fn populate() -> io::Result<()> {
     files.push((hw(MUTE), "0\n".into()));
     files.push((hw(ROUTE), ROUTE_HEADER.into()));
     files.push((hw(BACKLIGHT), "\n".into()));
+    // A stand-in, holding only the name MainUI carries for its model: written every start, so
+    // a kept card follows MODEL.
+    let main_ui = hw(MAIN_UI);
+    let model = if pro() { "Trimui Brick Pro" } else { "Trimui Brick" };
+    if let Some(dir) = main_ui.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(&main_ui, format!("\0{model}\0"))?;
     for (path, value) in files {
         if path.exists() {
             continue;

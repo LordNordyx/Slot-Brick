@@ -4,6 +4,8 @@ mod device;
 mod hw;
 #[cfg(feature = "brick")]
 pub use brick::BrickPlatform;
+mod model;
+pub use model::{model, Model};
 mod motor;
 mod power;
 mod sim;

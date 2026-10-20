@@ -4,6 +4,13 @@ use crate::power_menu::{MENU_H, MENU_INK, MENU_PAD, MENU_PX};
 use crate::slot_chrome::{edge, opening};
 use crate::text;
 
+/// The Brick Pro: set once at startup, it adds the Brick Pro's own rows (the stick lights).
+static BRICK_PRO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_brick_pro(pro: bool) {
+    BRICK_PRO.store(pro, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum QuickRow {
     FastForward,
@@ -47,10 +54,11 @@ pub enum QuickRow {
     Update,
     System,
     AutoClock,
+    LedSticks,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 41] = [
+    pub const ALL: [QuickRow; 42] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -92,6 +100,7 @@ impl QuickRow {
         QuickRow::Update,
         QuickRow::System,
         QuickRow::AutoClock,
+        QuickRow::LedSticks,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -105,7 +114,16 @@ impl QuickRow {
     #[cfg(feature = "brick")]
     pub const SYSTEM: [QuickRow; 4] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::AutoClock,QuickRow::About];
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
-    pub fn led_setting(self) -> bool { Self::LIGHTS.contains(&self) }
+    /// The Brick Pro's: its sticks have lights of their own.
+    pub const LIGHTS_PRO: [QuickRow; 7] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedSticks,QuickRow::LedColor,QuickRow::LedEffect];
+    /// The LEDs page of the Brick this is (see `set_brick_pro`).
+    pub fn lights() -> &'static [QuickRow] {
+        match BRICK_PRO.load(std::sync::atomic::Ordering::Relaxed) {
+            true => &QuickRow::LIGHTS_PRO,
+            false => &QuickRow::LIGHTS,
+        }
+    }
+    pub fn led_setting(self) -> bool { Self::LIGHTS_PRO.contains(&self) }
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
@@ -145,7 +163,7 @@ impl QuickRow {
 
     pub fn page(self) -> &'static [QuickRow] {
         match self {
-            QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => &QuickRow::LIGHTS,
+            QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => QuickRow::lights(),
             QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes => &QuickRow::SCREEN,
             QuickRow::GbShader
             | QuickRow::GbColourCorrection
@@ -184,7 +202,7 @@ impl QuickRow {
 
     pub fn child(self) -> Option<QuickRow> {
         match self {
-            QuickRow::Lights => Some(QuickRow::LIGHTS[0]),
+            QuickRow::Lights => Some(QuickRow::lights()[0]),
             QuickRow::Screen => Some(QuickRow::SCREEN[0]),
             QuickRow::ScreenGb => Some(QuickRow::SCREEN_GB[0]),
             QuickRow::ScreenGba => Some(QuickRow::SCREEN_GBA[0]),
@@ -215,6 +233,7 @@ impl QuickRow {
             QuickRow::LedTriggers => "Triggers",
             QuickRow::LedColor => "Color",
             QuickRow::LedEffect => "Effect",
+            QuickRow::LedSticks => "Sticks",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Screen",

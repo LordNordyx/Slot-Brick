@@ -202,6 +202,11 @@ fn serve(mut stream: TcpStream, shared: &Shared) {
             }
             json(&mut stream, "200 OK", state(shared))
         }
+        ("POST", "/stick") => {
+            let at = |key| req.get(key).and_then(|v| v.parse::<i16>().ok()).unwrap_or(0);
+            shared.stick(at("x"), at("y"));
+            json(&mut stream, "200 OK", state(shared))
+        }
         ("POST", "/idle") => {
             let settle = millis(&req, "settle", 400, 10_000);
             let timeout = millis(&req, "timeout", 10_000, 60_000);

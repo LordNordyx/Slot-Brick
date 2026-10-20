@@ -14,6 +14,7 @@
 //! - SLOT_SIM_OUT: where scenario screenshots go (default target-sim/out)
 //! - SLOT_SIM_GOLDEN: where the expected screenshots live (default brick/sim/golden)
 //! - SLOT_SIM_UPDATE=1: write the screenshots as the new goldens instead of comparing
+//! - SLOT_SIM_MODEL=pro: be a Brick Pro (its MainUI, its LED zones, its left stick)
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -43,6 +44,8 @@ pub struct Status {
 #[derive(Default)]
 struct State {
     events: VecDeque<RawEvent>,
+    /// The Brick Pro's left stick: SDL axis (0 across, 1 up and down) and where it is.
+    axes: VecDeque<(u8, i16)>,
     status: Status,
     /// Screenshots asked for and taken: the loop takes one whenever `wanted > taken`.
     wanted: u64,
@@ -69,6 +72,21 @@ impl Shared {
 
     pub fn push(&self, event: RawEvent) {
         self.lock().events.push_back(event);
+    }
+
+    /// The left stick to (x, y), -32767..32767 each, as the Brick Pro's SDL pad reports it.
+    pub fn stick(&self, x: i16, y: i16) {
+        let mut state = self.lock();
+        state.axes.push_back((0, x));
+        state.axes.push_back((1, y));
+    }
+
+    /// The left stick pushed to (x, y) for `ms`, then let go.
+    pub fn flick(&self, x: i16, y: i16, ms: u64) {
+        self.stick(x, y);
+        std::thread::sleep(Duration::from_millis(ms));
+        self.stick(0, 0);
+        self.wait_frames(2, Duration::from_secs(2));
     }
 
     /// Down, held for `ms`, then up: long enough that the frontend sees one press.
@@ -160,6 +178,10 @@ impl Shared {
         self.lock().events.drain(..).collect()
     }
 
+    pub fn take_axes(&self) -> Vec<(u8, i16)> {
+        self.lock().axes.drain(..).collect()
+    }
+
     /// Called by the device loop once a pass. `rendered`: it drew this pass. `grab` reads the
     /// screen, and is only called when a driver is waiting on it.
     pub fn tick(
@@ -248,6 +270,18 @@ pub fn parse_btn(name: &str) -> Option<Btn> {
         "volup" | "vol+" => Btn::VolUp,
         "voldown" | "vol-" => Btn::VolDown,
         "power" => Btn::Power,
+        _ => return None,
+    })
+}
+
+/// A stick direction's (x, y), all the way over.
+pub fn parse_stick(name: &str) -> Option<(i16, i16)> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "up" => (0, -32767),
+        "down" => (0, 32767),
+        "left" => (-32767, 0),
+        "right" => (32767, 0),
+        "centre" | "center" => (0, 0),
         _ => return None,
     })
 }
