@@ -33,6 +33,13 @@ and file modes will not stick. If `localhost:8765` does not answer from Windows,
 `networkingMode=mirrored` under `[wsl2]` in `%UserProfile%\.wslconfig` and `wsl --shutdown`.
 Do not reach it by the WSL IP: it answers to localhost only, on purpose.
 
+## Brick Pro
+
+`MODEL=pro task sim` (or `MODEL=pro sh brick/sim.sh serve`) makes the simulator a Brick Pro: its
+MainUI names it one, its LED driver has the Pro's rear zone, and it has a left stick, pushed with
+<kbd>I</kbd> <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> on the page, `POST /stick?x=&y=` (-32767..32767), or `stick DIR [ms]` in a scenario.
+Scenarios whose names start with `pro-` always run as a Brick Pro.
+
 ## What is real, and what is not
 
 Real: the whole frontend, menus, shelf, LED driver writes, battery and charger handling, the

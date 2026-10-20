@@ -42,6 +42,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
 | **Overlays** | Frames for GB, GBC, GBA, NES and SNES games, by KrutzOtrem, or your own 1024×768 ones; the game fits itself into the overlay's window. |
 | **Brick and Brick Hammer integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
+| **Brick Pro (experimental)** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. Not yet tested on a Brick Pro; reports welcome ([#45](../../issues/45)). |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under Gameplay → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |

@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Brick Pro (experimental, not yet tested on one): Slot recognises it, its left stick works as the D-pad, and System → LEDs has a Sticks row for the lights around its sticks.
 
 ## v0.44
 **New since v0.43:**

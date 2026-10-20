@@ -21,6 +21,9 @@ pub fn button(index: u8) -> Option<Btn> {
         8 => Btn::Menu,
         13 => Btn::VolDown,
         14 => Btn::VolUp,
+        // The Brick Pro's second Menu key (NextUI's JOY_MENU_ALT). 9 and 10 are F1/F2 on the
+        // Brick and the stick clicks on the Pro, 11 and 12 the Pro's F1/F2: none used.
+        15 => Btn::Menu,
         _ => return None,
     })
 }
@@ -42,6 +45,41 @@ pub fn hat_events(old: u8, new: u8) -> Vec<RawEvent> {
         }
     }
     events
+}
+
+/// The Brick Pro's left stick, working as the D-pad: in menus and in games alike. Pushed past
+/// half-way it presses that way, and lets go once back under a quarter, so it never flickers
+/// at the edge. Diagonals press both. Its bits are the hat's: 1 up, 2 right, 4 down, 8 left.
+#[derive(Default, Clone, Copy, Debug)]
+pub struct StickPad {
+    x: i16,
+    y: i16,
+    pub bits: u8,
+}
+
+impl StickPad {
+    const PRESS: i16 = 16000;
+    const RELEASE: i16 = 8000;
+
+    /// SDL axis 0 (left/right) or 1 (up/down), -32768..32767. The new bits, if this was one.
+    pub fn axis(&mut self, axis: u8, value: i16) -> Option<u8> {
+        match axis {
+            0 => self.x = value,
+            1 => self.y = value,
+            _ => return None,
+        }
+        let held = |bit: u8, along: i16, pressed: bool| {
+            let past = if self.bits & bit != 0 { Self::RELEASE } else { Self::PRESS };
+            if pressed { along > past } else { along < -past }
+        };
+        let mut bits = 0;
+        if held(1, self.y, false) { bits |= 1; }
+        if held(2, self.x, true) { bits |= 2; }
+        if held(4, self.y, true) { bits |= 4; }
+        if held(8, self.x, false) { bits |= 8; }
+        self.bits = bits;
+        Some(bits)
+    }
 }
 
 // TrimUI exposes rear L2/R2 as ABS_Z/ABS_RZ (SDL axes 2/5).
@@ -67,6 +105,8 @@ pub struct BrickInput {
     _lib: Library,
     power: DeviceInput,
     hat: u8,
+    /// The Brick Pro's left stick; None on the Brick, which has none.
+    stick: Option<StickPad>,
     held: u16,
     triggers: [bool; 2],
     exit_since: Option<Millis>,
@@ -142,6 +182,7 @@ impl BrickInput {
                 _lib: lib,
                 power: DeviceInput::open(root),
                 hat: 0,
+                stick: (slot_power::model() == slot_power::Model::BrickPro).then(StickPad::default),
                 held: 0,
                 triggers: [false; 2],
                 exit_since: None,
@@ -171,6 +212,12 @@ impl InputSource for BrickInput {
                     if let Some(raw) = trigger_event(&mut self.triggers, event.0[12], value) {
                         out.push(raw);
                     }
+                    if let Some(stick) = &mut self.stick {
+                        let before = self.hat | stick.bits;
+                        if let Some(bits) = stick.axis(event.0[12], value) {
+                            out.extend(hat_events(before, self.hat | bits));
+                        }
+                    }
                 }
                 0x603 | 0x604 => {
                     let index = event.0[12];
@@ -194,7 +241,8 @@ impl InputSource for BrickInput {
                 }
                 0x602 if event.0[12] == 0 => {
                     let new = event.0[13];
-                    out.extend(hat_events(self.hat, new));
+                    let stick = self.stick.map_or(0, |s| s.bits);
+                    out.extend(hat_events(self.hat | stick, new | stick));
                     self.hat = new;
                 }
                 0x606 => {
@@ -206,7 +254,10 @@ impl InputSource for BrickInput {
                             }
                         }
                     }
-                    out.extend(hat_events(self.hat, 0));
+                    out.extend(hat_events(self.hat | self.stick.map_or(0, |s| s.bits), 0));
+                    if let Some(stick) = &mut self.stick {
+                        *stick = StickPad::default();
+                    }
                     for (i, btn) in [Btn::L2, Btn::R2].into_iter().enumerate() {
                         if self.triggers[i] { out.push(RawEvent::Up(btn)); }
                     }
@@ -241,6 +292,19 @@ impl Drop for BrickInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_stick_presses_past_half_way_and_lets_go_under_a_quarter() {
+        let mut s = StickPad::default();
+        assert_eq!(s.axis(0, 12000), Some(0));
+        assert_eq!(s.axis(0, 20000), Some(2));
+        assert_eq!(s.axis(0, 12000), Some(2), "let go too early");
+        assert_eq!(s.axis(0, 4000), Some(0));
+        assert_eq!(s.axis(1, -30000), Some(1));
+        assert_eq!(s.axis(0, -30000), Some(1 | 8), "a diagonal presses both");
+        assert_eq!(s.axis(1, 30000), Some(4 | 8));
+        assert_eq!(s.axis(3, 30000), None, "the right stick is not the D-pad");
+        assert_eq!(button(15), Some(Btn::Menu));
+    }
     #[test]
     fn brick_face_order() {
         assert_eq!(button(0), Some(Btn::B));

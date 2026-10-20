@@ -1,0 +1,27 @@
+# The Brick Pro: its left stick works as the D-pad, and its LEDs page has a Sticks row. There,
+# Triggers sets the rear zone and Sticks the rings around the sticks (lr on a Brick Pro).
+press a
+phase Shelf
+stick right
+snap shelf-stick
+stick left
+press menu
+phase QuickMenu
+stick up      # System, by the stick
+press a
+press a       # LEDs
+snap menu-leds
+stick down
+stick down
+stick down    # Triggers
+press right
+led max_scale_rear 40
+stick down    # Sticks
+press right
+press right
+led max_scale_lr 60
+led max_scale 20
+press b
+press b
+press b
+phase Shelf

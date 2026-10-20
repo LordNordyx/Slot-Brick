@@ -153,6 +153,11 @@ The time zone is still yours to choose under **Date & Time**, and summer time is
 make there. On the clock screen shown at first start, the date and time fill themselves in
 once Wi-Fi connects, unless you have already changed them.
 
+**Brick Pro (experimental):** Slot tells a Brick Pro from a Brick by itself. Its left stick
+works as the D-pad, in menus and in games, and **HOME → System → LEDs** gains a **Sticks** row
+for the lights around the sticks (**Triggers** sets the shoulder lights at the back). The right
+stick, the stick clicks and the F1/F2 keys do nothing yet. Not yet tested on a real Brick Pro.
+
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.
 

@@ -28,7 +28,8 @@
     <div class="pad" id="pad"></div>
     <p class="muted">Keys: arrows, <kbd>X</kbd>=A <kbd>Z</kbd>=B <kbd>S</kbd>=X <kbd>A</kbd>=Y <kbd>Q</kbd>/<kbd>W</kbd>=L1/R1
       <kbd>1</kbd>/<kbd>2</kbd>=L2/R2 <kbd>Enter</kbd>=Start <kbd>Shift</kbd>=Select <kbd>M</kbd>=Menu
-      <kbd>P</kbd>=Power <kbd>-</kbd>/<kbd>=</kbd>=Volume</p>
+      <kbd>P</kbd>=Power <kbd>-</kbd>/<kbd>=</kbd>=Volume. Brick Pro (<code>MODEL=pro</code>):
+      <kbd>I</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd>=left stick</p>
     <pre id="state">…</pre>
   </aside>
 </main>
@@ -49,6 +50,21 @@ for (const b of BUTTONS) {
   pad.appendChild(el);
 }
 const held = new Set();
+// The Brick Pro's left stick: I/J/K/L push it up, left, down, right, all the way.
+const STICK = { i: [0, -1], j: [-1, 0], k: [0, 1], l: [1, 0] };
+const pushed = new Set();
+const moveStick = () => {
+  let x = 0, y = 0;
+  for (const k of pushed) { x += STICK[k][0]; y += STICK[k][1]; }
+  post('/stick?x=' + Math.sign(x) * 32767 + '&y=' + Math.sign(y) * 32767);
+};
+for (const [type, on] of [['keydown', true], ['keyup', false]]) addEventListener(type, (e) => {
+  const k = e.key.toLowerCase();
+  if (!STICK[k] || pushed.has(k) === on) return;
+  e.preventDefault();
+  on ? pushed.add(k) : pushed.delete(k);
+  moveStick();
+});
 addEventListener('keydown', (e) => {
   const b = KEYS[e.key] || KEYS[e.key.toLowerCase()];
   if (!b) return;

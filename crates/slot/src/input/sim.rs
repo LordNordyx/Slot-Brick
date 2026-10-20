@@ -5,6 +5,8 @@ use std::sync::Arc;
 
 pub struct SimInput {
     shared: Arc<Shared>,
+    /// A Brick Pro's left stick, through the same D-pad translation as on the device.
+    stick: Option<super::brick::StickPad>,
     held: Vec<Btn>,
     exit_since: Option<Millis>,
     exit: bool,
@@ -14,6 +16,7 @@ impl SimInput {
     pub fn new(shared: Arc<Shared>) -> Self {
         Self {
             shared,
+            stick: (slot_power::model() == slot_power::Model::BrickPro).then(super::brick::StickPad::default),
             held: Vec::new(),
             exit_since: None,
             exit: false,
@@ -26,7 +29,15 @@ impl SimInput {
 
 impl InputSource for SimInput {
     fn poll(&mut self, now: Millis) -> Vec<RawEvent> {
-        let events = self.shared.take_events();
+        let mut events = self.shared.take_events();
+        for (axis, value) in self.shared.take_axes() {
+            if let Some(stick) = &mut self.stick {
+                let before = stick.bits;
+                if let Some(bits) = stick.axis(axis, value) {
+                    events.extend(super::brick::hat_events(before, bits));
+                }
+            }
+        }
         for e in &events {
             match *e {
                 RawEvent::Down(b) if !self.held.contains(&b) => self.held.push(b),

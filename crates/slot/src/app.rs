@@ -587,7 +587,12 @@ impl App {
         let mut app = App::new(scan(root).unwrap_or_default());
         app.root = Some(root.to_path_buf());
         #[cfg(feature = "brick")]
-        { app.brick_leds = Some(crate::brick_led::BrickLeds::open(root)); }
+        {
+            let model = slot_power::model();
+            eprintln!("slot: running on a TrimUI {}", model.name());
+            slot_ui::set_brick_pro(model == slot_power::Model::BrickPro);
+            app.brick_leds = Some(crate::brick_led::BrickLeds::open(root));
+        }
         app.state = read_slot_state(root);
         app.autosave_at = app.autosave_ms();
         if app.state.clock_set {
@@ -853,7 +858,7 @@ impl App {
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
             QuickRow::AutoClock => Some(QuickValue::flag(self.state.auto_clock)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -1835,7 +1840,7 @@ impl App {
             | QuickRow::SnesOverlay
             | QuickRow::GbPalettes
             | QuickRow::AutoClock
-            | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => {}
+            | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
 
@@ -1912,7 +1917,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
