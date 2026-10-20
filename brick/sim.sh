@@ -50,6 +50,10 @@ fresh() {
     python3 -I brick/sim/make-overlay.py "$1/card/Slot/Overlays/GB/Sim Frame.png"
     cp "$1/card/Slot/Overlays/GB/Sim Frame.png" \
         "$1/card/Slot/Overlays/GBA/Sim Frame with a name far too long to fit beside its label.png"
+    # A release to update to, signed with the simulator's key, which only a simulator build takes.
+    python3 -I brick/sim/make-update.py "$1/releases"
+    openssl pkeyutl -sign -rawin -inkey brick/sim/update-key.pem \
+        -in "$1/releases/latest/download/update.txt" -out "$1/releases/latest/download/update.txt.sig"
 }
 
 # Where the cart art and label servers live. Docker looks names up with this machine's DNS;
@@ -87,6 +91,7 @@ run_scenarios() {
         fresh "$run"
         if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" \
             -e SLOT_SIM_TIME="$SIM_TIME" -e SLOT_SIM_SCRIPT="/src/$script" \
+            -e SLOT_UPDATE_URL="file:///src/$run/releases" \
             -e SLOT_SIM_OUT="/src/$SIM/out" -e SLOT_SIM_GOLDEN=/src/brick/sim/golden \
             -e SLOT_SIM_UPDATE="$update" "$IMAGE" timeout 300 "$BIN" > "$SIM/out/$name.log" 2>&1
         then
@@ -114,6 +119,7 @@ case "$cmd" in
         docker_run --name "$NAME" $(art_hosts) -p "127.0.0.1:$port:$port" \
             -e SLOT_ROOT="/src/$live/card/Slot" -e SLOT_HW_ROOT="/src/$live/hw" \
             -e SLOT_SIM_HTTP="0.0.0.0:$port" ${SLOT_SIM_TIME:+-e SLOT_SIM_TIME="$SLOT_SIM_TIME"} \
+            -e SLOT_UPDATE_URL="${SLOT_UPDATE_URL:-file:///src/$live/releases}" \
             "$IMAGE" "$BIN"
         ;;
     stop) docker rm -f "$NAME" > /dev/null 2>&1 || true ;;

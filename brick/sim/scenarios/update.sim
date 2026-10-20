@@ -1,0 +1,34 @@
+# HOME → Update finds a newer release, shows what is new in it, and asks again before
+# installing; B then keeps the Slot there is. With Wi-Fi off the row is greyed out.
+press a
+phase Shelf
+press menu
+phase QuickMenu
+press down
+press down
+press down
+press down
+press down
+press down    # Update
+snap menu-update-offline
+press b
+phase Shelf
+set online 1
+wait 400
+press menu
+phase QuickMenu
+press down
+press down
+press down
+press down
+press down
+press down    # Update
+press a
+wait 1000
+snap update-found
+press a
+snap update-confirm
+press b
+snap update-kept
+press b
+phase QuickMenu

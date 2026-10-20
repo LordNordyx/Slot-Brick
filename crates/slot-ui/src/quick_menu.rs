@@ -44,10 +44,11 @@ pub enum QuickRow {
     SnesOverlay,
     AutoSave,
     BatteryShutdown,
+    Update,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 38] = [
+    pub const ALL: [QuickRow; 39] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -86,6 +87,7 @@ impl QuickRow {
         QuickRow::SnesOverlay,
         QuickRow::AutoSave,
         QuickRow::BatteryShutdown,
+        QuickRow::Update,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -97,7 +99,7 @@ impl QuickRow {
     ];
 
     #[cfg(feature = "brick")]
-    pub const MAIN: [QuickRow; 8] = [QuickRow::Screen,QuickRow::Game,QuickRow::Lights,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::DateTime,QuickRow::About];
+    pub const MAIN: [QuickRow; 9] = [QuickRow::Screen,QuickRow::Game,QuickRow::Lights,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::DateTime,QuickRow::About];
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
     pub fn led_setting(self) -> bool { Self::LIGHTS.contains(&self) }
 
@@ -196,6 +198,7 @@ impl QuickRow {
             QuickRow::Wifi => "Wi-Fi",
             QuickRow::CartArt => "Cart Art",
             QuickRow::Achievements => "RetroAchievements",
+            QuickRow::Update => "Update",
             QuickRow::Lights => "LEDs",
             QuickRow::LedMode => "Lights",
             QuickRow::LedTop => "Top Bar",
@@ -231,7 +234,7 @@ impl QuickRow {
     pub fn opens(self) -> bool {
         matches!(
             self,
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements
+            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes
         )
     }

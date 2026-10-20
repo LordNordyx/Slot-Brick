@@ -82,9 +82,30 @@ if [ "$status" -ge 128 ]; then
     ls -1t "$CRASH"/slot-*.log 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
 fi
 sync
+# An update swapped in (see crates/slot/src/update.rs): Slot removes .slot-update/pending once
+# the new one has shown a frame. Still there when it ends, the new one never started, so the
+# files it replaced go back, and the old one starts instead.
+UPDATE="$(dirname "$SLOT_ROOT")/.slot-update"
+if [ "$status" != 66 ] && [ -f "$UPDATE/pending" ] && [ -d "$UPDATE/old" ]; then
+    echo 'The update did not start: putting the previous version back'
+    ( cd "$UPDATE/old" && find . -type f ) | while IFS= read -r f; do
+        mkdir -p "$(dirname "$(dirname "$SLOT_ROOT")/$f")"
+        mv -f "$UPDATE/old/$f" "$(dirname "$SLOT_ROOT")/$f"
+    done
+    rm -rf "$UPDATE"
+    sync
+    status=66
+fi
 case "$status" in
     64) action=poweroff ;;
     65) action=reboot ;;
+    66)
+        # Start again on the files just swapped in; this script may be one of them.
+        cleanup
+        trap - 0
+        echo 'Starting Slot again on the updated files'
+        exec sh "$SYS/launch.sh"
+        ;;
     *) exit "$status" ;;
 esac
 # The frontend has settled saves and exited, releasing audio/video handles.

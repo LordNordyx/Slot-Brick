@@ -403,6 +403,8 @@ pub struct App {
     #[cfg(feature = "brick")]
     brick_switch_at: Millis,
     powering_off: bool,
+    /// An update was swapped in: Slot ends, for launch.sh to start the new one.
+    updating: bool,
     radio: Box<dyn RadioJobs>,
 }
 
@@ -507,6 +509,7 @@ impl App {
             starting: None,
             link_transport: None,
             restarting: false,
+            updating: false,
             act_at: 0,
             root: None,
             state: SlotState::default(),
@@ -763,7 +766,7 @@ impl App {
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -934,7 +937,7 @@ impl App {
 
     fn quick_disabled(&self, row: QuickRow) -> bool {
         #[cfg(feature = "brick")]
-        if matches!(row, QuickRow::CartArt | QuickRow::Achievements) {
+        if matches!(row, QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update) {
             return !self.net_up;
         }
         let _ = row;
@@ -1370,6 +1373,10 @@ impl App {
         self.restarting
     }
 
+    pub fn updating(&self) -> bool {
+        self.updating
+    }
+
     pub fn restore_brick_leds(&self) {
         #[cfg(feature = "brick")]
         if let Some(leds)=&self.brick_leds { if let Err(e)=leds.restore() { eprintln!("slot: LED restore: {e}"); } }
@@ -1701,6 +1708,10 @@ impl App {
                 #[cfg(feature = "brick")]
                 if self.net_up {self.wifi=Some(crate::brick_wifi::WifiMenu::achievements());}
             },
+            QuickRow::Update => {
+                #[cfg(feature = "brick")]
+                if let (true, Some(root)) = (self.net_up, &self.root) {self.wifi=Some(crate::brick_wifi::WifiMenu::update(root));}
+            },
             QuickRow::DateTime => {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
@@ -1804,7 +1815,7 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
@@ -2211,7 +2222,9 @@ impl App {
         }
         #[cfg(feature = "brick")]
         {
-            if let Some(wifi)=&mut self.wifi {wifi.poll();}
+            let battery = self.battery.map(|b| (b.percent, matches!(b.charge, Charge::Charging | Charge::Full)));
+            if let Some(wifi)=&mut self.wifi {wifi.set_battery(battery);wifi.poll();}
+            if self.wifi.as_mut().is_some_and(|w|w.take_restart()) {self.updating=true;self.wifi_power=None;}
             for f in self.wifi.as_mut().map(|w|w.take_fetched()).unwrap_or_default() {self.adopt_label(f.platform,&f.stem,f.label);}
             if let Some(t)=self.wifi.as_mut().and_then(|w|w.take_test_unlock()) {
                 self.achievement_notice(slot_cheevos::Notice::Unlocked{title:t.title,description:t.description,points:t.points,badge:String::new()},t.badge);

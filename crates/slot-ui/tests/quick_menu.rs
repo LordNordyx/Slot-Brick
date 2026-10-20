@@ -80,7 +80,7 @@ fn the_rows_run_in_the_order_the_user_chose() {
     #[cfg(not(feature="brick"))]
     assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Date & Time", "About"]);
     #[cfg(feature="brick")]
-    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "LEDs", "Wi-Fi", "Cart Art", "RetroAchievements", "Date & Time", "About"]);
+    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "LEDs", "Wi-Fi", "Cart Art", "RetroAchievements", "Update", "Date & Time", "About"]);
     assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES"]);
     assert_eq!(
         QuickRow::SCREEN_GB.map(QuickRow::label),
@@ -121,7 +121,8 @@ fn the_rows_run_in_the_order_the_user_chose() {
             QuickRow::ScreenGb,
             QuickRow::ScreenGba,
             QuickRow::ScreenNes,
-            QuickRow::ScreenSnes
+            QuickRow::ScreenSnes,
+            QuickRow::Update
         ]
     );
     for page in [
