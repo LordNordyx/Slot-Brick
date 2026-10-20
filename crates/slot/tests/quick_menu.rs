@@ -550,8 +550,8 @@ fn the_legend_says_change_on_a_value_row_and_open_on_a_row_that_opens() {
     for row in QuickRow::MAIN {
         assert_eq!(a.quick_menu(), Some(row));
         let out = frame(&a);
-        // Cart Art and RetroAchievements are greyed out with no Wi-Fi, as here: only BACK.
-        let usable = !matches!(row, QuickRow::CartArt | QuickRow::Achievements);
+        // Cart Art, RetroAchievements and Update are greyed out with no Wi-Fi, as here: only BACK.
+        let usable = !matches!(row, QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update);
         assert!(drawn(&out, 400), "no B BACK on {row:?}");
         assert_eq!(drawn(&out, 401), !row.opens(), "CHANGE on {row:?}");
         assert_eq!(drawn(&out, 402), row.opens() && usable, "OPEN on {row:?}");
