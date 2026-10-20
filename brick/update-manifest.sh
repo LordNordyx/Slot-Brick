@@ -40,7 +40,14 @@ key=$(mktemp)
 trap 'rm -f "$key"' EXIT
 printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
 openssl pkeyutl -sign -rawin -inkey "$key" -in "$out/update.txt" -out "$out/update.txt.sig"
-# Checked against the key's own public half, so a wrong or damaged key fails here, not on a Brick.
+# The key must be the one Slot checks with (RELEASE_KEY in crates/slot/src/update.rs): signed
+# with any other, every Brick would refuse the update, and only a Brick would find out.
+ours=$(openssl pkey -in "$key" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
+built_in=$(sed -n '/^const RELEASE_KEY/,/^];/p' crates/slot/src/update.rs | grep -o '0x[0-9a-f][0-9a-f]' | sed 's/0x//' | tr -d '\n')
+if [ "$ours" != "$built_in" ]; then
+    echo "UPDATE_SIGNING_KEY is not the release key Slot checks with (RELEASE_KEY in crates/slot/src/update.rs)" >&2
+    exit 1
+fi
 openssl pkey -in "$key" -pubout > "$key.pub"
 openssl pkeyutl -verify -rawin -pubin -inkey "$key.pub" -in "$out/update.txt" -sigfile "$out/update.txt.sig" > /dev/null
 rm -f "$key.pub"
