@@ -52,6 +52,15 @@ pub fn draw_footer(
     }
 }
 
+/// How far a note sits from the battery's percent.
+const NOTE_GAP: f32 = 22.0;
+
+/// A note beside the battery's percent (the selected game's play time, on the shelf).
+pub fn draw_footer_note(percent: Printed, note: Printed, out: &mut Vec<Draw>) {
+    let x = crate::battery::gauge_end(FOOTER_MARGIN, percent) + NOTE_GAP;
+    printed(x.round(), note, out);
+}
+
 pub(crate) fn draw_printed(x: f32, y: f32, p: Printed, out: &mut Vec<Draw>) {
     if p.w == 0 {
         return;

@@ -58,10 +58,11 @@ pub enum QuickRow {
     Library,
     LibrarySort,
     LibraryShow,
+    LibraryPlayTime,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 45] = [
+    pub const ALL: [QuickRow; 46] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -107,6 +108,7 @@ impl QuickRow {
         QuickRow::Library,
         QuickRow::LibrarySort,
         QuickRow::LibraryShow,
+        QuickRow::LibraryPlayTime,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -132,7 +134,7 @@ impl QuickRow {
     pub fn led_setting(self) -> bool { Self::LIGHTS_PRO.contains(&self) }
 
     /// Library: how the shelves are ordered, and whether they hold only the favorites.
-    pub const LIBRARY: [QuickRow; 2] = [QuickRow::LibrarySort, QuickRow::LibraryShow];
+    pub const LIBRARY: [QuickRow; 3] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryPlayTime];
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
@@ -191,7 +193,7 @@ impl QuickRow {
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown => &QuickRow::GAME,
             QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::About => &QuickRow::SYSTEM,
-            QuickRow::LibrarySort | QuickRow::LibraryShow => &QuickRow::LIBRARY,
+            QuickRow::LibrarySort | QuickRow::LibraryShow | QuickRow::LibraryPlayTime => &QuickRow::LIBRARY,
             _ => &QuickRow::MAIN,
         }
     }
@@ -249,6 +251,7 @@ impl QuickRow {
             QuickRow::Library => "Library",
             QuickRow::LibrarySort => "Sort By",
             QuickRow::LibraryShow => "Show",
+            QuickRow::LibraryPlayTime => "Play Time",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Screen",
@@ -329,10 +332,12 @@ pub enum QuickValue {
     SortMost,
     AllGames,
     Favorites,
+    Minutes,
+    Hours,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 34] = [
+    pub const ALL: [QuickValue; 36] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -367,6 +372,8 @@ impl QuickValue {
         QuickValue::SortMost,
         QuickValue::AllGames,
         QuickValue::Favorites,
+        QuickValue::Minutes,
+        QuickValue::Hours,
     ];
 
     pub fn index(self) -> usize {
@@ -409,6 +416,8 @@ impl QuickValue {
             QuickValue::SortMost => "Most Played",
             QuickValue::AllGames => "All Games",
             QuickValue::Favorites => "Favorites",
+            QuickValue::Minutes => "Minutes",
+            QuickValue::Hours => "Hours",
         }
     }
 

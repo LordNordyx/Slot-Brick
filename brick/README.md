@@ -141,7 +141,7 @@ game has when it starts, and with each unlock and its badge as it happens. A gam
 are fetched when it starts and kept in `Slot/System/Cache/Badges`. Unlocks made offline are sent once the Brick is back online, while the game is
 still running. Hardcore mode isn't available.
 
-**Library:** under the game on the shelf is how long you have played it. `Y` stars a game as a
+**Library:** beside the battery, the shelf shows how long you have played the selected game: in minutes, or in hours and minutes (**HOME → Library → Play Time**). `Y` stars a game as a
 favorite. `SELECT` sorts the shelves A–Z, by the game played last,
 or by the most played, and names the order in the slot; **HOME → Library** has the same order
 (**Sort By**) and **Show: Favorites**, which leaves only your favorites on the shelves (all games,

@@ -416,7 +416,7 @@ pub struct App {
     /// Play time being counted: the last tick seen while playing, and what is not a second yet.
     play_tick: Option<Millis>,
     play_ms: Millis,
-    /// The selected game's play time, printed under it on the shelf.
+    /// The selected game's play time, printed beside the battery on the shelf.
     played: slot_ui::Printed,
     star_face: Option<(TexId, u32, u32)>,
     /// System → Auto Clock: the time server being asked, and when to ask next.
@@ -436,9 +436,6 @@ pub struct FaceWant {
     pub index: usize,
     pub on_screen: bool,
 }
-
-/// The play time under the selected cart: there, but quieter than the cart.
-const PLAYED_ALPHA: f32 = 0.7;
 
 /// How long a toast stays up, and how long it takes to slide in and out.
 const BANNER_MS: Millis = 4500;
@@ -768,14 +765,14 @@ impl App {
         }
     }
 
-    /// The selected game's play time, as printed under it on the shelf.
+    /// The selected game's play time, as the footer prints it beside the battery.
     pub fn played_text(&self) -> Option<String> {
         if !matches!(self.phase, Phase::Shelf) || self.cart_menu.is_some() || self.core_picker.is_some() {
             return None;
         }
         let platform = self.shelves.get(self.shelf_at)?.0;
         let secs = self.library.get(platform, self.selected_stem()?).played_secs;
-        slot_store::played_text(secs).map(|t| format!("PLAYED {t}"))
+        slot_store::played_text(secs, self.state.play_time_hours)
     }
 
     pub fn set_played_face(&mut self, face: Option<(TexId, u32)>) {
@@ -1042,6 +1039,10 @@ impl App {
             QuickRow::LibraryShow => Some(match self.state.favorites_only {
                 true => QuickValue::Favorites,
                 false => QuickValue::AllGames,
+            }),
+            QuickRow::LibraryPlayTime => Some(match self.state.play_time_hours {
+                true => QuickValue::Hours,
+                false => QuickValue::Minutes,
             }),
             QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
@@ -2034,6 +2035,7 @@ impl App {
             | QuickRow::AutoClock
             | QuickRow::LibrarySort
             | QuickRow::LibraryShow
+            | QuickRow::LibraryPlayTime
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
@@ -2117,6 +2119,7 @@ impl App {
                 self.arrange();
                 return;
             }
+            QuickRow::LibraryPlayTime => s.play_time_hours = !s.play_time_hours,
             QuickRow::AutoClock => {
                 s.auto_clock = !s.auto_clock;
                 // Turned on: the clock is set as soon as Wi-Fi allows.
@@ -2962,17 +2965,6 @@ impl App {
                     _ => {
                         self.shelf().draw(self.shelf_shake(), out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
-                        if let Some(tex) = self.played.face {
-                            let (w, h) = (self.played.w as f32, slot_ui::HINT_H as f32);
-                            out.push(Draw::Tex {
-                                x: ((OUT_W as f32 - w) / 2.0).round(),
-                                y: (self.shelf().selected_foot() + 14.0).round(),
-                                w,
-                                h,
-                                tex,
-                                alpha: PLAYED_ALPHA,
-                            });
-                        }
                     }
                 }
                 draw_footer(
@@ -2983,6 +2975,7 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                slot_ui::draw_footer_note(self.battery_percent, self.played, out);
             }
             Phase::About => {
                 draw_backdrop(self.wallpaper, out);

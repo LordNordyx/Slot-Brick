@@ -141,12 +141,6 @@ impl Shelf {
         self.star = Some(star);
     }
 
-    /// Where the selected cart's bottom edge is, for what is printed under it.
-    pub fn selected_foot(&self) -> f32 {
-        let h = self.carts.get(self.index).map_or(0, |c| cart_box(c.platform).1);
-        foot_y(h as f32)
-    }
-
     pub fn set_shadow(&mut self, face: TexId) {
         self.shadow = Some(face);
     }

@@ -65,12 +65,14 @@ fn y_stars_a_favorite_and_favorites_only_shows_just_those() {
 #[test]
 fn the_shelf_prints_how_long_the_selected_game_was_played() {
     let (_d, mut a) = library_app(PLAYED, SlotState { library_sort: LibrarySort::MostPlayed, ..SlotState::default() });
-    assert_eq!(a.played_text().as_deref(), Some("PLAYED 2 H 30 MIN"));
+    assert_eq!(a.played_text().as_deref(), Some("150 MIN"));
     a.apply(Action::GbaDown(Btn::Right));
     a.apply(Action::GbaUp(Btn::Right));
     assert_eq!(a.selected_stem(), Some("Gamma"));
-    assert_eq!(a.played_text().as_deref(), Some("PLAYED 1 H 6 MIN"));
+    assert_eq!(a.played_text().as_deref(), Some("66 MIN"));
     a.apply(Action::GbaDown(Btn::Right));
     a.apply(Action::GbaUp(Btn::Right));
     assert_eq!(a.played_text(), None, "Alpha was never played");
+    let (_d2, b) = library_app(PLAYED, SlotState { library_sort: LibrarySort::MostPlayed, play_time_hours: true, ..SlotState::default() });
+    assert_eq!(b.played_text().as_deref(), Some("2 H 30 MIN"));
 }
