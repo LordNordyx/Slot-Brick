@@ -129,11 +129,14 @@ pub fn run() {
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
-    // An update that a power cut stopped halfway is finished before anything else.
+    // An update that a power cut stopped halfway is finished before anything else, and one
+    // stopped before its swap began is cleared away.
     #[cfg(feature = "brick")]
     if slot::update::resume(&slot::update::card_of(&root)) {
         std::process::exit(slot::update::EXIT_UPDATED);
     }
+    #[cfg(feature = "brick")]
+    slot::update::tidy(&slot::update::card_of(&root));
     #[cfg(feature = "sim")]
     if let Err(e) = slot::sim::populate() {
         eprintln!("slot: sim: stand-in hardware: {e}");

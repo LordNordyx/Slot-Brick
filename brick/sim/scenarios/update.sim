@@ -1,5 +1,6 @@
 # HOME → Update finds a newer release, shows what is new in it, and asks again before
-# installing; B then keeps the Slot there is. With Wi-Fi off the row is greyed out.
+# installing; B then keeps the Slot there is. L1 / R1 scroll notes too long for the screen.
+# With Wi-Fi off the row is greyed out.
 press a
 phase Shelf
 press menu
@@ -18,6 +19,12 @@ press up      # Update
 press a
 wait 1000
 snap update-found
+# Notes longer than the screen: R1 scrolls down through them, L1 back up.
+press r1
+press r1
+snap update-scrolled
+press l1
+press l1
 press a
 snap update-confirm
 press b

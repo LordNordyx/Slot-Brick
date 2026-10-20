@@ -517,9 +517,10 @@ impl WifiMenu{
         let (have,notes)=u.about();let mut y=110+rows.len()*41+10;
         p.text(&have,32,y,576,18.0);y+=34;
         let lines:Vec<String>=notes.iter().flat_map(|n|wrap(n,576,17.0)).collect();
-        let room=(420-y)/24;
-        for (i,line) in lines.iter().take(room).enumerate(){let more=i+1==room && lines.len()>room;p.text(if more{"..."}else{line},32,y+i*24,576,17.0);}
-        p.text(u.legend(),24,430,592,20.0);
+        let room=(420-y)/24;let max=lines.len().saturating_sub(room);u.scroll_max.set(max);
+        for (i,line) in lines.iter().skip(u.scroll()).take(room).enumerate(){p.text(line,32,y+i*24,576,17.0);}
+        let legend=if max>0 && !u.legend().is_empty(){format!("{}    L1/R1 SCROLL",u.legend())}else{u.legend().to_string()};
+        p.text(&legend,24,430,592,20.0);
         UndoFace{rgba:p.rgba,w:640,h:480}
     }
     pub fn render(&self)->UndoFace{
