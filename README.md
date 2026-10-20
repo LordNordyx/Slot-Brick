@@ -241,8 +241,18 @@ needs write access, so only maintainers can start one. Before tagging:
    `brick/card/Slot/System/diagnose.sh` and `PORT_VERSION` in `crates/slot-ui/src/sticker.rs`
    (the About screen).
 2. Move the `## Unreleased` notes in [`brick/CHANGELOG.md`](brick/CHANGELOG.md) under a
-   `## vX.Y` heading. Those notes become the release's text, so write them for players.
-3. `git tag vX.Y && git push origin vX.Y`, with the tag on `main`.
+   `## vX.Y` heading (with `**New since vX.W:**` under it), leaving an empty `## Unreleased`
+   above it. Those notes become the release's text.
+3. Merge that as a pull request named `Release vX.Y`; `main` only takes pull requests.
+4. `git tag vX.Y && git push origin vX.Y`, with the tag on `main`.
+
+### Changelog
+
+Every pull request that changes what is on the card adds a line under `## Unreleased` in
+[`brick/CHANGELOG.md`](brick/CHANGELOG.md), written for players: what they can now do or what
+was fixed, and where to find it. The Changelog check fails without one. Those lines are the
+Dev build's release notes and, at the next tag, the release's. A change players won't notice
+(a refactor, a test) takes the `no-changelog` label instead.
 
 The run refuses to publish if the tag is not on `main`, if the card's README names another
 version, if the changelog has no section for it, or if that release already exists — and it
