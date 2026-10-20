@@ -91,7 +91,7 @@ run_scenarios() {
         fresh "$run"
         if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" \
             -e SLOT_SIM_TIME="$SIM_TIME" -e SLOT_SIM_SCRIPT="/src/$script" \
-            -e SLOT_UPDATE_URL="file:///src/$run/releases" -e SLOT_NTP_SERVER= \
+            -e SLOT_UPDATE_URL="file:///src/$run/releases" -e SLOT_NTP_SERVER= -e SLOT_SIM_VERSION=v0.1 \
             -e SLOT_SIM_OUT="/src/$SIM/out" -e SLOT_SIM_GOLDEN=/src/brick/sim/golden \
             -e SLOT_SIM_UPDATE="$update" "$IMAGE" timeout 300 "$BIN" > "$SIM/out/$name.log" 2>&1
         then

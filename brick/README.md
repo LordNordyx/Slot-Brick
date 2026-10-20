@@ -1,4 +1,4 @@
-# Slot. for TrimUI Brick — v0.43
+# Slot. for TrimUI Brick — v0.44
 
 An unofficial port of **Slot.**, Brandon T. Kowalski's GB/GBC/GBA frontend for the Anbernic RG SP,
 to the **original TrimUI Brick** on stock firmware, with NES and SNES added. Port by **LordNordyx**.
