@@ -166,8 +166,14 @@ pub struct Installed {
 
 impl Installed {
     pub fn current() -> Installed {
+        // The simulator's scenarios name a version of their own, so their screenshots don't
+        // change with every release.
+        #[cfg(feature = "sim")]
+        let version = std::env::var("SLOT_SIM_VERSION").unwrap_or_else(|_| slot_ui::PORT_VERSION.to_lowercase());
+        #[cfg(not(feature = "sim"))]
+        let version = slot_ui::PORT_VERSION.to_lowercase();
         Installed {
-            version: slot_ui::PORT_VERSION.to_lowercase(),
+            version,
             commit: crate::build_info::Build::current().hash.to_string(),
             channel: match option_env!("SLOT_CHANNEL") {
                 Some("dev") => Channel::Dev,

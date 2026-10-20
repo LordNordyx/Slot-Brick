@@ -1,11 +1,12 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- Update: L1 / R1 scroll the notes of an update too long to fit on the screen.
-- An update cut short by the Brick switching off is cleared away the next time Slot starts, instead of taking up space on the SD card.
-- System → Auto Clock: with Wi-Fi on, the clock now sets itself from an internet time server, on connecting and every six hours. On by default; the time zone is still set under Date & Time.
+
+## v0.44
+**New since v0.43:**
+- HOME → Update: update Slot over Wi-Fi. It shows what's new (L1 / R1 scroll long notes), asks before installing, and leaves your games, saves, states, labels and settings alone. Updates are signed and checked before anything is replaced; if the new version doesn't start, the previous one is put back, and an update cut short by the Brick switching off is cleared away. Needs 20% battery or a charger.
 - HOME → System: LEDs, Date & Time and About are now under System, leaving the menu shorter.
-- HOME → Update: update Slot over Wi-Fi. It shows what's new, asks before installing, and leaves your games, saves, states, labels and settings alone. Updates are signed and checked before anything is replaced, and if the new version doesn't start, the previous one is put back. Needs 20% battery or a charger.
+- System → Auto Clock: with Wi-Fi on, the clock now sets itself from an internet time server, on connecting and every six hours. On by default; the time zone is still set under Date & Time.
 
 ## v0.43
 **New since v0.42:**
