@@ -84,7 +84,7 @@ fn the_rows_run_in_the_order_the_user_chose() {
     #[cfg(feature="brick")]
     assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Wi-Fi", "Cart Art", "RetroAchievements", "Update", "System"]);
     #[cfg(feature="brick")]
-    assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["LEDs", "Date & Time", "About"]);
+    assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["LEDs", "Date & Time", "Auto Clock", "About"]);
     assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES"]);
     assert_eq!(
         QuickRow::SCREEN_GB.map(QuickRow::label),

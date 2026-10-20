@@ -106,6 +106,15 @@ impl ClockPicker {
         }
     }
 
+    /// The date and time shown moved to `utc`, in the offset chosen, the cursor where it is.
+    pub fn set_time(&mut self, utc: i64) {
+        *self = ClockPicker {
+            offset_min: self.offset_min,
+            cursor: self.cursor,
+            ..ClockPicker::from_secs(utc + self.offset_min * 60)
+        };
+    }
+
     pub fn from_ymd(year: i64, month: i64, day: i64) -> Self {
         ClockPicker {
             year: year.clamp(YEAR_MIN, YEAR_MAX),

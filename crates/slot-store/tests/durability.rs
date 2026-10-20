@@ -190,6 +190,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             muted_hp: true,
             clock_set: true,
             utc_offset_min: -300,
+            auto_clock: true,
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
@@ -216,6 +217,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
     let d = tmp_root();
     let s = SlotState {
         clock_set: true,
+        auto_clock: false,
         rumble: false,
         ff_speed: 2,
         ff_sound: true,
@@ -238,6 +240,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
     assert_eq!(read_slot_state(d.path()), s);
     let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     for line in [
+        "auto_clock=0",
         "rumble=0",
         "ff_speed=2",
         "ff_sound=1",
