@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- HOME → System: LEDs, Date & Time and About are now under System, leaving the menu shorter.
 - HOME → Update: update Slot over Wi-Fi. It shows what's new, asks before installing, and leaves your games, saves, states, labels and settings alone. Updates are signed and checked before anything is replaced, and if the new version doesn't start, the previous one is put back. Needs 20% battery or a charger.
 
 ## v0.43

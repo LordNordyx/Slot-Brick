@@ -110,7 +110,7 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | Tap `A` | Resume the last save state |
 | Hold `A` | Start the game fresh |
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
-| `HOME` | Open the menu: Screen, Gameplay, LEDs, Wi-Fi, Cart Art, RetroAchievements, Date & Time, and About |
+| `HOME` | Open the menu: Screen, Gameplay, Wi-Fi, Cart Art, RetroAchievements, Update, and System (LEDs, Date & Time, About) |
 
 ### In game
 
