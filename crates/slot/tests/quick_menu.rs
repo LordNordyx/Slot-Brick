@@ -597,7 +597,7 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
     let out = frame(&a);
     assert!(drawn(&out, 500), "the date and time is not grey");
 
-    press(&mut a, Btn::Up);
+    open_at(&mut a, QuickRow::DateTime);
     let out = frame(&a);
     assert!(
         !drawn(&out, 300) && !drawn(&out, 301),

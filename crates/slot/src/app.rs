@@ -405,6 +405,11 @@ pub struct App {
     powering_off: bool,
     /// An update was swapped in: Slot ends, for launch.sh to start the new one.
     updating: bool,
+    /// System → Auto Clock: the time server being asked, and when to ask next.
+    #[cfg(feature = "brick")]
+    clock_sync: Option<std::sync::mpsc::Receiver<Result<i64, String>>>,
+    #[cfg(feature = "brick")]
+    clock_sync_at: Millis,
     radio: Box<dyn RadioJobs>,
 }
 
@@ -510,6 +515,10 @@ impl App {
             link_transport: None,
             restarting: false,
             updating: false,
+            #[cfg(feature = "brick")]
+            clock_sync: None,
+            #[cfg(feature = "brick")]
+            clock_sync_at: 0,
             act_at: 0,
             root: None,
             state: SlotState::default(),
@@ -724,6 +733,83 @@ impl App {
         self.root.as_deref()
     }
 
+    /// System → Auto Clock: while Wi-Fi is up, the clock is set from a time server when it
+    /// connects and every few hours after; a failed try is made again a little later.
+    #[cfg(feature = "brick")]
+    fn sync_clock(&mut self) {
+        const EVERY: Millis = 6 * 60 * 60 * 1000;
+        const RETRY: Millis = 5 * 60 * 1000;
+        let now = self.now();
+        if let Some(rx) = &self.clock_sync {
+            let got = match rx.try_recv() {
+                Ok(got) => got,
+                Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Err("stopped".into()),
+            };
+            self.clock_sync = None;
+            match got {
+                Ok(utc) if self.state.auto_clock => {
+                    self.clock_sync_at = now + EVERY;
+                    self.adopt_time(utc);
+                }
+                Ok(_) => self.clock_sync_at = now + EVERY,
+                Err(e) => {
+                    eprintln!("slot: auto clock: {e}");
+                    self.clock_sync_at = now + RETRY;
+                }
+            }
+            return;
+        }
+        if !self.state.auto_clock || !self.net_up || now < self.clock_sync_at {
+            return;
+        }
+        let servers = crate::sntp::servers();
+        if servers.is_empty() {
+            self.clock_sync_at = Millis::MAX;
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("slot-clock".into())
+            .spawn(move || {
+                let _ = tx.send(crate::sntp::now(&servers));
+            });
+        match spawned {
+            Ok(_) => self.clock_sync = Some(rx),
+            Err(e) => {
+                eprintln!("slot: auto clock: {e}");
+                self.clock_sync_at = now + RETRY;
+            }
+        }
+    }
+
+    /// A time server's UTC: the clock moves to it, if it is out by more than a moment. On the
+    /// Date & Time screen, a date and time not yet changed by hand move with it, so only the
+    /// time zone is left to choose; one being changed is left alone.
+    #[cfg(feature = "brick")]
+    fn adopt_time(&mut self, utc: i64) {
+        let shown = self.state.utc_offset_min;
+        if let Phase::SetClock { picker, seed, .. } = &mut self.phase {
+            let local = picker.secs() + picker.offset_min() * 60;
+            if local != *seed + i64::from(shown) * 60 {
+                return;
+            }
+            picker.set_time(utc);
+            *seed = utc - utc.rem_euclid(60);
+        }
+        let off = utc - self.utc_secs();
+        if off.abs() >= 2 {
+            if let Some(power) = &mut self.power {
+                power.set_clock(utc);
+            }
+            eprintln!("slot: auto clock: set from a time server, {off:+} s");
+        }
+        if !self.state.clock_set {
+            self.state.clock_set = true;
+            self.persist();
+        }
+    }
+
     pub fn wall_secs(&self) -> i64 {
         self.utc_secs() + i64::from(self.state.utc_offset_min) * 60
     }
@@ -766,6 +852,7 @@ impl App {
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
+            QuickRow::AutoClock => Some(QuickValue::flag(self.state.auto_clock)),
             QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
@@ -1747,6 +1834,7 @@ impl App {
             | QuickRow::NesOverlay
             | QuickRow::SnesOverlay
             | QuickRow::GbPalettes
+            | QuickRow::AutoClock
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
@@ -1816,6 +1904,14 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
+            QuickRow::AutoClock => {
+                s.auto_clock = !s.auto_clock;
+                // Turned on: the clock is set as soon as Wi-Fi allows.
+                #[cfg(feature = "brick")]
+                {
+                    self.clock_sync_at = 0;
+                }
+            }
             QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
@@ -2237,7 +2333,12 @@ impl App {
         #[cfg(feature = "brick")]
         if self.now() >= self.brick_switch_at {
             self.brick_switch_at = self.now() + 200;
+            let was_up = self.net_up;
             self.net_up = crate::brick_wifi::online();
+            // Just connected: a good moment to set the clock.
+            if self.net_up && !was_up {
+                self.clock_sync_at = 0;
+            }
             self.net_on = self.net_up || crate::brick_wifi::radio_on();
             if let Ok(value) = std::fs::read_to_string(slot_power::hw("/sys/class/gpio/gpio243/value")) {
                 match value.trim() {
@@ -2247,6 +2348,8 @@ impl App {
                 }
             }
         }
+        #[cfg(feature = "brick")]
+        self.sync_clock();
         self.play_hold();
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {

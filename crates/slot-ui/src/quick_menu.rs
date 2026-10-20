@@ -46,10 +46,11 @@ pub enum QuickRow {
     BatteryShutdown,
     Update,
     System,
+    AutoClock,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 40] = [
+    pub const ALL: [QuickRow; 41] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -90,6 +91,7 @@ impl QuickRow {
         QuickRow::BatteryShutdown,
         QuickRow::Update,
         QuickRow::System,
+        QuickRow::AutoClock,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -101,7 +103,7 @@ impl QuickRow {
     pub const MAIN: [QuickRow; 7] = [QuickRow::Screen,QuickRow::Game,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::System];
     /// System: the Brick's lights, its clock, and what Slot is.
     #[cfg(feature = "brick")]
-    pub const SYSTEM: [QuickRow; 3] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::About];
+    pub const SYSTEM: [QuickRow; 4] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::AutoClock,QuickRow::About];
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
     pub fn led_setting(self) -> bool { Self::LIGHTS.contains(&self) }
 
@@ -161,7 +163,7 @@ impl QuickRow {
             | QuickRow::EjectSave
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown => &QuickRow::GAME,
-            QuickRow::Lights | QuickRow::DateTime | QuickRow::About => &QuickRow::SYSTEM,
+            QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::About => &QuickRow::SYSTEM,
             _ => &QuickRow::MAIN,
         }
     }
@@ -205,6 +207,7 @@ impl QuickRow {
             QuickRow::Achievements => "RetroAchievements",
             QuickRow::Update => "Update",
             QuickRow::System => "System",
+            QuickRow::AutoClock => "Auto Clock",
             QuickRow::Lights => "LEDs",
             QuickRow::LedMode => "Lights",
             QuickRow::LedTop => "Top Bar",

@@ -43,7 +43,7 @@ doesn't flash anything to the device.
 | Tap `A`          | Resume from the last save state         |
 | Hold `A`         | Start the game fresh                    |
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
-| `HOME`           | Menu (Screen, Gameplay, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, About) |
+| `HOME`           | Menu (Screen, Gameplay, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, Auto Clock, About) |
 
 ### In game
 
@@ -146,6 +146,12 @@ are replaced (`Slot/System`, the `Apps` it came with, `.slot-boot`, the bundled 
 this README); your games, saves, states, labels, BIOS files, settings and wallpapers are left
 as they are. Every update is signed, and one whose signature or checksum doesn't match is
 never installed. If the new version doesn't start, the previous one is put back.
+
+**Auto Clock:** **HOME → System → Auto Clock** (on to start with) sets the clock from an
+internet time server whenever Wi-Fi connects, and every six hours while it stays connected.
+The time zone is still yours to choose under **Date & Time**, and summer time is a change you
+make there. On the clock screen shown at first start, the date and time fill themselves in
+once Wi-Fi connects, unless you have already changed them.
 
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.
