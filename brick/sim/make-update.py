@@ -21,6 +21,7 @@ data = open(zip_path, "rb").read()
 notes = [
     "- Something new on the shelf, with a line long enough that it has to be wrapped onto a second one.",
     "- A fix for something that was broken.",
+    *[f"- Change number {n}, one of many, so the notes run past the bottom of the screen." for n in range(3, 13)],
 ]
 manifest = "\n".join([
     "slot-update 1",

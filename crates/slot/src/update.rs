@@ -509,6 +509,19 @@ pub fn resume(card: &Path) -> bool {
     }
 }
 
+/// What a download or unpacking cut short (by a power cut, say) leaves behind is deleted. A
+/// swap under way is left alone: resume finishes it, and launch.sh may need its old files.
+pub fn tidy(card: &Path) {
+    let dir = card.join(DIR);
+    if !dir.exists() || dir.join(STAGED).exists() || dir.join(PENDING).exists() {
+        return;
+    }
+    match fs::remove_dir_all(&dir) {
+        Ok(()) => eprintln!("slot: update: cleared away an update that never finished"),
+        Err(e) => eprintln!("slot: update: cannot clear {}: {e}", dir.display()),
+    }
+}
+
 /// The new Slot is up: the old files are no longer needed.
 pub fn settle(card: &Path) {
     let dir = card.join(DIR);
@@ -829,6 +842,25 @@ mod tests {
         assert_eq!(read(&card, ".slot-update/old/Slot/System/launch.sh"), "old launch");
         assert_eq!(read(&card, ".slot-update/old/Slot/System/slot"), "old slot");
         assert!(!resume(&card));
+    }
+
+    #[test]
+    fn a_half_finished_update_is_cleared_but_a_swap_under_way_is_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let card = dir.path();
+        let up = card.join(DIR);
+        tidy(card);
+        fs::create_dir_all(up.join("new/Slot/System")).unwrap();
+        fs::write(up.join("download.zip"), "half").unwrap();
+        tidy(card);
+        assert!(!up.exists());
+        for marker in [STAGED, PENDING] {
+            fs::create_dir_all(up.join("old")).unwrap();
+            fs::write(up.join(marker), "").unwrap();
+            tidy(card);
+            assert!(up.join(marker).exists() && up.join("old").exists(), "{marker}");
+            fs::remove_dir_all(&up).unwrap();
+        }
     }
 
     #[test]

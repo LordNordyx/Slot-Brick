@@ -45,7 +45,14 @@ pub struct UpdateScreen {
     /// Percent and whether it is charging, as the app last read it.
     pub battery: Option<(u8, bool)>,
     restart: bool,
+    /// How far the notes are scrolled (L1 / R1), in lines, and the furthest they can go, as the
+    /// screen last laid them out.
+    scroll: usize,
+    pub scroll_max: std::cell::Cell<usize>,
 }
+
+/// Lines L1 / R1 move the notes by.
+const SCROLL_STEP: usize = 3;
 
 impl UpdateScreen {
     pub fn open(root: &Path) -> Self {
@@ -71,6 +78,8 @@ impl UpdateScreen {
             pressed: Vec::new(),
             battery: None,
             restart: false,
+            scroll: 0,
+            scroll_max: std::cell::Cell::new(0),
         }
     }
 
@@ -118,6 +127,7 @@ impl UpdateScreen {
         self.found = None;
         self.armed = false;
         self.row = 0;
+        self.scroll = 0;
         self.status = "Checking for updates...".into();
     }
 
@@ -235,7 +245,10 @@ impl UpdateScreen {
                 self.armed = false;
                 self.status = "Not installed".into();
             }
-            Btn::B => return true,
+            Btn::B => {
+                update::tidy(&update::card_of(&self.root));
+                return true;
+            }
             Btn::Up => {
                 self.row = (self.row + rows.len() - 1) % rows.len();
                 self.armed = false;
@@ -245,6 +258,8 @@ impl UpdateScreen {
                 self.armed = false;
             }
             Btn::Left | Btn::Right if row == Row::Channel => self.switch_channel(),
+            Btn::L1 => self.scroll = self.scroll.min(self.scroll_max.get()).saturating_sub(SCROLL_STEP),
+            Btn::R1 => self.scroll = (self.scroll + SCROLL_STEP).min(self.scroll_max.get()),
             Btn::A => match row {
                 Row::Check => self.start_check(),
                 Row::Install => self.install(),
@@ -321,6 +336,10 @@ impl UpdateScreen {
         self.row
     }
 
+    pub fn scroll(&self) -> usize {
+        self.scroll.min(self.scroll_max.get())
+    }
+
     /// What is installed, and what the update found brings, for under the rows.
     pub fn about(&self) -> (String, Vec<String>) {
         let have = format!("Installed: {}", self.have());
@@ -394,6 +413,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mut s = screen(dir.path());
         assert!(press(&mut s, &[Btn::Up, Btn::Down, Btn::B]));
+        assert!(!press(&mut s, &[Btn::L1, Btn::R1]));
         assert!(press(&mut s, &CODE[..9].iter().chain(&[Btn::B]).copied().collect::<Vec<_>>()));
     }
 
@@ -409,6 +429,21 @@ mod tests {
         assert_eq!(update::saved_channel(dir.path()), Channel::Dev);
         let reopened = UpdateScreen::with(dir.path(), String::new(), s.installed.clone(), update::saved_channel(dir.path()));
         assert!(reopened.unlocked);
+    }
+
+    #[test]
+    fn l1_and_r1_scroll_the_notes_no_further_than_their_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = screen(dir.path());
+        s.scroll_max.set(4);
+        press(&mut s, &[Btn::R1]);
+        assert_eq!(s.scroll(), 3);
+        press(&mut s, &[Btn::R1, Btn::R1]);
+        assert_eq!(s.scroll(), 4);
+        press(&mut s, &[Btn::L1]);
+        assert_eq!(s.scroll(), 1);
+        press(&mut s, &[Btn::L1]);
+        assert_eq!(s.scroll(), 0);
     }
 
     #[test]
