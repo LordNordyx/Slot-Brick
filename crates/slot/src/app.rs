@@ -372,6 +372,8 @@ pub struct App {
     shelf_platform: slot_ui::Printed,
     name_pending: bool,
     slot_letter: Option<char>,
+    /// What SELECT just switched the shelves' order to, shown in the slot as a letter is.
+    slot_word: Option<&'static str>,
     shelf_named: Option<Millis>,
     shelf_clock: slot_ui::Printed,
     hud: Hud,
@@ -405,6 +407,18 @@ pub struct App {
     powering_off: bool,
     /// An update was swapped in: Slot ends, for launch.sh to start the new one.
     updating: bool,
+    /// HOME → Library: every game, A–Z, whatever the shelves show; and play time, last played
+    /// and favorites for each (Config/library.txt).
+    all_carts: Vec<Cart>,
+    library: slot_store::Library,
+    library_dirty: bool,
+    library_saved_at: Millis,
+    /// Play time being counted: the last tick seen while playing, and what is not a second yet.
+    play_tick: Option<Millis>,
+    play_ms: Millis,
+    /// The selected game's play time, printed under it on the shelf.
+    played: slot_ui::Printed,
+    star_face: Option<(TexId, u32, u32)>,
     /// System → Auto Clock: the time server being asked, and when to ask next.
     #[cfg(feature = "brick")]
     clock_sync: Option<std::sync::mpsc::Receiver<Result<i64, String>>>,
@@ -422,6 +436,9 @@ pub struct FaceWant {
     pub index: usize,
     pub on_screen: bool,
 }
+
+/// The play time under the selected cart: there, but quieter than the cart.
+const PLAYED_ALPHA: f32 = 0.7;
 
 /// How long a toast stays up, and how long it takes to slide in and out.
 const BANNER_MS: Millis = 4500;
@@ -444,6 +461,7 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
 
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
+        let all_carts = carts.clone();
         let shelves = shelves_of(carts);
         let shelf_at = shelves
             .iter()
@@ -515,6 +533,14 @@ impl App {
             link_transport: None,
             restarting: false,
             updating: false,
+            all_carts,
+            library: slot_store::Library::default(),
+            library_dirty: false,
+            library_saved_at: 0,
+            play_tick: None,
+            play_ms: 0,
+            played: slot_ui::Printed::default(),
+            star_face: None,
             #[cfg(feature = "brick")]
             clock_sync: None,
             #[cfg(feature = "brick")]
@@ -551,6 +577,7 @@ impl App {
             shelf_platform: slot_ui::Printed::default(),
             name_pending: false,
             slot_letter: None,
+            slot_word: None,
             shelf_named: None,
             shelf_clock: slot_ui::Printed::default(),
             hud: Hud::new(),
@@ -594,6 +621,12 @@ impl App {
             app.brick_leds = Some(crate::brick_led::BrickLeds::open(root));
         }
         app.state = read_slot_state(root);
+        app.library = slot_store::Library::read(root);
+        app.arrange();
+        // At startup, each shelf starts at the top of its order.
+        for (_, shelf) in &mut app.shelves {
+            shelf.select(0);
+        }
         app.autosave_at = app.autosave_ms();
         if app.state.clock_set {
             app.start();
@@ -634,6 +667,138 @@ impl App {
         &self.shelves[self.shelf_at].1
     }
 
+    /// Puts every shelf in HOME → Library's order, with only the favorites when it says so (all
+    /// the games, while none is a favorite). Each cart keeps its face, and each shelf the cart
+    /// it had selected.
+    fn arrange(&mut self) {
+        let mut faces = HashMap::new();
+        let mut picked = Vec::new();
+        for (platform, shelf) in &mut self.shelves {
+            picked.push(shelf.carts.get(shelf.index).map(|c| c.stem.clone()));
+            let taken = shelf.take_faces();
+            for (cart, face) in shelf.carts.iter().zip(taken) {
+                // What changed on the shelf (a label, a plastic) is kept for next time.
+                if let Some(kept) = self.all_carts.iter_mut().find(|c| c.platform == *platform && c.stem == cart.stem) {
+                    *kept = cart.clone();
+                }
+                if let Some(face) = face {
+                    faces.insert((*platform, cart.stem.clone()), face);
+                }
+            }
+        }
+        let favorites_only = self.state.favorites_only && self.library.any_favorite(&self.all_carts);
+        for ((platform, shelf), pick) in self.shelves.iter_mut().zip(picked) {
+            let mut carts: Vec<Cart> = self.all_carts.iter().filter(|c| c.platform == *platform).cloned().collect();
+            slot_store::arrange(&mut carts, self.state.library_sort, favorites_only, &self.library);
+            let shelf_faces = carts.iter().map(|c| faces.remove(&(*platform, c.stem.clone()))).collect();
+            let starred = carts.iter().map(|c| self.library.get(*platform, &c.stem).favorite).collect();
+            shelf.replace(carts, shelf_faces, starred, pick.as_deref());
+            if let Some(star) = self.star_face {
+                shelf.set_star(star);
+            }
+        }
+        self.stale_faces.extend(faces.into_values());
+        if self.shelf().carts.is_empty() {
+            if let Some(to) = self.next_shelf(1) {
+                self.shelf_at = to;
+            }
+        }
+        self.shelf_platform = slot_ui::Printed::default();
+        self.name_pending = true;
+    }
+
+    /// Y on the shelf: the selected game is a favorite, or no longer one.
+    fn toggle_favorite(&mut self) {
+        let platform = self.shelves[self.shelf_at].0;
+        let at = self.shelf().index;
+        let Some(stem) = self.selected_stem().map(str::to_string) else {
+            return;
+        };
+        let record = self.library.get_mut(platform, &stem);
+        record.favorite = !record.favorite;
+        let favorite = record.favorite;
+        self.shelf_mut().set_favorite(at, favorite);
+        self.save_library();
+        // A game that is no longer a favorite leaves a shelf of favorites.
+        if self.state.favorites_only {
+            self.arrange();
+        }
+    }
+
+    /// X on the shelf: on to the next favorite.
+    fn jump_favorite(&mut self) {
+        if !self.shelf_mut().jump_next_favorite() {
+            self.refuse();
+        }
+    }
+
+    /// The library written out, on a thread of its own: it is small, but the card may be slow.
+    fn save_library(&mut self) {
+        self.library_dirty = false;
+        self.library_saved_at = self.now();
+        let Some(root) = self.root.clone() else {
+            return;
+        };
+        let text = self.library.text();
+        let _ = std::thread::Builder::new().name("slot-library".into()).spawn(move || {
+            if let Err(e) = slot_store::atomic_write(&root.join(slot_store::LIBRARY_FILE), text.as_bytes()) {
+                eprintln!("slot: library: {e}");
+            }
+        });
+    }
+
+    /// Play time: counted while a game is on screen, in whole seconds, and saved each minute.
+    /// A long gap between ticks (the Brick asleep) is not counted.
+    fn count_play_time(&mut self) {
+        let now = self.now();
+        let Phase::Playing { cart } = &self.phase else {
+            self.play_tick = None;
+            return;
+        };
+        if let Some(tick) = self.play_tick {
+            let gap = now.saturating_sub(tick);
+            if gap < 5_000 {
+                self.play_ms += gap;
+            }
+        }
+        self.play_tick = Some(now);
+        if self.play_ms >= 1_000 {
+            let platform = self.shelves[self.shelf_at].0;
+            let secs = self.play_ms / 1_000;
+            self.play_ms %= 1_000;
+            let cart = cart.clone();
+            self.library.get_mut(platform, &cart).played_secs += secs;
+            self.library_dirty = true;
+        }
+        if self.library_dirty && now.saturating_sub(self.library_saved_at) >= 60_000 {
+            self.save_library();
+        }
+    }
+
+    /// The selected game's play time, as printed under it on the shelf.
+    pub fn played_text(&self) -> Option<String> {
+        if !matches!(self.phase, Phase::Shelf) || self.cart_menu.is_some() || self.core_picker.is_some() {
+            return None;
+        }
+        let platform = self.shelves.get(self.shelf_at)?.0;
+        let secs = self.library.get(platform, self.selected_stem()?).played_secs;
+        slot_store::played_text(secs).map(|t| format!("PLAYED {t}"))
+    }
+
+    pub fn set_played_face(&mut self, face: Option<(TexId, u32)>) {
+        self.played = match face {
+            Some((tex, w)) => slot_ui::Printed::new(tex, w),
+            None => slot_ui::Printed::default(),
+        };
+    }
+
+    pub fn set_star_face(&mut self, star: (TexId, u32, u32)) {
+        self.star_face = Some(star);
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_star(star);
+        }
+    }
+
     fn shelf_mut(&mut self) -> &mut Shelf {
         &mut self.shelves[self.shelf_at].1
     }
@@ -647,6 +812,7 @@ impl App {
         self.shelf_at = to;
         self.shelf_platform = slot_ui::Printed::default();
         self.slot_letter = None;
+        self.slot_word = None;
         self.shelf_named = None;
         self.name_pending = true;
     }
@@ -667,8 +833,25 @@ impl App {
             self.shelf_platform = slot_ui::Printed::default();
         }
         self.slot_letter = Some(letter);
+        self.slot_word = None;
         self.shelf_named = None;
         self.name_pending = true;
+    }
+
+    /// SELECT on the shelf: the next order (A–Z, last played, most played), named in the slot.
+    fn cycle_sort(&mut self) {
+        let all = slot_store::LibrarySort::ALL;
+        let at = all.iter().position(|v| *v == self.state.library_sort).unwrap_or(0);
+        self.state.library_sort = all[(at + 1) % all.len()];
+        self.persist();
+        self.arrange();
+        self.slot_letter = None;
+        self.slot_word = Some(match self.state.library_sort {
+            slot_store::LibrarySort::Az => "A–Z",
+            slot_store::LibrarySort::Recent => "LAST PLAYED",
+            slot_store::LibrarySort::MostPlayed => "MOST PLAYED",
+        });
+        self.shelf_named = None;
     }
 
     fn slot_name_alpha(&self) -> f32 {
@@ -858,7 +1041,16 @@ impl App {
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
             QuickRow::AutoClock => Some(QuickValue::flag(self.state.auto_clock)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::LibrarySort => Some(match self.state.library_sort {
+                slot_store::LibrarySort::Az => QuickValue::SortAz,
+                slot_store::LibrarySort::Recent => QuickValue::SortRecent,
+                slot_store::LibrarySort::MostPlayed => QuickValue::SortMost,
+            }),
+            QuickRow::LibraryShow => Some(match self.state.favorites_only {
+                true => QuickValue::Favorites,
+                false => QuickValue::AllGames,
+            }),
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -936,6 +1128,9 @@ impl App {
     }
 
     pub fn slot_text(&self) -> Option<String> {
+        if let Some(word) = self.slot_word {
+            return Some(word.to_string());
+        }
         match self.slot_letter {
             Some(letter) => Some(letter.to_string()),
             None => self.shelf_platform_name().map(str::to_string),
@@ -977,8 +1172,9 @@ impl App {
         self.shelf().carts.iter().find(|c| c.stem == *stem)
     }
 
+    /// One game on the whole card (not one on show: a lone favorite isn't started at boot).
     pub fn single_cart(&self) -> bool {
-        self.carts().count() == 1
+        self.all_carts.len() == 1
     }
 
     pub fn set_faces(&mut self, faces: Vec<TexId>) {
@@ -1723,6 +1919,9 @@ impl App {
                 Action::Insert => self.insert(!self.state.eject_save),
                 Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
+                Action::GbaDown(Btn::Y) => self.toggle_favorite(),
+                Action::GbaDown(Btn::Select) => self.cycle_sort(),
+                Action::GbaDown(Btn::X) => self.jump_favorite(),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),
@@ -1815,6 +2014,7 @@ impl App {
             | QuickRow::ScreenSnes
             | QuickRow::Game
             | QuickRow::System
+            | QuickRow::Library
             | QuickRow::Lights => {
                 if let Some(row) = row.child() {
                     self.phase = Phase::QuickMenu { row };
@@ -1840,6 +2040,8 @@ impl App {
             | QuickRow::SnesOverlay
             | QuickRow::GbPalettes
             | QuickRow::AutoClock
+            | QuickRow::LibrarySort
+            | QuickRow::LibraryShow
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
@@ -1909,6 +2111,20 @@ impl App {
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
+            QuickRow::LibrarySort => {
+                let all = slot_store::LibrarySort::ALL;
+                let at = all.iter().position(|v| *v == s.library_sort).unwrap_or(0);
+                s.library_sort = all[(at + if right { 1 } else { all.len() - 1 }) % all.len()];
+                self.persist();
+                self.arrange();
+                return;
+            }
+            QuickRow::LibraryShow => {
+                s.favorites_only = !s.favorites_only;
+                self.persist();
+                self.arrange();
+                return;
+            }
             QuickRow::AutoClock => {
                 s.auto_clock = !s.auto_clock;
                 // Turned on: the clock is set as soon as Wi-Fi allows.
@@ -1917,7 +2133,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
@@ -2246,7 +2462,17 @@ impl App {
             if seated.is_none() {
                 self.link_loaded = None;
             }
+            if let Some(cart) = &seated {
+                let platform = self.shelves[self.shelf_at].0;
+                self.library.get_mut(platform, cart).last_played = self.utc_secs();
+                self.save_library();
+            }
             self.record_cart(seated);
+            // Back on the shelf: the game just played may have moved up.
+            if matches!(self.phase, Phase::Shelf) && self.state.library_sort != slot_store::LibrarySort::Az {
+                self.save_library();
+                self.arrange();
+            }
         }
         self.step_screen(dt);
     }
@@ -2355,6 +2581,7 @@ impl App {
         }
         #[cfg(feature = "brick")]
         self.sync_clock();
+        self.count_play_time();
         self.play_hold();
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
@@ -2743,6 +2970,17 @@ impl App {
                     _ => {
                         self.shelf().draw(self.shelf_shake(), out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
+                        if let Some(tex) = self.played.face {
+                            let (w, h) = (self.played.w as f32, slot_ui::HINT_H as f32);
+                            out.push(Draw::Tex {
+                                x: ((OUT_W as f32 - w) / 2.0).round(),
+                                y: (self.shelf().selected_foot() + 14.0).round(),
+                                w,
+                                h,
+                                tex,
+                                alpha: PLAYED_ALPHA,
+                            });
+                        }
                     }
                 }
                 draw_footer(
@@ -4627,6 +4865,14 @@ impl App {
 
     pub fn settle_saves(&mut self) {
         self.state_writer.flush();
+        if self.library_dirty {
+            self.library_dirty = false;
+            if let Some(root) = &self.root {
+                if let Err(e) = self.library.write(root) {
+                    eprintln!("slot: library: {e}");
+                }
+            }
+        }
         if let Some(h) = self.pending_save.take() {
             let _ = h.join();
         }

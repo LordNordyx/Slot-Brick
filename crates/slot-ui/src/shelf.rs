@@ -75,6 +75,9 @@ pub struct Shelf {
     snes_pal_shadow: Option<TexId>,
     /// Each cart's shadow shape: reading it needs the ROM, so it is read once, not per frame.
     shells: Vec<Backing>,
+    /// Which carts are favorites, starred on the shelf, and the star.
+    favorites: Vec<bool>,
+    star: Option<(TexId, u32, u32)>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -85,6 +88,8 @@ impl Shelf {
         Shelf {
             shells: carts.iter().map(backing).collect(),
             faces: vec![None; carts.len()],
+            favorites: vec![false; carts.len()],
+            star: None,
             carts,
             index: 0,
             scroll: 0.0,
@@ -106,6 +111,54 @@ impl Shelf {
         self.scroll = i as f32;
         self.ride = i as f32;
         self.vel = 0.0;
+    }
+
+    /// The same shelf with `carts` on it instead (another order, or fewer), each with its face
+    /// if it has one, and `keep` still selected if it is there.
+    pub fn replace(&mut self, carts: Vec<Cart>, faces: Vec<Option<TexId>>, favorites: Vec<bool>, keep: Option<&str>) {
+        let at = keep.and_then(|stem| carts.iter().position(|c| c.stem == stem));
+        self.shells = carts.iter().map(backing).collect();
+        self.faces = faces;
+        self.faces.resize(carts.len(), None);
+        self.favorites = favorites;
+        self.favorites.resize(carts.len(), false);
+        self.carts = carts;
+        self.held = None;
+        self.select(at.unwrap_or(0).min(self.carts.len().saturating_sub(1)));
+    }
+
+    pub fn set_favorite(&mut self, i: usize, favorite: bool) {
+        if let Some(f) = self.favorites.get_mut(i) {
+            *f = favorite;
+        }
+    }
+
+    pub fn favorite(&self, i: usize) -> bool {
+        self.favorites.get(i).copied().unwrap_or(false)
+    }
+
+    pub fn set_star(&mut self, star: (TexId, u32, u32)) {
+        self.star = Some(star);
+    }
+
+    /// On to the next favorite, as the letters are jumped to. False when there is none to go to.
+    pub fn jump_next_favorite(&mut self) -> bool {
+        let n = self.carts.len();
+        let Some(ahead) = (1..=n).find(|step| self.favorite((self.index + step) % n)) else {
+            return false;
+        };
+        if ahead == n {
+            return false;
+        }
+        self.index = (self.index + ahead) % n;
+        self.ride += ahead as f32;
+        true
+    }
+
+    /// Where the selected cart's bottom edge is, for what is printed under it.
+    pub fn selected_foot(&self) -> f32 {
+        let h = self.carts.get(self.index).map_or(0, |c| cart_box(c.platform).1);
+        foot_y(h as f32)
     }
 
     pub fn set_shadow(&mut self, face: TexId) {
@@ -156,6 +209,11 @@ impl Shelf {
             *s = backing(cart);
         }
         self.take_face(i)
+    }
+
+    /// Every face, taken off its cart.
+    pub fn take_faces(&mut self) -> Vec<Option<TexId>> {
+        self.faces.iter_mut().map(Option::take).collect()
     }
 
     pub fn take_face(&mut self, i: usize) -> Option<TexId> {
@@ -429,6 +487,18 @@ impl Shelf {
                     }
                 }
             });
+            // A favorite's star sits on its top right corner, a little over the edge.
+            if let (true, Some((tex, sw, sh))) = (self.favorite(i), self.star) {
+                let (sw, sh) = (sw as f32 * scale, sh as f32 * scale);
+                out.push(Draw::Tex {
+                    x: (x + w - sw * 0.75).round(),
+                    y: (y - sh * 0.25).round(),
+                    w: sw,
+                    h: sh,
+                    tex,
+                    alpha: alpha * dim,
+                });
+            }
         }
     }
 }

@@ -38,6 +38,9 @@ pub struct SlotState {
     pub utc_offset_min: i16,
     /// The clock is set from an internet time server whenever Wi-Fi is up.
     pub auto_clock: bool,
+    /// HOME → Library: the order of each shelf, and whether only favorites are on them.
+    pub library_sort: crate::LibrarySort,
+    pub favorites_only: bool,
     pub rumble: bool,
     pub ff_speed: u8,
     pub ff_sound: bool,
@@ -132,6 +135,8 @@ impl Default for SlotState {
             clock_set: false,
             utc_offset_min: 0,
             auto_clock: true,
+            library_sort: crate::LibrarySort::Az,
+            favorites_only: false,
             rumble: true,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
@@ -167,7 +172,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nauto_clock={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nautosave_min={}\nbattery_shutdown={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nauto_clock={}\nlibrary_sort={}\nfavorites_only={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\neject_save={}\nautosave_min={}\nbattery_shutdown={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -179,6 +184,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.clock_set as u8,
         s.utc_offset_min,
         s.auto_clock as u8,
+        s.library_sort.name(),
+        s.favorites_only as u8,
         s.rumble as u8,
         s.ff_speed,
         s.ff_sound as u8,
@@ -215,6 +222,8 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut clock_set = None;
     let mut utc_offset_min = None;
     let mut auto_clock = None;
+    let mut library_sort = None;
+    let mut favorites_only = None;
     let mut rumble = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
@@ -249,6 +258,8 @@ fn parse(text: &str) -> Option<SlotState> {
             "clock_set" => clock_set = Some(level(value, 1)? == 1),
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "auto_clock" => auto_clock = flag(value),
+            "library_sort" => library_sort = crate::LibrarySort::parse(value),
+            "favorites_only" => favorites_only = flag(value),
             "rumble" => rumble = flag(value),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
@@ -290,6 +301,8 @@ fn parse(text: &str) -> Option<SlotState> {
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
         auto_clock: auto_clock.unwrap_or(fallback.auto_clock),
+        library_sort: library_sort.unwrap_or(fallback.library_sort),
+        favorites_only: favorites_only.unwrap_or(fallback.favorites_only),
         rumble: rumble.unwrap_or(fallback.rumble),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),
         ff_sound: ff_sound.unwrap_or(fallback.ff_sound),

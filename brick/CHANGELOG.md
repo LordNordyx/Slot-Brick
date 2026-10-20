@@ -1,6 +1,9 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Play time: how long you have played a game shows under it on the shelf.
+- Favorites: Y stars a game (a gold star on its cart), X jumps to the next favorite, and HOME → Library → Show: Favorites shows only those.
+- Sort the shelves with SELECT, or under HOME → Library → Sort By: A–Z, last played, or most played.
 - Brick Pro (experimental, not yet tested on one): Slot recognises it, its left stick works as the D-pad, and System → LEDs has a Sticks row for the lights around its sticks.
 
 ## v0.44

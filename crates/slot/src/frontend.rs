@@ -300,6 +300,10 @@ struct AboutFace {
     battery: Option<u8>,
 }
 
+/// A favorite's star on the shelf: its size at full scale, and its gold.
+const STAR_PX: f32 = 40.0;
+const STAR_INK: [u8; 3] = [0xff, 0xc8, 0x3c];
+
 #[derive(Default)]
 struct Clocks {
     line: Option<TexId>,
@@ -311,6 +315,8 @@ struct Clocks {
     battery_tex: Option<TexId>,
     platform: String,
     platform_tex: Option<TexId>,
+    played: Option<String>,
+    played_tex: Option<TexId>,
 }
 
 #[derive(Default)]
@@ -575,6 +581,10 @@ impl Frontend {
             (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
         });
         self.session.app_mut().set_wifi_faces(wifi);
+        // A favorite's star, gold, outlined so it shows on any plastic.
+        let star = icon_face(Icon::Star, STAR_PX, STAR_INK);
+        let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
+        self.session.app_mut().set_star_face(star);
         self.upload_wallpaper(compositor);
     }
 
@@ -1041,6 +1051,16 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             let id = upload(compositor, &mut clocks.platform_tex, face);
             app.set_shelf_platform_face(id, w);
         }
+    }
+    let played = app.played_text();
+    if played != clocks.played {
+        clocks.played = played.clone();
+        let face = played.map(|text| {
+            let face = word_face(&text);
+            let w = face.w;
+            (upload(compositor, &mut clocks.played_tex, face), w)
+        });
+        app.set_played_face(face);
     }
     let battery_shown = app
         .battery()

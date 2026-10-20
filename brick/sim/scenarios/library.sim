@@ -1,0 +1,27 @@
+# The library: Y stars a favorite and X finds it again, SELECT steps the order (named in the
+# slot), and HOME → Library → Show: Favorites leaves only the starred games on the shelves.
+press a
+phase Shelf
+press y
+snap shelf-favorite
+press right
+press x
+idle
+press select
+snap shelf-sort-recent
+press select
+press select   # back to A–Z
+press menu
+phase QuickMenu
+press down
+press down     # Library
+press a
+snap menu-library
+press down     # Show
+press right
+press b
+press b
+phase Shelf
+snap shelf-favorites-only
+press r1       # no other shelf has a favorite: it stays
+snap shelf-favorites-only-r1
