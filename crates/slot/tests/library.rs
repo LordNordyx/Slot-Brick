@@ -48,17 +48,13 @@ fn the_order_chosen_is_kept_and_the_selected_game_stays_selected() {
 }
 
 #[test]
-fn y_stars_a_favorite_x_finds_it_and_favorites_only_shows_just_those() {
+fn y_stars_a_favorite_and_favorites_only_shows_just_those() {
     let (d, mut a) = library_app("", SlotState::default());
     assert_eq!(a.selected_stem(), Some("Alpha"));
     a.apply(Action::GbaDown(Btn::Y));
     a.settle_saves();
     std::thread::sleep(std::time::Duration::from_millis(100));
     assert!(Library::read(d.path()).get(slot_store::Platform::Gba, "Alpha").favorite);
-    a.apply(Action::GbaDown(Btn::Right));
-    a.apply(Action::GbaUp(Btn::Right));
-    a.apply(Action::GbaDown(Btn::X));
-    assert_eq!(a.selected_stem(), Some("Alpha"));
     let (_d2, b) = library_app("GBA\tGamma\t0\t0\t1\n", SlotState { favorites_only: true, ..SlotState::default() });
     assert_eq!(order(&b), "Gamma");
     // With no favorites at all, Favorites still shows every game rather than none.

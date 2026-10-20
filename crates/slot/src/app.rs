@@ -725,13 +725,6 @@ impl App {
         }
     }
 
-    /// X on the shelf: on to the next favorite.
-    fn jump_favorite(&mut self) {
-        if !self.shelf_mut().jump_next_favorite() {
-            self.refuse();
-        }
-    }
-
     /// The library written out, on a thread of its own: it is small, but the card may be slow.
     fn save_library(&mut self) {
         self.library_dirty = false;
@@ -1921,7 +1914,6 @@ impl App {
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
                 Action::GbaDown(Btn::Y) => self.toggle_favorite(),
                 Action::GbaDown(Btn::Select) => self.cycle_sort(),
-                Action::GbaDown(Btn::X) => self.jump_favorite(),
                 _ => {}
             },
             Phase::Inserting { .. } if action == Action::Eject => self.eject(),

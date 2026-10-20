@@ -141,20 +141,6 @@ impl Shelf {
         self.star = Some(star);
     }
 
-    /// On to the next favorite, as the letters are jumped to. False when there is none to go to.
-    pub fn jump_next_favorite(&mut self) -> bool {
-        let n = self.carts.len();
-        let Some(ahead) = (1..=n).find(|step| self.favorite((self.index + step) % n)) else {
-            return false;
-        };
-        if ahead == n {
-            return false;
-        }
-        self.index = (self.index + ahead) % n;
-        self.ride += ahead as f32;
-        true
-    }
-
     /// Where the selected cart's bottom edge is, for what is printed under it.
     pub fn selected_foot(&self) -> f32 {
         let h = self.carts.get(self.index).map_or(0, |c| cart_box(c.platform).1);

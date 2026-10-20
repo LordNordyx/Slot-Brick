@@ -114,7 +114,6 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | Hold `A` | Start the game fresh |
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
 | `Y` | Mark the game as a favorite (a star on its cart), or unmark it |
-| `X` | Jump to the next favorite |
 | `SELECT` | Sort the shelves: A–Z, last played, most played |
 | `HOME` | Open the menu: Screen, Gameplay, Library, Wi-Fi, Cart Art, RetroAchievements, Update, and System (LEDs, Date & Time, Auto Clock, About) |
 

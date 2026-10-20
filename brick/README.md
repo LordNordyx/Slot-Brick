@@ -44,7 +44,6 @@ doesn't flash anything to the device.
 | Hold `A`         | Start the game fresh                    |
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
 | `Y`              | Favorite: a star on the cart, or off again |
-| `X`              | Jump to the next favorite               |
 | `SELECT`         | Sort: A–Z, last played, most played     |
 | `HOME`           | Menu (Screen, Gameplay, Library, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, Auto Clock, About) |
 
@@ -143,7 +142,7 @@ are fetched when it starts and kept in `Slot/System/Cache/Badges`. Unlocks made 
 still running. Hardcore mode isn't available.
 
 **Library:** under the game on the shelf is how long you have played it. `Y` stars a game as a
-favorite and `X` jumps to the next one. `SELECT` sorts the shelves A–Z, by the game played last,
+favorite. `SELECT` sorts the shelves A–Z, by the game played last,
 or by the most played, and names the order in the slot; **HOME → Library** has the same order
 (**Sort By**) and **Show: Favorites**, which leaves only your favorites on the shelves (all games,
 while you have none). Play time, last played and favorites are kept in `Slot/Config/library.txt`.
