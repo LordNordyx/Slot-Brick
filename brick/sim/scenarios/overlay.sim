@@ -31,13 +31,7 @@ press b
 press b
 press b
 phase Shelf
-press l1     # GBA -> SNES -> NES -> GBC -> GB
-wait 1200
-press l1
-wait 1200
-press l1
-wait 1200
-press l1
+press r1     # GBA -> GB
 press a
 phase Playing 20000
 wait 1000

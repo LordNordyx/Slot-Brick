@@ -357,6 +357,8 @@ pub struct App {
     snapshot: Option<Box<dyn Snapshot>>,
     core: Core,
     colour_pending: Option<bool>,
+    /// Screen → PlayStation → Dithering changed, for the running core to take up.
+    ps1_dithering_changed: bool,
     palette_live: bool,
     palette_pending: Option<GbPalette>,
     link_player: Option<u8>,
@@ -567,6 +569,7 @@ impl App {
             snapshot: None,
             core: Core::default(),
             colour_pending: None,
+            ps1_dithering_changed: false,
             palette_live: false,
             palette_pending: None,
             link_player: None,
@@ -1060,6 +1063,8 @@ impl App {
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
             QuickRow::NesShader => Some(shader_value(self.state.shader_nes)),
             QuickRow::SnesShader => Some(shader_value(self.state.shader_snes)),
+            QuickRow::Ps1Shader => Some(shader_value(self.state.shader_ps1)),
+            QuickRow::Ps1Dithering => Some(QuickValue::flag(self.state.ps1_dithering)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::AutoSave => QuickValue::minutes(self.state.autosave_min),
@@ -1081,7 +1086,7 @@ impl App {
                 false => QuickValue::Minutes,
             }),
             QuickRow::LibraryTitleCard => Some(QuickValue::flag(self.state.title_card)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -1523,8 +1528,10 @@ impl App {
         self.link.as_ref().map(|s| s.client_id)
     }
 
+    /// Rewind snapshots the game every other frame: cheap for a cart, but a PlayStation's
+    /// state is megabytes, more than the Brick can copy thirty times a second.
     pub fn may_rewind(&self) -> bool {
-        self.state.rewind && !self.link_active()
+        self.records_rewind() && !self.link_active()
     }
 
     pub fn turbo(&self) -> bool {
@@ -1532,7 +1539,7 @@ impl App {
     }
 
     pub fn records_rewind(&self) -> bool {
-        self.state.rewind
+        self.state.rewind && self.platform != Platform::Ps1
     }
 
     /// The canvas the running core draws into.
@@ -1768,6 +1775,15 @@ impl App {
 
     pub fn take_colour_correction(&mut self) -> Option<bool> {
         self.colour_pending.take()
+    }
+
+    /// The PlayStation's dithering, when it changed since last asked.
+    pub fn take_ps1_dithering(&mut self) -> Option<bool> {
+        std::mem::take(&mut self.ps1_dithering_changed).then_some(self.state.ps1_dithering)
+    }
+
+    pub fn ps1_dithering(&self) -> bool {
+        self.state.ps1_dithering
     }
 
     pub fn gb_palette(&self) -> Option<GbPalette> {
@@ -2047,6 +2063,7 @@ impl App {
             | QuickRow::ScreenGba
             | QuickRow::ScreenNes
             | QuickRow::ScreenSnes
+            | QuickRow::ScreenPs1
             | QuickRow::Game
             | QuickRow::System
             | QuickRow::Library
@@ -2068,11 +2085,14 @@ impl App {
             | QuickRow::GbShader
             | QuickRow::NesShader
             | QuickRow::SnesShader
+            | QuickRow::Ps1Shader
+            | QuickRow::Ps1Dithering
             | QuickRow::GbOverlay
             | QuickRow::GbcOverlay
             | QuickRow::GbaOverlay
             | QuickRow::NesOverlay
             | QuickRow::SnesOverlay
+            | QuickRow::Ps1Overlay
             | QuickRow::GbPalettes
             | QuickRow::AutoClock
             | QuickRow::LibrarySort
@@ -2130,13 +2150,21 @@ impl App {
                 }
                 s.shader_gb = to;
             }
-            QuickRow::NesShader | QuickRow::SnesShader => {
-                let shader = if row == QuickRow::NesShader { &mut s.shader_nes } else { &mut s.shader_snes };
+            QuickRow::NesShader | QuickRow::SnesShader | QuickRow::Ps1Shader => {
+                let shader = match row {
+                    QuickRow::NesShader => &mut s.shader_nes,
+                    QuickRow::SnesShader => &mut s.shader_snes,
+                    _ => &mut s.shader_ps1,
+                };
                 let to = shader.step(&Shader::NES, right);
                 if to == *shader {
                     return;
                 }
                 *shader = to;
+            }
+            QuickRow::Ps1Dithering => {
+                s.ps1_dithering = !s.ps1_dithering;
+                self.ps1_dithering_changed = true;
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
@@ -2172,7 +2200,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }

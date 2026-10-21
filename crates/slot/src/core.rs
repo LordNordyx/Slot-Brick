@@ -171,6 +171,14 @@ pub fn colour_option(which: Core, on: bool) -> Option<(&'static str, &'static st
     }
 }
 
+/// PCSX ReARMed's dithering option, on or off.
+pub fn dithering(on: bool) -> &'static str {
+    match on {
+        true => "enabled",
+        false => "disabled",
+    }
+}
+
 pub fn apply_link_options(core: &mut LibretroCore, which: Core, player: u8) {
     if which != Core::Mgba {
         return;

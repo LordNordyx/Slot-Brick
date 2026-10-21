@@ -90,7 +90,8 @@ pub struct Gestures {
     r2_last_release: Option<Millis>,
     rewinding: bool,
     /// A PlayStation game is running: its pad has L2 and R2 of its own, so the triggers go to
-    /// the game, and rewind and fast forward move to HOME+L2 and HOME+R2.
+    /// the game, and fast forward moves to HOME+R2 (HOME+L2 asks for a rewind, which a
+    /// PlayStation game doesn't record).
     triggers_to_game: bool,
 }
 

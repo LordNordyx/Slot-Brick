@@ -60,10 +60,14 @@ pub enum QuickRow {
     LibraryShow,
     LibraryPlayTime,
     LibraryTitleCard,
+    ScreenPs1,
+    Ps1Shader,
+    Ps1Dithering,
+    Ps1Overlay,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 47] = [
+    pub const ALL: [QuickRow; 51] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -111,6 +115,10 @@ impl QuickRow {
         QuickRow::LibraryShow,
         QuickRow::LibraryPlayTime,
         QuickRow::LibraryTitleCard,
+        QuickRow::ScreenPs1,
+        QuickRow::Ps1Shader,
+        QuickRow::Ps1Dithering,
+        QuickRow::Ps1Overlay,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -140,12 +148,14 @@ impl QuickRow {
     pub const LIBRARY: [QuickRow; 4] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryPlayTime, QuickRow::LibraryTitleCard];
 
     /// Screen: a page for each system, holding that system's own picture settings.
-    pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
+    pub const SCREEN: [QuickRow; 5] =
+        [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes, QuickRow::ScreenPs1];
     pub const SCREEN_GB: [QuickRow; 5] =
         [QuickRow::GbShader, QuickRow::GbColourCorrection, QuickRow::GbPalettes, QuickRow::GbOverlay, QuickRow::GbcOverlay];
     pub const SCREEN_GBA: [QuickRow; 3] = [QuickRow::GbaShader, QuickRow::GbaColourCorrection, QuickRow::GbaOverlay];
     pub const SCREEN_NES: [QuickRow; 2] = [QuickRow::NesShader, QuickRow::NesOverlay];
     pub const SCREEN_SNES: [QuickRow; 2] = [QuickRow::SnesShader, QuickRow::SnesOverlay];
+    pub const SCREEN_PS1: [QuickRow; 3] = [QuickRow::Ps1Shader, QuickRow::Ps1Dithering, QuickRow::Ps1Overlay];
 
     /// The system an Overlay row picks the overlay for.
     pub fn overlay_of(self) -> Option<slot_store::Platform> {
@@ -156,6 +166,7 @@ impl QuickRow {
             QuickRow::GbaOverlay => Platform::Gba,
             QuickRow::NesOverlay => Platform::Nes,
             QuickRow::SnesOverlay => Platform::Snes,
+            QuickRow::Ps1Overlay => Platform::Ps1,
             _ => return None,
         })
     }
@@ -178,7 +189,7 @@ impl QuickRow {
     pub fn page(self) -> &'static [QuickRow] {
         match self {
             QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => QuickRow::lights(),
-            QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes => &QuickRow::SCREEN,
+            QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 => &QuickRow::SCREEN,
             QuickRow::GbShader
             | QuickRow::GbColourCorrection
             | QuickRow::GbPalettes
@@ -187,6 +198,7 @@ impl QuickRow {
             QuickRow::GbaShader | QuickRow::GbaColourCorrection | QuickRow::GbaOverlay => &QuickRow::SCREEN_GBA,
             QuickRow::NesShader | QuickRow::NesOverlay => &QuickRow::SCREEN_NES,
             QuickRow::SnesShader | QuickRow::SnesOverlay => &QuickRow::SCREEN_SNES,
+            QuickRow::Ps1Shader | QuickRow::Ps1Dithering | QuickRow::Ps1Overlay => &QuickRow::SCREEN_PS1,
             QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::Rewind
@@ -209,6 +221,7 @@ impl QuickRow {
             QuickRow::GbaShader => Some(QuickRow::ScreenGba),
             QuickRow::NesShader => Some(QuickRow::ScreenNes),
             QuickRow::SnesShader => Some(QuickRow::ScreenSnes),
+            QuickRow::Ps1Shader => Some(QuickRow::ScreenPs1),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::LibrarySort => Some(QuickRow::Library),
             first if first == QuickRow::SYSTEM[0] => Some(QuickRow::System),
@@ -224,6 +237,7 @@ impl QuickRow {
             QuickRow::ScreenGba => Some(QuickRow::SCREEN_GBA[0]),
             QuickRow::ScreenNes => Some(QuickRow::SCREEN_NES[0]),
             QuickRow::ScreenSnes => Some(QuickRow::SCREEN_SNES[0]),
+            QuickRow::ScreenPs1 => Some(QuickRow::SCREEN_PS1[0]),
             QuickRow::Game => Some(QuickRow::GAME[0]),
             QuickRow::System => Some(QuickRow::SYSTEM[0]),
             QuickRow::Library => Some(QuickRow::LIBRARY[0]),
@@ -262,15 +276,17 @@ impl QuickRow {
             QuickRow::Rumble => "Rumble",
             QuickRow::DateTime => "Date & Time",
             QuickRow::About => "About",
-            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::NesShader | QuickRow::SnesShader => "Shader",
+            QuickRow::GbaShader | QuickRow::GbShader | QuickRow::NesShader | QuickRow::SnesShader | QuickRow::Ps1Shader => "Shader",
             QuickRow::GbColourCorrection | QuickRow::GbaColourCorrection => "Color Correction",
             QuickRow::GbOverlay => "GB Overlay",
             QuickRow::GbcOverlay => "GBC Overlay",
-            QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay => "Overlay",
+            QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay => "Overlay",
+            QuickRow::Ps1Dithering => "Dithering",
             QuickRow::ScreenGb => "Game Boy / GBC",
             QuickRow::ScreenGba => "Game Boy Advance",
             QuickRow::ScreenNes => "NES",
             QuickRow::ScreenSnes => "SNES",
+            QuickRow::ScreenPs1 => "PlayStation",
             QuickRow::Game => "Gameplay",
             QuickRow::EjectSave => "Auto Save on Eject",
             QuickRow::AutoSave => "Auto Save",
@@ -285,7 +301,7 @@ impl QuickRow {
         matches!(
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
-                | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes
+                | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1
         )
     }
 

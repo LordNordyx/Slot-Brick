@@ -1,0 +1,17 @@
+# A PlayStation game: Disc Test (brick/sim/make-ps1.py) runs under PCSX ReARMed and fills
+# the screen, ejects back to the shelf, and HOME → Screen has a PlayStation page.
+press a
+phase Shelf
+press l1       # the PlayStation shelf, last in the ring
+press a
+phase Playing 30000
+wait 2000
+snap playing
+hold menu 1500 # save state, eject, back to the shelf
+phase Shelf 20000
+press menu
+phase QuickMenu
+press a        # Screen
+press up       # PlayStation, last on the page
+press a
+snap menu-screen-ps1

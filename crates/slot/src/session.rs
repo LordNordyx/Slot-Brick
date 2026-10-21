@@ -265,6 +265,11 @@ impl Session {
                 }
             }
         }
+        if let Some(on) = self.app.take_ps1_dithering() {
+            if let (Some(emu), Platform::Ps1) = (&self.emu, self.app.platform()) {
+                emu.set_option("pcsx_rearmed_dithering", crate::core::dithering(on));
+            }
+        }
         if let Some((stem, serial)) = self.app.take_link_reload() {
             self.reload_for_link(&stem, serial);
         }
@@ -484,6 +489,9 @@ impl Session {
             None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
         };
         emu.set_volume(self.app.output_volume());
+        if platform == Platform::Ps1 {
+            emu.set_option("pcsx_rearmed_dithering", crate::core::dithering(self.app.ps1_dithering()));
+        }
         // The SNES and PlayStation pads have X and Y of their own: no turbo on them.
         emu.set_native_xy(matches!(platform, Platform::Snes | Platform::Ps1));
         emu.set_driven(self.driven);

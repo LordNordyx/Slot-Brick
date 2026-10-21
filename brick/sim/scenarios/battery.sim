@@ -13,13 +13,7 @@ led effect_f2 4
 led max_scale_f1f2 20
 led effect_rgb_hex_m FFFFFF
 # The LED shortcut is available during gameplay.
-press l1
-wait 1200
-press l1
-wait 1200
-press l1
-wait 1200
-press l1
+press r1     # GBA -> GB
 press a
 phase Playing 20000
 set battery 11

@@ -56,6 +56,8 @@ pub struct SlotState {
     pub shader_nes: Shader,
     pub shader_snes: Shader,
     pub shader_ps1: Shader,
+    /// The PlayStation's dithering: on as it was, off for smoother gradients.
+    pub ps1_dithering: bool,
     pub eject_save: bool,
     pub autosave_min: u8,
     pub battery_shutdown: u8,
@@ -154,6 +156,7 @@ impl Default for SlotState {
             shader_nes: Shader::Off,
             shader_snes: Shader::Off,
             shader_ps1: Shader::Off,
+            ps1_dithering: true,
             eject_save: true,
             autosave_min: AUTOSAVE_MIN_DEFAULT,
             battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,
@@ -180,7 +183,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nauto_clock={}\nlibrary_sort={}\nfavorites_only={}\nplay_time_hours={}\ntitle_card={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\nshader_ps1={}\neject_save={}\nautosave_min={}\nbattery_shutdown={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nauto_clock={}\nlibrary_sort={}\nfavorites_only={}\nplay_time_hours={}\ntitle_card={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction_gb={}\ncolour_correction_gba={}\nshader_gba={}\nshader_gb={}\nshader_nes={}\nshader_snes={}\nshader_ps1={}\nps1_dithering={}\neject_save={}\nautosave_min={}\nbattery_shutdown={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -206,6 +209,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.shader_nes.name(),
         s.shader_snes.name(),
         s.shader_ps1.name(),
+        s.ps1_dithering as u8,
         s.eject_save as u8,
         s.autosave_min,
         s.battery_shutdown,
@@ -248,6 +252,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shader_nes = None;
     let mut shader_snes = None;
     let mut shader_ps1 = None;
+    let mut ps1_dithering = None;
     let mut eject_save = None;
     let mut autosave_min = None;
     let mut battery_shutdown = None;
@@ -295,6 +300,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "shader_nes" => shader_nes = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
             "shader_snes" => shader_snes = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
             "shader_ps1" => shader_ps1 = Shader::parse(value).filter(|s| Shader::NES.contains(s)),
+            "ps1_dithering" => ps1_dithering = flag(value),
             _ => {
                 // overlay_gb=<file name>: one for each system, empty for off.
                 let system = key.strip_prefix("overlay_").and_then(platform_value);
@@ -332,6 +338,7 @@ fn parse(text: &str) -> Option<SlotState> {
         shader_nes: shader_nes.unwrap_or(fallback.shader_nes),
         shader_snes: shader_snes.unwrap_or(fallback.shader_snes),
         shader_ps1: shader_ps1.unwrap_or(fallback.shader_ps1),
+        ps1_dithering: ps1_dithering.unwrap_or(fallback.ps1_dithering),
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         autosave_min: autosave_min.unwrap_or(fallback.autosave_min),
         battery_shutdown: battery_shutdown.unwrap_or(fallback.battery_shutdown),

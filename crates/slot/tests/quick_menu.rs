@@ -263,7 +263,7 @@ fn screen_opens_a_page_per_system_each_with_its_own_page_and_b_comes_back_up() {
     open_at(&mut a, QuickRow::Screen);
     press(&mut a, Btn::A);
     assert_eq!(a.quick_menu(), Some(QuickRow::ScreenGb));
-    for want in [QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes, QuickRow::ScreenGb] {
+    for want in [QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes, QuickRow::ScreenPs1, QuickRow::ScreenGb] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(want), "the page did not wrap on itself");
     }
@@ -285,6 +285,7 @@ fn screen_opens_a_page_per_system_each_with_its_own_page_and_b_comes_back_up() {
         (QuickRow::ScreenGba, QuickRow::GbaShader),
         (QuickRow::ScreenNes, QuickRow::NesShader),
         (QuickRow::ScreenSnes, QuickRow::SnesShader),
+        (QuickRow::ScreenPs1, QuickRow::Ps1Shader),
     ] {
         press(&mut a, Btn::Down);
         assert_eq!(a.quick_menu(), Some(system));

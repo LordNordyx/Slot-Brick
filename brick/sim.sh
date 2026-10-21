@@ -30,14 +30,14 @@ build() {
     mkdir -p .docker-cache/cargo
     docker_run "$IMAGE" cargo build --locked --release --target-dir "$SIM" \
         -p slot --no-default-features --features sim
-    # The Brick's four cores, from the same sources, for this PC. Built once, then kept.
+    # The Brick's five cores, from the same sources, for this PC. Built once, then kept.
     docker_run "$IMAGE" sh brick/sim/build-cores.sh
 }
 
 # A fresh SD card and fresh stand-in hardware in $1: the card layout slot makes itself, the
-# Brick card's data files and the cores, and a cartridge per shelf. Only Pocket Test is a real
-# game (brick/sim/make-rom.py); the others are stand-ins that fill the shelf, which the cores
-# refuse. Put your own games in target-sim/live/card/Slot/Games to play them under `serve`.
+# Brick card's data files and the cores, and a cartridge per shelf. Only Pocket Test and Disc
+# Test are real games (brick/sim/make-rom.py, make-ps1.py); the others are stand-ins that fill
+# the shelf, which the cores refuse. Put your own games in target-sim/live/card/Slot/Games to play them under `serve`.
 fresh() {
     rm -rf "$1"
     mkdir -p "$1/hw"
@@ -48,6 +48,7 @@ fresh() {
         printf 'slot simulator stand-in cartridge\n' > "$1/card/Slot/Games/$cart"
     done
     python3 -I brick/sim/make-rom.py "$1/card/Slot/Games/GB/Pocket Test.gb"
+    python3 -I brick/sim/make-ps1.py "$1/card/Slot/Games/PS1/Disc Test.exe"
     python3 -I brick/sim/make-overlay.py "$1/card/Slot/Overlays/GB/Sim Frame.png"
     cp "$1/card/Slot/Overlays/GB/Sim Frame.png" \
         "$1/card/Slot/Overlays/GBA/Sim Frame with a name far too long to fit beside its label.png"

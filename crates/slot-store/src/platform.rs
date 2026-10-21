@@ -56,7 +56,7 @@ impl Platform {
             Platform::Nes => &["nes"],
             Platform::Snes => &["sfc", "smc"],
             // A .bin counts only when no .cue names it (see `ps1::games`).
-            Platform::Ps1 => &["cue", "chd", "pbp", "m3u", "bin"],
+            Platform::Ps1 => &["cue", "chd", "pbp", "m3u", "bin", "iso", "exe"],
         }
     }
 
