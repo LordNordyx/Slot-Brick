@@ -8,11 +8,12 @@ pub enum Platform {
     Gbc,
     Nes,
     Snes,
+    Ps1,
 }
 
 impl Platform {
-    pub const ALL: [Platform; 5] =
-        [Platform::Gba, Platform::Gb, Platform::Gbc, Platform::Nes, Platform::Snes];
+    pub const ALL: [Platform; 6] =
+        [Platform::Gba, Platform::Gb, Platform::Gbc, Platform::Nes, Platform::Snes, Platform::Ps1];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -21,6 +22,7 @@ impl Platform {
             Platform::Gbc => "Game Boy Color",
             Platform::Nes => "Nintendo Entertainment System",
             Platform::Snes => "Super Nintendo Entertainment System",
+            Platform::Ps1 => "PlayStation",
         }
     }
 
@@ -32,6 +34,7 @@ impl Platform {
             Platform::Gbc => 2,
             Platform::Nes => 3,
             Platform::Snes => 4,
+            Platform::Ps1 => 5,
         }
     }
 
@@ -42,6 +45,7 @@ impl Platform {
             Platform::Gbc => "GBC",
             Platform::Nes => "NES",
             Platform::Snes => "SNES",
+            Platform::Ps1 => "PS1",
         }
     }
 
@@ -51,6 +55,8 @@ impl Platform {
             Platform::Gb | Platform::Gbc => &["gb", "gbc"],
             Platform::Nes => &["nes"],
             Platform::Snes => &["sfc", "smc"],
+            // A .bin counts only when no .cue names it (see `ps1::games`).
+            Platform::Ps1 => &["cue", "chd", "pbp", "m3u", "bin"],
         }
     }
 
@@ -60,6 +66,9 @@ impl Platform {
             Platform::Gb | Platform::Gbc => (160, 144),
             // With FCEUmm's and snes9x's 8-line overscan crop top and bottom.
             Platform::Nes | Platform::Snes => (256, 224),
+            // Whatever size it draws at (256 to 640 wide, 240 or 480 tall), a PlayStation
+            // picture fills a 4:3 screen: each frame is stretched over the whole canvas.
+            Platform::Ps1 => (640, 480),
         }
     }
 
@@ -70,6 +79,7 @@ impl Platform {
         match self {
             Platform::Gba | Platform::Gb | Platform::Gbc => (240, 160),
             Platform::Nes | Platform::Snes => (256, 240),
+            Platform::Ps1 => (640, 480),
         }
     }
 

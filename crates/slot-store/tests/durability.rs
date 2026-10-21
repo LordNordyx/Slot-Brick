@@ -204,6 +204,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             shader_gb: Shader::Simpletex,
             shader_nes: Shader::Off,
             shader_snes: Shader::Off,
+            shader_ps1: Shader::Off,
             eject_save: true,
             autosave_min: AUTOSAVE_MIN_DEFAULT,
             battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,

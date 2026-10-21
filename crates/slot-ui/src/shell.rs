@@ -72,6 +72,10 @@ pub const SNES_SHELL: Shell = shell([0x95, 0x94, 0x9a], Finish::Solid);
 /// The PAL and Super Famicom cart's lighter, warmer grey.
 pub const SNES_PAL_SHELL: Shell = shell([0xab, 0xab, 0xa7], Finish::Solid);
 
+/// The PlayStation's light grey. For now a PlayStation game is drawn as a GBA-shaped cart in
+/// it: a stand-in until the PlayStation's own look on the shelf is settled.
+pub const PS1_SHELL: Shell = shell([0xb4, 0xb3, 0xb0], Finish::Solid);
+
 /// What each of FAMICOM_SHELLS is called, in the same order.
 pub const FAMICOM_NAMES: [&str; 8] = [
     "Famicom yellow",
@@ -147,6 +151,7 @@ pub fn shell_for(cart: &Cart) -> Shell {
             Some(crate::SnesShell::Pal) => SNES_PAL_SHELL,
             _ => SNES_SHELL,
         },
+        Platform::Ps1 => PS1_SHELL,
         Platform::Gba | Platform::Gb | Platform::Gbc => match cart.shell {
             Some(choice) => shell(choice.colour, finish_of(choice.finish)),
             None if cart.platform == Platform::Gba => gba_shell_for(&cart.code),

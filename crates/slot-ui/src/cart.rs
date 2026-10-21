@@ -171,7 +171,7 @@ enum Shape {
 
 pub fn gb_shell_of(cart: &Cart) -> Option<GbShell> {
     match cart.platform {
-        Platform::Gba | Platform::Nes | Platform::Snes => None,
+        Platform::Gba | Platform::Nes | Platform::Snes | Platform::Ps1 => None,
         Platform::Gb | Platform::Gbc => Some(match cart.shell.map(|c| c.outline) {
             Some(Outline::Notched) => GbShell::Notched,
             Some(Outline::Rounded) => GbShell::Rounded,
@@ -352,7 +352,8 @@ const SNES_SEATED_H: u32 = 157;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
-        Platform::Gba => (SEATED_W, SEATED_H),
+        // A PlayStation game stands in as a GBA cart for now (see shell::PS1_SHELL).
+        Platform::Gba | Platform::Ps1 => (SEATED_W, SEATED_H),
         Platform::Gb | Platform::Gbc => (SEATED_W, GB_SEATED_H),
         Platform::Nes => (SEATED_W, NES_SEATED_H),
         Platform::Snes => (SEATED_W, SNES_SEATED_H),
@@ -361,7 +362,7 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
 
 pub fn cart_box(platform: Platform) -> (u32, u32) {
     let s = spec(match platform {
-        Platform::Gba => Shape::Gba,
+        Platform::Gba | Platform::Ps1 => Shape::Gba,
         Platform::Gb | Platform::Gbc => Shape::Gb(GbShell::Notched),
         Platform::Nes => Shape::Nes(NesShell::Nes),
         Platform::Snes => Shape::Snes(SnesShell::Us),

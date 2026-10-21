@@ -44,6 +44,9 @@ fn bit(btn: Btn) -> Option<u16> {
         Btn::Y => ButtonMask::Y,
         Btn::L1 => ButtonMask::L,
         Btn::R1 => ButtonMask::R,
+        // Only a PlayStation game is handed its triggers (Gestures::set_triggers_to_game).
+        Btn::L2 => ButtonMask::L2,
+        Btn::R2 => ButtonMask::R2,
         Btn::Start => ButtonMask::START,
         Btn::Select => ButtonMask::SELECT,
         _ => return None,

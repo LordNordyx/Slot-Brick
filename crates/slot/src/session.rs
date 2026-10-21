@@ -148,6 +148,8 @@ impl Session {
     }
 
     pub fn feed(&mut self, events: impl IntoIterator<Item = RawEvent>, now: Millis) {
+        self.gestures
+            .set_triggers_to_game(self.has_core() && self.app.platform() == Platform::Ps1);
         let mut actions = Vec::new();
         for ev in events {
             actions.extend(self.gestures.feed(ev, now));
@@ -482,17 +484,20 @@ impl Session {
             None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
         };
         emu.set_volume(self.app.output_volume());
-        emu.set_native_xy(platform == Platform::Snes);
+        // The SNES and PlayStation pads have X and Y of their own: no turbo on them.
+        emu.set_native_xy(matches!(platform, Platform::Snes | Platform::Ps1));
         emu.set_driven(self.driven);
         // Logged in to RetroAchievements: this game earns achievements (softcore).
-        if let Some(account) = crate::ra::load(&self.root) {
-            let console = match platform {
-                Platform::Gba => slot_cheevos::Console::Gba,
-                Platform::Gb => slot_cheevos::Console::Gb,
-                Platform::Gbc => slot_cheevos::Console::Gbc,
-                Platform::Nes => slot_cheevos::Console::Nes,
-                Platform::Snes => slot_cheevos::Console::Snes,
-            };
+        let console = match platform {
+            Platform::Gba => Some(slot_cheevos::Console::Gba),
+            Platform::Gb => Some(slot_cheevos::Console::Gb),
+            Platform::Gbc => Some(slot_cheevos::Console::Gbc),
+            Platform::Nes => Some(slot_cheevos::Console::Nes),
+            Platform::Snes => Some(slot_cheevos::Console::Snes),
+            // Not yet: a disc is identified by its program, read off the disc.
+            Platform::Ps1 => None,
+        };
+        if let (Some(account), Some(console)) = (crate::ra::load(&self.root), console) {
             emu.achievements(&account.user, &account.token, console);
         }
         self.app.set_snapshot(Box::new(emu.snapshot()));

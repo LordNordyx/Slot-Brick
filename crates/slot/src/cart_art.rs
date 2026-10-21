@@ -300,6 +300,7 @@ fn platforms_for(platform: Platform) -> &'static [Platform] {
         Platform::Gbc => &[Platform::Gbc, Platform::Gb],
         Platform::Nes => &[Platform::Nes],
         Platform::Snes => &[Platform::Snes],
+        Platform::Ps1 => &[Platform::Ps1],
     }
 }
 
@@ -338,6 +339,8 @@ fn fetch_label(cart: &Cart, src: &mut Sources) -> Result<Outcome, String> {
 /// even when it has a NES one.
 fn needs_label(cart: &Cart) -> bool {
     match cart.platform {
+        // Covers, not cart labels: not fetched yet.
+        Platform::Ps1 => false,
         Platform::Nes if slot_ui::nes_famicom_of(cart) => cart.famicom_label.is_none(),
         _ => cart.label.is_none(),
     }
