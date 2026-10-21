@@ -12,8 +12,8 @@ cp -R brick/card/. "$OUT/"
 cp brick/bootlogo-tool/target/aarch64-unknown-linux-gnu/release/slot-bootlogo "$OUT/Apps/BootLogo/"
 cp brick/card/Slot/System/slot-filecheck "$OUT/Apps/BootLogo/"
 cp target/aarch64-unknown-linux-gnu/device/slot "$OUT/Slot/System/"
-cp vendor/mgba_libretro.so vendor/gpsp_libretro.so vendor/fceumm_libretro.so vendor/snes9x_libretro.so "$OUT/Slot/System/"
-for f in slot mgba_libretro.so gpsp_libretro.so fceumm_libretro.so snes9x_libretro.so; do "$BRICK_TOOLCHAIN/bin/aarch64-linux-gnu-strip" "$OUT/Slot/System/$f"; done
+cp vendor/mgba_libretro.so vendor/gpsp_libretro.so vendor/fceumm_libretro.so vendor/snes9x_libretro.so vendor/pcsx_rearmed_libretro.so "$OUT/Slot/System/"
+for f in slot mgba_libretro.so gpsp_libretro.so fceumm_libretro.so snes9x_libretro.so pcsx_rearmed_libretro.so; do "$BRICK_TOOLCHAIN/bin/aarch64-linux-gnu-strip" "$OUT/Slot/System/$f"; done
 for d in BIOS Config Games/GB Games/GBC Games/GBA Games/NES Games/SNES Labels/GB Labels/GBC Labels/GBA Labels/NES Labels/SNES Saves/GB Saves/GBC Saves/GBA Saves/NES Saves/SNES States/GB States/GBC States/GBA States/NES States/SNES Overlays/GB Overlays/GBC Overlays/GBA Overlays/NES Overlays/SNES Wallpapers Logs; do mkdir -p "$OUT/Slot/$d"; done
 cp brick/README.md "$OUT/Slot/README.md"
 # Overlays kept on this machine only (brick/overlays-local is not in git, so a card built by
