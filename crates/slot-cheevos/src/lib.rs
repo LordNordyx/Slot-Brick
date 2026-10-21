@@ -37,6 +37,7 @@ extern "C" {
     fn slot_cheevos_console_gbc() -> c_uint;
     fn slot_cheevos_console_nes() -> c_uint;
     fn slot_cheevos_console_snes() -> c_uint;
+    fn slot_cheevos_console_ps1() -> c_uint;
 }
 
 /// rcheevos' version, for the User-Agent RetroAchievements asks clients to send.
@@ -51,6 +52,7 @@ pub enum Console {
     Gbc,
     Nes,
     Snes,
+    Ps1,
 }
 
 impl Console {
@@ -62,6 +64,7 @@ impl Console {
                 Console::Gbc => slot_cheevos_console_gbc(),
                 Console::Nes => slot_cheevos_console_nes(),
                 Console::Snes => slot_cheevos_console_snes(),
+                Console::Ps1 => slot_cheevos_console_ps1(),
             }
         }
     }

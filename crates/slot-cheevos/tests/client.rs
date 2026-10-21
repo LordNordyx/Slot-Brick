@@ -78,6 +78,81 @@ fn a_nes_rom_is_hashed_without_its_ines_header() {
     assert!(seen.iter().any(|p| p.contains("b2ea9f7fcea831a4a63b213f41a8855b")), "{seen:?}");
 }
 
+/// A PlayStation disc as a 2048-byte-sector ISO 9660 image: SYSTEM.CNF booting PSX.EXE.
+fn ps1_iso(exe: &[u8]) -> Vec<u8> {
+    const SECTOR: usize = 2048;
+    let both32 = |v: u32| [v.to_le_bytes(), v.to_be_bytes()].concat();
+    let record = |name: &[u8], sector: u32, size: u32, dir: bool| {
+        let mut body = [both32(sector), both32(size)].concat();
+        body.extend([0u8; 7]);
+        body.extend([if dir { 2 } else { 0 }, 0, 0, 1, 0, 0, 1, name.len() as u8]);
+        body.extend(name);
+        if name.len() % 2 == 0 {
+            body.push(0);
+        }
+        [vec![body.len() as u8 + 2, 0], body].concat()
+    };
+    let cnf = b"BOOT = cdrom:\\PSX.EXE;1\r\n";
+    let (root, cnf_at, exe_at) = (20u32, 21u32, 22u32);
+    let mut pvd = vec![0u8; SECTOR];
+    pvd[0..7].copy_from_slice(b"\x01CD001\x01");
+    pvd[80..88].copy_from_slice(&both32(exe_at + exe.len().div_ceil(SECTOR) as u32));
+    pvd[128..132].copy_from_slice(&[0, 8, 8, 0]);
+    pvd[156..190].copy_from_slice(&record(&[0], root, SECTOR as u32, true));
+    let mut end = vec![0u8; SECTOR];
+    end[0..7].copy_from_slice(b"\xffCD001\x01");
+    let dir = [
+        record(&[0], root, SECTOR as u32, true),
+        record(&[1], root, SECTOR as u32, true),
+        record(b"PSX.EXE;1", exe_at, exe.len() as u32, false),
+        record(b"SYSTEM.CNF;1", cnf_at, cnf.len() as u32, false),
+    ]
+    .concat();
+    // Sectors 16 on: the volume descriptor, the end of them, two empty path tables, the root
+    // directory, then the files. Each starts on a sector of its own.
+    let mut iso = vec![0u8; 16 * SECTOR];
+    for part in [&pvd[..], &end, &[], &[], &dir, cnf, exe] {
+        let start = iso.len();
+        iso.extend(part);
+        iso.resize(start + part.len().div_ceil(SECTOR).max(1) * SECTOR, 0);
+    }
+    iso
+}
+
+#[test]
+fn a_playstation_disc_is_identified_by_its_boot_program() {
+    let fake = Arc::new(Fake::default());
+    let c = Cheevos::new(fake.clone()).unwrap();
+    c.login("Benni", "t0k3n");
+    wait(&c, |n| matches!(n, Notice::LoggedIn(_)));
+    let mut exe = vec![0u8; 2048];
+    exe[0..8].copy_from_slice(b"PS-X EXE");
+    exe[0x1c..0x20].copy_from_slice(&2048u32.to_le_bytes());
+    exe.extend((0..=255u8).cycle().take(2048));
+    let d = tempfile::tempdir().unwrap();
+    let disc = d.path().join("game.iso");
+    std::fs::write(&disc, ps1_iso(&exe)).unwrap();
+    c.load_game(&disc, Console::Ps1);
+    wait(&c, |n| matches!(n, Notice::GameLoaded(_)));
+    let seen = fake.seen.lock().unwrap();
+    // md5("PSX.EXE" + the program): the boot program's name, then the program itself.
+    assert!(seen.iter().any(|p| p.contains("d254942162e1a7e2ba7a02bb5cc8b1c2")), "{seen:?}");
+}
+
+#[test]
+fn a_playstation_disc_kept_as_chd_is_identified_as_the_same_disc() {
+    // tests/disc.chd: the disc ps1_iso builds, padded to 300 sectors, through MAME's
+    // `chdman createcd` (0.251) as a MODE1 track.
+    let fake = Arc::new(Fake::default());
+    let c = Cheevos::new(fake.clone()).unwrap();
+    c.login("Benni", "t0k3n");
+    wait(&c, |n| matches!(n, Notice::LoggedIn(_)));
+    c.load_game(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/disc.chd")), Console::Ps1);
+    wait(&c, |n| matches!(n, Notice::GameLoaded(_)));
+    let seen = fake.seen.lock().unwrap();
+    assert!(seen.iter().any(|p| p.contains("d254942162e1a7e2ba7a02bb5cc8b1c2")), "{seen:?}");
+}
+
 #[test]
 fn core_memory_is_mapped_for_a_nes() {
     let mut c = Cheevos::new(Arc::new(Fake::default())).unwrap();

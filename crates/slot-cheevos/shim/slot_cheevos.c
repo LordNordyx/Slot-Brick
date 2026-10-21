@@ -156,9 +156,13 @@ static void event_handler(const rc_client_event_t* e, rc_client_t* client) {
   }
 }
 
+void slot_cheevos_use_chd_reader(void);
+
 slot_cheevos* slot_cheevos_new(void* host, slot_http_fn http, slot_event_fn event, slot_done_fn done,
                                slot_memory_fn memory) {
   slot_cheevos* s = (slot_cheevos*)calloc(1, sizeof(slot_cheevos));
+  /* PlayStation discs kept as .chd are read for their hash as .cue/.bin ones are. */
+  slot_cheevos_use_chd_reader();
   if (!s)
     return NULL;
   s->host = host;
@@ -275,3 +279,4 @@ unsigned slot_cheevos_console_gb(void) { return RC_CONSOLE_GAMEBOY; }
 unsigned slot_cheevos_console_gbc(void) { return RC_CONSOLE_GAMEBOY_COLOR; }
 unsigned slot_cheevos_console_nes(void) { return RC_CONSOLE_NINTENDO; }
 unsigned slot_cheevos_console_snes(void) { return RC_CONSOLE_SUPER_NINTENDO; }
+unsigned slot_cheevos_console_ps1(void) { return RC_CONSOLE_PLAYSTATION; }

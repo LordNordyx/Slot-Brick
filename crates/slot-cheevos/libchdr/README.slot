@@ -1,0 +1,6 @@
+libchdr, as pinned in PCSX ReARMed c8816799b50388e61cfe237fe2cdbb7d8175f20a (vendor/pcsx_rearmed-src.tar.gz,
+deps/libchdr): include/, src/*.c and *.h, and of its deps only what decoding needs: lzma-26.02's
+include/ and src/LzmaDec.c (deps/lzma-26.02), zstd-1.5.7's single-file decoder (deps/zstd-1.5.7), and
+miniz-3.1.2 (deps/miniz-3.1.2). Unmodified. It reads PlayStation discs kept as .chd for their
+RetroAchievements hash (shim/chd_reader.c). Licences: LICENSE.txt (BSD-3-Clause), the LZMA SDK's
+deps/lzma-26.02/LICENSE (public domain), and the zstd (BSD) and miniz (MIT) notices in their sources.
