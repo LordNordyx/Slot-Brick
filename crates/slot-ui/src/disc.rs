@@ -25,6 +25,9 @@ const TITLE_MIN_PX: f32 = 12.0;
 /// "DISC 2": under the hub.
 const NUMBER_BOX: (f32, f32, f32, f32) = (0.3, 0.7, 0.4, 0.1);
 const NUMBER_PX: f32 = 18.0;
+/// The tag a disc number sits on over a disc's own art.
+const TAG: [u8; 3] = [0x1a, 0x18, 0x16];
+const TAG_ALPHA: f32 = 0.75;
 
 /// The disc's face: `art` (DISC_PX square, RGBA) printed on it when given, else a disc in the
 /// game's own colour with its name across the top, and which disc it is under the hub for a
@@ -65,11 +68,19 @@ pub fn disc_face(cart: &Cart, art: Option<Vec<u8>>, number: Option<usize>) -> Ca
             }
         }
     }
-    if art.is_none() {
-        print_title(&mut rgba, n, &title, print, TITLE_BOX, TITLE_LINES, TITLE_PX);
-        if let Some(number) = number {
-            print_title(&mut rgba, n, &format!("DISC {number}"), print, NUMBER_BOX, 1, NUMBER_PX);
+    match (&art, number) {
+        (None, number) => {
+            print_title(&mut rgba, n, &title, print, TITLE_BOX, TITLE_LINES, TITLE_PX);
+            if let Some(number) = number {
+                print_title(&mut rgba, n, &format!("DISC {number}"), print, NUMBER_BOX, 1, NUMBER_PX);
+            }
         }
+        // A scan prints its own number, but which scan is which disc is not known: a tag says.
+        (Some(_), Some(number)) => {
+            tag(&mut rgba, n, NUMBER_BOX);
+            print_title(&mut rgba, n, &format!("DISC {number}"), TAG, NUMBER_BOX, 1, NUMBER_PX);
+        }
+        (Some(_), None) => {}
     }
     CartFace { rgba, w: n, h: n }
 }
@@ -116,6 +127,27 @@ fn print_title(
             let d = (((y0 + y) * n + x0 + x) * 4) as usize;
             for c in 0..3 {
                 rgba[d + c] = ((block[s + c] as u32 * a + rgba[d + c] as u32 * (255 - a)) / 255) as u8;
+            }
+        }
+    }
+}
+
+/// A dark, rounded tag across `(bx, by, bw, bh)`, for words printed over a disc's own art.
+fn tag(rgba: &mut [u8], n: u32, (bx, by, bw, bh): (f32, f32, f32, f32)) {
+    let (x0, y0) = (bx * n as f32, by * n as f32);
+    let (w, h) = (bw * n as f32, bh * n as f32);
+    let r = h / 2.0;
+    for y in y0 as u32..(y0 + h).ceil() as u32 {
+        for x in x0 as u32..(x0 + w).ceil() as u32 {
+            let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+            let cx = px.clamp(x0 + r, x0 + w - r);
+            let cover = (r - (px - cx).hypot(py - (y0 + r)) + 0.5).clamp(0.0, 1.0) * TAG_ALPHA;
+            let o = ((y * n + x) * 4) as usize;
+            if cover <= 0.0 || rgba[o + 3] == 0 {
+                continue;
+            }
+            for c in 0..3 {
+                rgba[o + c] = (rgba[o + c] as f32 * (1.0 - cover) + TAG[c] as f32 * cover) as u8;
             }
         }
     }

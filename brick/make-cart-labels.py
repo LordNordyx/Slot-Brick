@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate card/Slot/System/{nes,famicom,snes,snes-pal}-cart-labels.txt from the LaunchBox Games Database.
+"""Regenerate card/Slot/System/{nes,famicom,snes,snes-pal}-cart-labels.txt and ps1-disc-labels.txt from the LaunchBox Games Database.
 
 The slot art set behind Cart Studio has no NES or SNES label scans, so Cart Art takes those
 labels from LaunchBox's "Cart - Front" pictures: whole-cart photos it crops the label out of
@@ -7,13 +7,14 @@ labels from LaunchBox's "Cart - Front" pictures: whole-cart photos it crops the 
 regions that cart was sold in; Famicom, Super Famicom and PAL SNES carts are other shapes)
 with the game's name and region, so the Brick never downloads the 100 MB metadata itself.
 "famicom" keeps the NES games' Japanese pictures instead: the Famicom cart; "snes-pal" the SNES
-games' Japanese and European ones: the rounder Super Famicom / PAL cart.
+games' Japanese and European ones: the rounder Super Famicom / PAL cart. "ps1" keeps the
+PlayStation games' "Disc" pictures, from every region: the disc itself, printed side up.
 
 The download is untrusted input: it is parsed with the standard library's expat (2.4+
 guards against entity expansion), and only names without control characters and file names
 of plain characters make it into the list, which the Brick checks again before any request.
 
-Usage: python3 brick/make-cart-labels.py nes|famicom|snes|snes-pal [Metadata.zip]
+Usage: python3 brick/make-cart-labels.py nes|famicom|snes|snes-pal|ps1 [Metadata.zip]
 """
 import pathlib, sys, tempfile, urllib.request, zipfile
 import xml.etree.ElementTree as ET
@@ -26,15 +27,16 @@ EUROPE = {'Europe': 'Europe', 'United Kingdom': 'UK', 'Germany': 'Germany', 'Fra
           'Spain': 'Spain', 'Italy': 'Italy', 'Australia': 'Australia', 'Sweden': 'Sweden',
           'Netherlands': 'Netherlands'}
 CONSOLES = {
-    'nes': ('Nintendo Entertainment System', {**AMERICAS, **EUROPE}),
-    'famicom': ('Nintendo Entertainment System', {'Japan': 'Japan'}),
-    'snes': ('Super Nintendo Entertainment System', AMERICAS),
-    'snes-pal': ('Super Nintendo Entertainment System', {'Japan': 'Japan', **EUROPE}),
+    'nes': ('Nintendo Entertainment System', {**AMERICAS, **EUROPE}, 'Cart - Front', 'cart'),
+    'famicom': ('Nintendo Entertainment System', {'Japan': 'Japan'}, 'Cart - Front', 'cart'),
+    'snes': ('Super Nintendo Entertainment System', AMERICAS, 'Cart - Front', 'cart'),
+    'snes-pal': ('Super Nintendo Entertainment System', {'Japan': 'Japan', **EUROPE}, 'Cart - Front', 'cart'),
+    'ps1': ('Sony Playstation', {'Japan': 'Japan', **AMERICAS, **EUROPE}, 'Disc', 'disc'),
 }
 if len(sys.argv) < 2 or sys.argv[1] not in CONSOLES:
     sys.exit(__doc__)
-PLATFORM, REGIONS = CONSOLES[sys.argv[1]]
-OUT = pathlib.Path(__file__).parent / f'card/Slot/System/{sys.argv[1]}-cart-labels.txt'
+PLATFORM, REGIONS, IMAGE, KIND = CONSOLES[sys.argv[1]]
+OUT = pathlib.Path(__file__).parent / f'card/Slot/System/{sys.argv[1]}-{KIND}-labels.txt'
 SAFE = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.')
 
 
@@ -62,7 +64,7 @@ with metadata().open('Metadata.xml') as f:
                 (el.findtext('AlternateName') or '', el.findtext('Region') or ''))
             el.clear()
         elif el.tag == 'GameImage':
-            if el.findtext('Type') == 'Cart - Front':
+            if el.findtext('Type') == IMAGE:
                 carts.setdefault(el.findtext('DatabaseID'), []).append(
                     (el.findtext('FileName') or '', el.findtext('Region') or ''))
             el.clear()
@@ -78,6 +80,6 @@ for gid, name in games.items():
             # Famicom picture.
             if (alt_region in REGIONS or not alt_region) and title and not any(ord(c) < 32 for c in title):
                 lines.add(f'{title} ({tag})\t{file}' if tag else f'{title}\t{file}')
-header = f'# {PLATFORM} cart pictures from the LaunchBox Games Database ({URL}): name (region), file\n'
+header = f'# {PLATFORM} {KIND} pictures from the LaunchBox Games Database ({URL}): name (region), file\n'
 OUT.write_text(header + '\n'.join(sorted(lines)) + '\n')
 print(f'{len(lines)} names for {sum(1 for g in games if g in carts)} games; wrote {OUT}', file=sys.stderr)

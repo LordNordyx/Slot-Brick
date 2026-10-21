@@ -91,6 +91,18 @@ const FAMICOM_PHOTO: CartPhoto = CartPhoto {
     plain: [[0.1, 0.9, 0.9, 0.97], [0.955, 0.2, 0.975, 0.7]],
 };
 
+/// A PlayStation disc, printed side up: the picture is the disc, so it is kept whole, cut to
+/// the disc's own round outline. Only `index` and `aspect` are read (see `disc_from_photo`).
+const PS1_DISC_PHOTO: CartPhoto = CartPhoto {
+    index: "System/ps1-disc-labels.txt",
+    sub: "",
+    aspect: (0.9, 1.1),
+    label: [0.0, 0.0, 1.0, 1.0],
+    art: [0.0, 0.0, 1.0, 1.0],
+    side: [0.0, 0.0, 1.0, 1.0],
+    plain: [[0.0, 0.0, 1.0, 1.0]; 2],
+};
+
 /// The pictures a cart's label is cut from: a NES game on the Famicom cart takes a Famicom
 /// cart's label (kept apart from its NES one), else the NES one's if it has none yet (shown
 /// whole, as it is tall).
@@ -102,6 +114,7 @@ fn photo_specs(cart: &Cart) -> &'static [&'static CartPhoto] {
         // The cart's own shape first, the other's label (trimmed to fit) when it has none.
         Platform::Snes if slot_ui::snes_shell_of(cart) == Some(slot_ui::SnesShell::Pal) => &[&SNES_PAL_PHOTO, &SNES_PHOTO],
         Platform::Snes => &[&SNES_PHOTO, &SNES_PAL_PHOTO],
+        Platform::Ps1 => &[&PS1_DISC_PHOTO],
         _ => &[],
     }
 }
@@ -339,8 +352,6 @@ fn fetch_label(cart: &Cart, src: &mut Sources) -> Result<Outcome, String> {
 /// even when it has a NES one.
 fn needs_label(cart: &Cart) -> bool {
     match cart.platform {
-        // Covers, not cart labels: not fetched yet.
-        Platform::Ps1 => false,
         Platform::Nes if slot_ui::nes_famicom_of(cart) => cart.famicom_label.is_none(),
         _ => cart.label.is_none(),
     }
@@ -400,7 +411,11 @@ fn fetch_photo_label(cart: &Cart, spec: &CartPhoto, src: &mut Sources) -> Result
                 continue;
             }
         };
-        match label_from_photo(&png, spec) {
+        let made = match spec.index == PS1_DISC_PHOTO.index {
+            true => disc_from_photo(&png),
+            false => label_from_photo(&png, spec),
+        };
+        match made {
             Ok(label) => return Ok(save_label(root, cart, spec.sub, &label, format!("{name} cart {file}"))),
             Err(e) => why.push(format!("{file}: {e}")),
         }
@@ -418,6 +433,28 @@ fn fetch_photo_label(cart: &Cart, spec: &CartPhoto, src: &mut Sources) -> Result
 enum Cut {
     Clean,
     Loose,
+}
+
+/// A disc picture, cut to the disc: what is not see-through around it, which must be round
+/// (as wide as it is tall) and large enough to print on a disc on the shelf.
+fn disc_from_photo(png: &[u8]) -> Result<Vec<u8>, &'static str> {
+    let (rgba, w, h) = decode_rgba(png).ok_or("not a readable PNG")?;
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if rgba[((y * w + x) * 4 + 3) as usize] > 128 {
+                (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x + 1), y1.max(y + 1));
+            }
+        }
+    }
+    if x1 <= x0 || y1 <= y0 {
+        return Err("an empty picture");
+    }
+    let (dw, dh) = (x1 - x0, y1 - y0);
+    if dw < 120 || !(PS1_DISC_PHOTO.aspect.0..=PS1_DISC_PHOTO.aspect.1).contains(&(dh as f32 / dw as f32)) {
+        return Err("not a disc");
+    }
+    cut_out(png, Frame { x: x0 as i32, y: y0 as i32, w: dw, h: dh })
 }
 
 fn label_from_photo(png: &[u8], spec: &CartPhoto) -> Result<Vec<u8>, &'static str> {
@@ -1798,6 +1835,27 @@ mod tests {
         assert_eq!(label_from_photo(&cart_png(280, 312, GREY, RED, NES_PHOTO.label), &SNES_PAL_PHOTO), Err("not the cart's shape"));
         let blank = cart_png(600, 420, PAL_GREY, PAL_GREY, [0.07, 0.06, 0.93, 0.45]);
         assert_eq!(label_from_photo(&blank, &SNES_PAL_PHOTO), Err("no label on the cart"));
+    }
+
+    #[test]
+    fn a_disc_picture_is_kept_whole_cut_to_the_disc() {
+        // A disc 200 across on a clear 300 by 260 picture: cut to the disc, 200 square.
+        let (w, h) = (300u32, 260u32);
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let (dx, dy) = (x as f32 + 0.5 - 150.0, y as f32 + 0.5 - 130.0);
+                if dx * dx + dy * dy < 100.0 * 100.0 {
+                    rgba[((y * w + x) * 4) as usize..][..4].copy_from_slice(&[200, 30, 30, 255]);
+                }
+            }
+        }
+        let disc = disc_from_photo(&encode(&rgba, w, h).unwrap()).unwrap();
+        let (_, dw, dh) = decode_rgba(&disc).unwrap();
+        assert_eq!((dw, dh), (200, 200));
+        // A wide box is no disc.
+        let wide = vec![255u8; (300 * 150 * 4) as usize];
+        assert_eq!(disc_from_photo(&encode(&wide, 300, 150).unwrap()), Err("not a disc"));
     }
 
     #[test]

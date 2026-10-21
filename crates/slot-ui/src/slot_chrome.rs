@@ -31,7 +31,9 @@ const SCOOP_Y: f32 = SLIT_Y + SLIT_H;
 
 const RECESS_H: f32 = 42.0;
 /// The disc slot's slit: where the cart slot's opens, a little thinner.
+#[cfg(feature = "brick")]
 const DISC_SLIT_Y: f32 = SLIT_Y;
+#[cfg(feature = "brick")]
 const DISC_SLIT_H: f32 = 7.0;
 const RIM_W: f32 = 2.0;
 const CX: f32 = OUT_W as f32 / 2.0;
