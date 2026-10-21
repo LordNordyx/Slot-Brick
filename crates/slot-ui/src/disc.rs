@@ -22,10 +22,14 @@ const TITLE_BOX: (f32, f32, f32, f32) = (0.18, 0.12, 0.64, 0.22);
 const TITLE_LINES: usize = 2;
 const TITLE_PX: f32 = 28.0;
 const TITLE_MIN_PX: f32 = 12.0;
+/// "DISC 2": under the hub.
+const NUMBER_BOX: (f32, f32, f32, f32) = (0.3, 0.7, 0.4, 0.1);
+const NUMBER_PX: f32 = 18.0;
 
 /// The disc's face: `art` (DISC_PX square, RGBA) printed on it when given, else a disc in the
-/// game's own colour with its name across the top.
-pub fn disc_face(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
+/// game's own colour with its name across the top, and which disc it is under the hub for a
+/// game of several (`number`, from 1).
+pub fn disc_face(cart: &Cart, art: Option<Vec<u8>>, number: Option<usize>) -> CartFace {
     let n = DISC_PX;
     let title = label_text(cart);
     let print = label_colour(&title);
@@ -62,7 +66,10 @@ pub fn disc_face(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
         }
     }
     if art.is_none() {
-        print_title(&mut rgba, n, &title, print);
+        print_title(&mut rgba, n, &title, print, TITLE_BOX, TITLE_LINES, TITLE_PX);
+        if let Some(number) = number {
+            print_title(&mut rgba, n, &format!("DISC {number}"), print, NUMBER_BOX, 1, NUMBER_PX);
+        }
     }
     CartFace { rgba, w: n, h: n }
 }
@@ -82,14 +89,21 @@ pub fn disc_shadow() -> CartFace {
     CartFace { rgba, w: n, h: n }
 }
 
-fn print_title(rgba: &mut [u8], n: u32, title: &str, print: [u8; 3]) {
+fn print_title(
+    rgba: &mut [u8],
+    n: u32,
+    title: &str,
+    print: [u8; 3],
+    (bx, by, bw, bh): (f32, f32, f32, f32),
+    lines: usize,
+    px: f32,
+) {
     let Some(font) = text::label_font() else {
         return;
     };
-    let (bx, by, bw, bh) = TITLE_BOX;
     let (x0, y0) = ((bx * n as f32) as u32, (by * n as f32) as u32);
     let (w, h) = ((bw * n as f32) as u32, (bh * n as f32) as u32);
-    let layout = text::fit_box(font, title, w as f32, h as f32, TITLE_LINES, TITLE_PX, TITLE_MIN_PX);
+    let layout = text::fit_box(font, title, w as f32, h as f32, lines, px, TITLE_MIN_PX);
     let mut block = vec![0u8; (w * h * 4) as usize];
     text::draw_centred(&mut block, w, h, &layout, ink(print));
     for y in 0..h {
@@ -143,7 +157,7 @@ mod tests {
 
     #[test]
     fn a_disc_is_round_with_a_hole_in_the_middle() {
-        let face = disc_face(&placeholder(), None);
+        let face = disc_face(&placeholder(), None, Some(2));
         let c = DISC_PX / 2;
         assert_eq!(alpha(&face, 0, 0), 0, "a corner is not clear");
         assert_eq!(alpha(&face, c, c), 0, "the hole is not clear");

@@ -49,6 +49,13 @@ fresh() {
     done
     python3 -I brick/sim/make-rom.py "$1/card/Slot/Games/GB/Pocket Test.gb"
     python3 -I brick/sim/make-ps1.py "$1/card/Slot/Games/PS1/Disc Test.exe"
+    # A game of two discs, each painting its bands in its own order, in a folder of its own.
+    two="$1/card/Slot/Games/PS1/Two Disc Test"
+    mkdir -p "$two"
+    for n in 1 2; do
+        python3 -I brick/sim/make-ps1.py "$two/Two Disc Test (Disc $n).iso" "$n"
+        printf 'Two Disc Test (Disc %s).iso\n' "$n" >> "$two/Two Disc Test.m3u"
+    done
     python3 -I brick/sim/make-overlay.py "$1/card/Slot/Overlays/GB/Sim Frame.png"
     cp "$1/card/Slot/Overlays/GB/Sim Frame.png" \
         "$1/card/Slot/Overlays/GBA/Sim Frame with a name far too long to fit beside its label.png"

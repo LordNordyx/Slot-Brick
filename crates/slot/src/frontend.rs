@@ -317,6 +317,8 @@ struct Clocks {
     platform_tex: Option<TexId>,
     played: Option<String>,
     played_tex: Option<TexId>,
+    /// The fanned discs' faces, one texture each, kept for the next game's.
+    discs: Vec<Option<TexId>>,
     title_card: Option<String>,
     title_card_tex: Option<TexId>,
 }
@@ -743,6 +745,7 @@ impl Frontend {
             self.session.app_mut().set_banner_face(id, tex);
         }
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
+        sync_disc_faces(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_overlay_texts(self.session.app_mut(), compositor, &mut self.overlay_tex);
@@ -1089,6 +1092,27 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             app.set_battery_percent_face(id, w);
         }
     }
+}
+
+/// A game's discs fanned out: each one's face, built here as it is asked for.
+fn sync_disc_faces(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
+    let Some(discs) = app.disc_faces_wanted() else {
+        return;
+    };
+    let root = app.root().map(|r| r.to_path_buf());
+    if clocks.discs.len() < discs.len() {
+        clocks.discs.resize(discs.len(), None);
+    }
+    let ids = discs
+        .iter()
+        .zip(clocks.discs.iter_mut())
+        .map(|((cart, number), slot)| {
+            let art = root.as_deref().and_then(|r| crate::label_cache::label_art(r, cart));
+            let face = slot_ui::disc_face(cart, art, Some(*number));
+            upload_rgba(compositor, slot, face.w, face.h, &face.rgba)
+        })
+        .collect();
+    app.set_disc_faces(ids);
 }
 
 fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut QuickClock) {

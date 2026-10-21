@@ -121,6 +121,10 @@ pub trait RetroCore: Send {
     fn set_disc(&mut self, _at: u32) -> bool {
         false
     }
+    /// The disc the player chose to start with: put in by `settle_disc` once the game has
+    /// loaded and any saved state is in, as a state made on another disc brings that disc back.
+    fn want_disc(&mut self, _at: u32) {}
+    fn settle_disc(&mut self) {}
 }
 
 #[cfg(test)]

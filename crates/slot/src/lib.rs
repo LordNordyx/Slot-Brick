@@ -10,6 +10,7 @@ pub mod cart_faces;
 pub mod core;
 pub mod core_picker;
 pub mod crash;
+pub mod disc_picker;
 pub mod drc;
 pub mod emu;
 pub mod face_builder;

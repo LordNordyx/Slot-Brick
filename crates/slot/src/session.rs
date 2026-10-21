@@ -473,7 +473,7 @@ impl Session {
         let player = self.app.link_player();
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
-        let opened = open_core(
+        let mut opened = open_core(
             &self.root,
             core,
             serial,
@@ -481,6 +481,9 @@ impl Session {
             palette,
             player,
         );
+        if let Some(disc) = self.app.chosen_disc().filter(|_| platform == Platform::Ps1) {
+            opened.core.want_disc(disc);
+        }
         self.app.set_named_core(opened.named);
         let sav = persist::read_sav(&self.root, platform, stem);
         let ring = self.sink.ring();

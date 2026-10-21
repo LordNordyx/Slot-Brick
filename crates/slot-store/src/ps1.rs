@@ -19,6 +19,22 @@ pub fn games(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
+/// A game's discs, in order: those its .m3u lists, or the one file it is.
+pub fn discs(rom: &Path) -> Vec<PathBuf> {
+    let m3u = rom.extension().is_some_and(|e| e.eq_ignore_ascii_case("m3u"));
+    let Some(dir) = rom.parent().filter(|_| m3u) else {
+        return vec![rom.to_path_buf()];
+    };
+    let Ok(text) = std::fs::read_to_string(rom) else {
+        return vec![rom.to_path_buf()];
+    };
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| dir.join(l.replace('\\', "/")))
+        .collect()
+}
+
 /// The files a .cue (its tracks) or an .m3u (its discs) names, beside it.
 fn named_by(file: &Path) -> Vec<PathBuf> {
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
@@ -112,5 +128,9 @@ mod tests {
         put("Loose.bin", "");
         put("notes.txt", "");
         assert_eq!(names(d.path()), vec!["Crash Bandicoot.chd", "FF7/Final Fantasy VII.m3u", "Loose.bin", "Ridge Racer.cue"]);
+        let ff7 = discs(&d.path().join("FF7/Final Fantasy VII.m3u"));
+        assert_eq!(ff7.len(), 2);
+        assert!(ff7[1].ends_with("FF7/Final Fantasy VII (Disc 2).cue"));
+        assert_eq!(discs(&d.path().join("Crash Bandicoot.chd")).len(), 1);
     }
 }

@@ -415,7 +415,7 @@ pub fn label_size(cart: &Cart) -> (u32, u32) {
 
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
     if cart.platform == Platform::Ps1 {
-        return crate::disc::disc_face(cart, art);
+        return crate::disc::disc_face(cart, art, None);
     }
     let s = spec(shape_of(cart));
     let shell = shell_for(cart);

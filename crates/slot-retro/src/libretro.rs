@@ -49,8 +49,9 @@ struct Host {
     /// In fill mode, the frame column each canvas column takes, kept while the frame and
     /// canvas widths (the key) hold.
     fill_columns: ((usize, usize), Vec<usize>),
-    /// For a disc-based core: how it swaps discs.
+    /// For a disc-based core: how it swaps discs, and how it is told the disc to start on.
     disk: Option<DiskControl>,
+    initial_disc: Option<unsafe extern "C" fn(c_uint, *const c_char) -> bool>,
 }
 
 thread_local! {
@@ -223,6 +224,24 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
             })
             .is_some()
         }
+        GET_DISK_CONTROL_INTERFACE_VERSION => {
+            if data.is_null() {
+                return false;
+            }
+            *(data as *mut c_uint) = 1;
+            true
+        }
+        SET_DISK_CONTROL_EXT_INTERFACE => {
+            if data.is_null() {
+                return false;
+            }
+            let control = std::ptr::read(data as *const DiskControlExt);
+            with_host(|h| {
+                h.disk = Some(control.base);
+                h.initial_disc = control.set_initial_image;
+            })
+            .is_some()
+        }
         SET_DISK_CONTROL_INTERFACE => {
             if data.is_null() {
                 return false;
@@ -392,6 +411,26 @@ unsafe extern "C" fn video_refresh(
     });
 }
 
+/// Disc `at` (from 0) of an .m3u, as a core reads the list: its folder and the line as written,
+/// lines starting # left out. None for anything but an .m3u.
+fn m3u_disc(m3u: &Path, at: u32) -> Option<CString> {
+    if !m3u.extension().is_some_and(|e| e.eq_ignore_ascii_case("m3u")) {
+        return None;
+    }
+    let text = std::fs::read_to_string(m3u).ok()?;
+    let line = text
+        .split('\n')
+        .map(|l| l.split('\r').next().unwrap_or(""))
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .nth(at as usize)?;
+    let dir = m3u.parent()?.to_string_lossy();
+    let path = match line.starts_with('/') {
+        true => line.to_string(),
+        false => format!("{}/{line}", if dir.is_empty() { "." } else { &dir }),
+    };
+    CString::new(path).ok()
+}
+
 /// The frame stretched over the whole canvas, nearest pixel: no borders, whatever its size.
 unsafe fn fill_canvas(h: &mut Host, data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
     let (cw, ch) = (h.canvas.0 as usize, h.canvas.1 as usize);
@@ -481,6 +520,7 @@ pub struct LibretroCore {
     rom_path: Option<CString>,
     av: AvInfo,
     loaded: bool,
+    wanted_disc: Option<u32>,
     _lib: Library,
 }
 
@@ -591,6 +631,7 @@ impl LibretroCore {
             fill: false,
             fill_columns: ((0, 0), Vec::new()),
             disk: None,
+            initial_disc: None,
         });
         unsafe {
             let _a = Active::bind(&mut host);
@@ -612,6 +653,7 @@ impl LibretroCore {
                 sample_rate: 0.0,
             },
             loaded: false,
+            wanted_disc: None,
             _lib: lib,
         })
     }
@@ -682,6 +724,14 @@ impl RetroCore for LibretroCore {
             size: self.rom.len(),
             meta: ptr::null(),
         };
+        // The disc to start on, named as the core names the .m3u's discs.
+        let initial = self.wanted_disc.filter(|at| *at > 0).and_then(|at| Some((at, m3u_disc(rom, at)?)));
+        if let (Some((at, path)), Some(set)) = (&initial, self.host.initial_disc) {
+            let _a = Active::bind(&mut self.host);
+            if !unsafe { set(*at, path.as_ptr()) } {
+                eprintln!("slot-retro: the core would not start on disc {}", at + 1);
+            }
+        }
         let ok = {
             let _a = Active::bind(&mut self.host);
             unsafe { (self.api.load_game)(&info) }
@@ -830,6 +880,19 @@ impl RetroCore for LibretroCore {
         (of > 0).then_some((at.min(of - 1), of))
     }
 
+    fn want_disc(&mut self, at: u32) {
+        self.wanted_disc = Some(at);
+    }
+
+    fn settle_disc(&mut self) {
+        let Some(want) = self.wanted_disc else {
+            return;
+        };
+        if self.discs().is_some_and(|(at, of)| at != want && want < of) && !self.set_disc(want) {
+            eprintln!("slot-retro: the core would not take disc {}", want + 1);
+        }
+    }
+
     fn set_disc(&mut self, at: u32) -> bool {
         let Some(disk) = self.host.disk else {
             return false;
@@ -872,6 +935,7 @@ mod tests {
             fill: false,
             fill_columns: ((0, 0), Vec::new()),
             disk: None,
+            initial_disc: None,
         })
     }
 
@@ -1756,6 +1820,19 @@ mod tests {
         assert_eq!(px(0, 8), vec![127, 127, 127], "224 lines start 8 down");
         assert_eq!(px(128, 4), vec![0, 0, 0], "the band above the picture is not cleared");
         assert_eq!(px(128, 233), vec![0, 0, 0], "the band below the picture is not cleared");
+    }
+
+    #[test]
+    fn an_m3u_disc_is_named_as_the_core_reads_the_list() {
+        let d = std::env::temp_dir().join(format!("slot-m3u-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let m3u = d.join("FF7.m3u");
+        std::fs::write(&m3u, "#EXTM3U\r\nFF7 (Disc 1).cue\r\n\r\nFF7 (Disc 2).cue\n").unwrap();
+        let want = format!("{}/FF7 (Disc 2).cue", d.display());
+        assert_eq!(m3u_disc(&m3u, 1).unwrap().to_str().unwrap(), want);
+        assert!(m3u_disc(&m3u, 2).is_none());
+        assert!(m3u_disc(&d.join("FF7.cue"), 0).is_none());
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

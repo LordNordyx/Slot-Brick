@@ -309,6 +309,13 @@ pub struct App {
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
     core_picker: Option<CorePicker>,
+    /// A PlayStation game of several discs, fanned out to pick the one to put in.
+    disc_picker: Option<crate::disc_picker::DiscPicker>,
+    /// Each fanned disc's face, once built; asked for while `disc_faces_wanted`.
+    disc_faces: Vec<TexId>,
+    disc_faces_wanted: bool,
+    /// The disc picked for the game going in (from 0), and its face, which goes in with it.
+    chosen_disc: Option<(u32, Option<TexId>)>,
     /// START on a cart: its plastic and shape.
     cart_menu: Option<CartMenu>,
     /// The cart's plastic while the core picker is open: Up/Down change it there.
@@ -519,6 +526,10 @@ impl App {
             power_menu: None,
             power_menu_faces: Vec::new(),
             core_picker: None,
+            disc_picker: None,
+            disc_faces: Vec::new(),
+            disc_faces_wanted: false,
+            chosen_disc: None,
             cart_menu: None,
             picker_look: None,
             cart_menu_faces: None,
@@ -1981,6 +1992,7 @@ impl App {
                     }
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
+                _ if self.disc_picker.is_some() => self.disc_picker_input(action),
                 Action::GbaDown(Btn::Up) => self.jump_letter(-1),
                 Action::GbaDown(Btn::Down) => self.jump_letter(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
@@ -1991,10 +2003,10 @@ impl App {
                 Action::GbaDown(Btn::A) => self.play_held = Some(now),
                 Action::GbaUp(Btn::A) => {
                     if self.play_held.take().is_some() {
-                        self.insert(!self.state.eject_save);
+                        self.play(!self.state.eject_save);
                     }
                 }
-                Action::Insert => self.insert(!self.state.eject_save),
+                Action::Insert => self.play(!self.state.eject_save),
                 Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
                 Action::GbaDown(Btn::Y) => self.toggle_favorite(),
@@ -2485,6 +2497,13 @@ impl App {
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
         self.turn_slot(dt);
+        let now = self.now();
+        if let Some(picker) = &mut self.disc_picker {
+            picker.update(dt);
+            if picker.finished(now) {
+                self.disc_picker = None;
+            }
+        }
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
             self.shelf_named = Some(self.now());
@@ -3057,6 +3076,15 @@ impl App {
             Phase::Shelf => {
                 draw_backdrop(self.wallpaper, out);
                 match (self.core_picker_shown(), self.selected_stem()) {
+                    // A game's discs fanned out: the rest of the shelf steps back behind them.
+                    _ if self.disc_picker.is_some() => {
+                        let picker = self.disc_picker.as_ref().expect("checked above");
+                        let open = ease(picker.openness(self.now()));
+                        self.shelf().draw_row(Some(&picker.stem), 0.0, CORE_PICKER_RECEDE * open, 1.0, out);
+                        let fallback = self.shelf().find(&picker.stem).and_then(|(_, f)| f);
+                        picker.draw(&self.disc_faces, fallback, self.now(), out);
+                        draw_empty_slot(out);
+                    }
                     (Some(picker), Some(stem)) => {
                         let open = ease(picker.openness(self.now()));
                         let dim = 1.0 + (CORE_PICKER_DIM - 1.0) * open;
@@ -3180,6 +3208,8 @@ impl App {
         let Some((cart, face)) = self.shelf().find(stem) else {
             return;
         };
+        // A disc picked from a game's several goes in wearing its own face.
+        let face = self.chosen_disc.and_then(|(_, f)| f).filter(|_| cart.platform == Platform::Ps1).or(face);
         let alpha = self.alert_alpha();
         let (rest, scale) = self.shelf().selected_at();
         SlotChrome {
@@ -3561,6 +3591,95 @@ impl App {
         shelf.carts.get(shelf.index).map(|c| c.rom.as_path())
     }
 
+    /// A game of several discs fans them out to pick one; any other goes straight in.
+    fn play(&mut self, clean: bool) {
+        self.chosen_disc = None;
+        let discs = self
+            .shelf()
+            .carts
+            .get(self.shelf().index)
+            .filter(|c| c.platform == Platform::Ps1)
+            .map(|c| (c.stem.clone(), slot_store::ps1::discs(&c.rom)));
+        match discs {
+            Some((stem, discs)) if discs.len() > 1 && self.on_shelf() => {
+                self.play_held = None;
+                let last = self
+                    .root
+                    .as_ref()
+                    .and_then(|r| slot_store::ini::value(r, crate::disc_picker::DISCS_FILE, &stem))
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .map_or(0, |n| n.saturating_sub(1));
+                self.disc_picker = Some(crate::disc_picker::DiscPicker::open(stem, discs, last, clean, self.now()));
+                self.disc_faces.clear();
+                self.disc_faces_wanted = true;
+            }
+            _ => self.insert(clean),
+        }
+    }
+
+    fn disc_picker_input(&mut self, action: Action) {
+        let now = self.now();
+        let Some(picker) = &mut self.disc_picker else {
+            return;
+        };
+        if picker.closing() {
+            return;
+        }
+        match action {
+            Action::ShelfLeft | Action::GbaDown(Btn::Left) if !picker.step(-1) => self.refuse(),
+            Action::ShelfRight | Action::GbaDown(Btn::Right) if !picker.step(1) => self.refuse(),
+            Action::GbaDown(Btn::A) | Action::Insert => {
+                let (at, clean) = (picker.selected(), picker.clean);
+                if let Some(root) = &self.root {
+                    let n = (at + 1).to_string();
+                    if let Err(e) = slot_store::ini::write(root, crate::disc_picker::DISCS_FILE, &picker.stem, &n) {
+                        eprintln!("slot: discs: {e}");
+                    }
+                }
+                self.disc_picker = None;
+                self.chosen_disc = Some((at as u32, self.disc_faces.get(at).copied()));
+                self.insert(clean);
+            }
+            Action::GbaDown(Btn::B) => picker.close(now),
+            _ => {}
+        }
+    }
+
+    /// The fanned discs whose faces are to be built: each a copy of the game's cart, as that
+    /// disc (from 1), wearing its own picture if it has one, else the game's.
+    pub fn disc_faces_wanted(&mut self) -> Option<Vec<(Cart, usize)>> {
+        if !std::mem::take(&mut self.disc_faces_wanted) {
+            return None;
+        }
+        let picker = self.disc_picker.as_ref()?;
+        let game = self.shelf().carts.iter().find(|c| c.stem == picker.stem)?.clone();
+        let root = self.root.clone();
+        Some(
+            picker
+                .discs
+                .iter()
+                .enumerate()
+                .map(|(i, disc)| {
+                    let mut cart = game.clone();
+                    let stem = disc.file_stem().and_then(|s| s.to_str()).unwrap_or(&game.stem).to_string();
+                    let own = root.as_ref().and_then(|r| slot_store::labels_of(r, Platform::Ps1, &stem).0);
+                    cart.label = own.or(game.label.clone());
+                    cart.stem = stem;
+                    (cart, i + 1)
+                })
+                .collect(),
+        )
+    }
+
+    pub fn set_disc_faces(&mut self, faces: Vec<TexId>) {
+        self.disc_faces = faces;
+    }
+
+    /// The disc picked to go in, from 0.
+    pub fn chosen_disc(&self) -> Option<u32> {
+        self.chosen_disc.map(|(at, _)| at)
+    }
+
     fn insert(&mut self, clean: bool) {
         if !self.on_shelf() {
             return;
@@ -3598,7 +3717,7 @@ impl App {
             return;
         }
         if self.now().saturating_sub(at) >= PLAY_HOLD_MS {
-            self.insert(true);
+            self.play(true);
         }
     }
 

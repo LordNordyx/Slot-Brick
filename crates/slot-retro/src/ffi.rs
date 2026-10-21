@@ -9,6 +9,8 @@ pub const API_VERSION: c_uint = 1;
 pub const GET_CAN_DUPE: c_uint = 3;
 pub const GET_SYSTEM_DIRECTORY: c_uint = 9;
 pub const SET_DISK_CONTROL_INTERFACE: c_uint = 13;
+pub const GET_DISK_CONTROL_INTERFACE_VERSION: c_uint = 57;
+pub const SET_DISK_CONTROL_EXT_INTERFACE: c_uint = 58;
 pub const SET_PIXEL_FORMAT: c_uint = 10;
 pub const GET_VARIABLE: c_uint = 15;
 pub const SET_VARIABLES: c_uint = 16;
@@ -77,6 +79,16 @@ pub struct DiskControl {
     pub get_num_images: Option<unsafe extern "C" fn() -> c_uint>,
     pub replace_image_index: Option<unsafe extern "C" fn(c_uint, *const GameInfo) -> bool>,
     pub add_image_index: Option<unsafe extern "C" fn() -> bool>,
+}
+
+/// retro_disk_control_ext_callback: the same, and the disc to start on, set before the game loads.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct DiskControlExt {
+    pub base: DiskControl,
+    pub set_initial_image: Option<unsafe extern "C" fn(c_uint, *const c_char) -> bool>,
+    pub get_image_path: Option<unsafe extern "C" fn(c_uint, *mut c_char, usize) -> bool>,
+    pub get_image_label: Option<unsafe extern "C" fn(c_uint, *mut c_char, usize) -> bool>,
 }
 
 #[repr(C)]

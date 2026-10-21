@@ -554,6 +554,7 @@ impl Worker {
                 self.shared.resume_refused.store(true, Ordering::Release);
             }
         }
+        core.settle_disc();
         let av = core.av_info();
         let device_hz = match ring.sample_rate() {
             0 => av.sample_rate,
