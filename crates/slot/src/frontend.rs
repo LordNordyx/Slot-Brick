@@ -317,6 +317,8 @@ struct Clocks {
     platform_tex: Option<TexId>,
     played: Option<String>,
     played_tex: Option<TexId>,
+    title_card: Option<String>,
+    title_card_tex: Option<TexId>,
 }
 
 #[derive(Default)]
@@ -1061,6 +1063,15 @@ fn sync_clock(app: &mut App, compositor: &mut Compositor, clocks: &mut Clocks) {
             (upload(compositor, &mut clocks.played_tex, face), w)
         });
         app.set_played_face(face);
+    }
+    let title_card = app.title_card_text();
+    if title_card != clocks.title_card {
+        clocks.title_card = title_card.clone();
+        let face = title_card.map(|text| slot_ui::title_card_face(&text)).filter(|f| f.w > 0).map(|face| {
+            let (w, h) = (face.w, face.h);
+            (upload(compositor, &mut clocks.title_card_tex, face), w, h)
+        });
+        app.set_title_card_face(face);
     }
     let battery_shown = app
         .battery()

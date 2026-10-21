@@ -121,15 +121,14 @@ pub fn arrange(carts: &mut Vec<Cart>, sort: LibrarySort, favorites_only: bool, l
     }
 }
 
-/// Play time as the shelf prints it: in minutes ("12 MIN", "200 MIN"), or with `hours`, in
-/// hours and minutes ("12 MIN", "3 H 20 MIN", "3 H"). Nothing under a minute.
+/// Play time as the shelf prints it: in minutes ("12M", "200M"), or with `hours`, in hours and
+/// minutes ("12M", "3H20M", "3H05M"). Nothing under a minute.
 pub fn played_text(secs: u64, hours: bool) -> Option<String> {
     let mins = secs / 60;
     match (mins, hours) {
         (0, _) => None,
-        (m, false) | (m @ 0..=59, true) => Some(format!("{m} MIN")),
-        (m, true) if m % 60 == 0 => Some(format!("{} H", m / 60)),
-        (m, true) => Some(format!("{} H {} MIN", m / 60, m % 60)),
+        (m, false) | (m @ 0..=59, true) => Some(format!("{m}M")),
+        (m, true) => Some(format!("{}H{:02}M", m / 60, m % 60)),
     }
 }
 
@@ -191,11 +190,12 @@ mod tests {
     fn play_time_reads_in_minutes_or_hours_and_minutes() {
         for hours in [false, true] {
             assert_eq!(played_text(59, hours), None);
-            assert_eq!(played_text(12 * 60 + 5, hours).as_deref(), Some("12 MIN"));
+            assert_eq!(played_text(12 * 60 + 5, hours).as_deref(), Some("12M"));
         }
-        assert_eq!(played_text(3 * 3600 + 20 * 60, false).as_deref(), Some("200 MIN"));
-        assert_eq!(played_text(3 * 3600 + 20 * 60, true).as_deref(), Some("3 H 20 MIN"));
-        assert_eq!(played_text(3 * 3600, true).as_deref(), Some("3 H"));
+        assert_eq!(played_text(3 * 3600 + 20 * 60, false).as_deref(), Some("200M"));
+        assert_eq!(played_text(3 * 3600 + 20 * 60, true).as_deref(), Some("3H20M"));
+        assert_eq!(played_text(3 * 3600 + 5 * 60, true).as_deref(), Some("3H05M"));
+        assert_eq!(played_text(3 * 3600, true).as_deref(), Some("3H00M"));
     }
 
     #[test]

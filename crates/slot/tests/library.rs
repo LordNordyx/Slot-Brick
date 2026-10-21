@@ -65,14 +65,25 @@ fn y_stars_a_favorite_and_favorites_only_shows_just_those() {
 #[test]
 fn the_shelf_prints_how_long_the_selected_game_was_played() {
     let (_d, mut a) = library_app(PLAYED, SlotState { library_sort: LibrarySort::MostPlayed, ..SlotState::default() });
-    assert_eq!(a.played_text().as_deref(), Some("150 MIN"));
+    assert_eq!(a.played_text().as_deref(), Some("150M"));
     a.apply(Action::GbaDown(Btn::Right));
     a.apply(Action::GbaUp(Btn::Right));
     assert_eq!(a.selected_stem(), Some("Gamma"));
-    assert_eq!(a.played_text().as_deref(), Some("66 MIN"));
+    assert_eq!(a.played_text().as_deref(), Some("66M"));
     a.apply(Action::GbaDown(Btn::Right));
     a.apply(Action::GbaUp(Btn::Right));
     assert_eq!(a.played_text(), None, "Alpha was never played");
     let (_d2, b) = library_app(PLAYED, SlotState { library_sort: LibrarySort::MostPlayed, play_time_hours: true, ..SlotState::default() });
-    assert_eq!(b.played_text().as_deref(), Some("2 H 30 MIN"));
+    assert_eq!(b.played_text().as_deref(), Some("2H30M"));
+}
+
+#[test]
+fn the_title_card_names_the_selected_game_unless_turned_off() {
+    let (_d, mut a) = library_app("", SlotState::default());
+    assert_eq!(a.title_card_text().as_deref(), Some("Alpha"));
+    a.apply(Action::GbaDown(Btn::Right));
+    a.apply(Action::GbaUp(Btn::Right));
+    assert_eq!(a.title_card_text().as_deref(), Some("Beta"));
+    let (_d2, b) = library_app("", SlotState { title_card: false, ..SlotState::default() });
+    assert_eq!(b.title_card_text(), None);
 }

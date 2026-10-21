@@ -384,6 +384,12 @@ impl Shelf {
         self.scroll += self.vel * dt;
     }
 
+    /// Where the selected cart's foot rests, when the shelf is still.
+    pub fn selected_foot(&self) -> Option<f32> {
+        let cart = self.carts.get(self.index)?;
+        Some(foot_y(cart_box(cart.platform).1 as f32))
+    }
+
     pub fn draw(&self, shake: f32, out: &mut Vec<Draw>) {
         self.draw_row(None, shake, 0.0, 1.0, out);
         draw_empty_slot(out);

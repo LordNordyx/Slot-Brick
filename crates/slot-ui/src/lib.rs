@@ -27,6 +27,7 @@ mod shell;
 mod silhouette;
 mod slot_chrome;
 mod sticker;
+mod title_card;
 pub mod text;
 mod toast;
 
@@ -102,6 +103,7 @@ pub use sticker::{
     draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,
     HOME, ORIGIN, PORT_VERSION, STICKER_H, STICKER_W, TITLE,
 };
+pub use title_card::{draw_title_card, title_card_face};
 pub use toast::{toast_box, toast_face, toast_rect, Toast};
 
 #[cfg(feature = "brick")]
