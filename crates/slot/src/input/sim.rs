@@ -7,6 +7,7 @@ pub struct SimInput {
     shared: Arc<Shared>,
     /// A Brick Pro's left stick, through the same D-pad translation as on the device.
     stick: Option<super::brick::StickPad>,
+    pending: Vec<RawEvent>,
     held: Vec<Btn>,
     exit_since: Option<Millis>,
     exit: bool,
@@ -17,6 +18,7 @@ impl SimInput {
         Self {
             shared,
             stick: (slot_power::model() == slot_power::Model::BrickPro).then(super::brick::StickPad::default),
+            pending: Vec::new(),
             held: Vec::new(),
             exit_since: None,
             exit: false,
@@ -28,8 +30,22 @@ impl SimInput {
 }
 
 impl InputSource for SimInput {
+    fn stick(&self) -> Option<(i16, i16)> {
+        self.stick.map(|s| s.position())
+    }
+
+    fn set_stick_to_game(&mut self, on: bool) {
+        if let Some(stick) = &mut self.stick {
+            let before = stick.bits;
+            if let Some(bits) = stick.hand_to_game(on) {
+                self.pending.extend(super::brick::hat_events(before, bits));
+            }
+        }
+    }
+
     fn poll(&mut self, now: Millis) -> Vec<RawEvent> {
-        let mut events = self.shared.take_events();
+        let mut events = std::mem::take(&mut self.pending);
+        events.extend(self.shared.take_events());
         for (axis, value) in self.shared.take_axes() {
             if let Some(stick) = &mut self.stick {
                 let before = stick.bits;

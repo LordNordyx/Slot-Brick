@@ -170,6 +170,17 @@ impl Session {
         self.sync_pad();
     }
 
+    /// A PlayStation game takes a Brick Pro's stick as its DualShock's left stick.
+    pub fn stick_to_game(&self) -> bool {
+        self.has_core() && self.app.platform() == Platform::Ps1 && self.app.game_visible()
+    }
+
+    pub fn set_stick(&mut self, at: Option<(i16, i16)>) {
+        if let (Some(emu), true) = (&self.emu, self.stick_to_game()) {
+            emu.set_stick(at.unwrap_or_default());
+        }
+    }
+
     fn sync_pad(&mut self) {
         for btn in self.app.taken_buttons() {
             self.pad.apply(Action::GbaUp(*btn));

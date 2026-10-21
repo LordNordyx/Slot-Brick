@@ -124,6 +124,8 @@ pub trait RetroCore: Send {
     /// The disc the player chose to start with: put in by `settle_disc` once the game has
     /// loaded and any saved state is in, as a state made on another disc brings that disc back.
     fn want_disc(&mut self, _at: u32) {}
+    /// The left analog stick, -32768..32767 across then down.
+    fn set_stick(&mut self, _x: i16, _y: i16) {}
     fn settle_disc(&mut self) {}
 }
 

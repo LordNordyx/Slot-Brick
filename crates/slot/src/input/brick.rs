@@ -55,6 +55,8 @@ pub struct StickPad {
     x: i16,
     y: i16,
     pub bits: u8,
+    /// Handed to the game as a stick: it presses nothing.
+    pub to_game: bool,
 }
 
 impl StickPad {
@@ -68,11 +70,33 @@ impl StickPad {
             1 => self.y = value,
             _ => return None,
         }
+        self.settle()
+    }
+
+    pub fn position(&self) -> (i16, i16) {
+        (self.x, self.y)
+    }
+
+    /// Hands the stick to the game or takes it back. The D-pad presses it had in hand, or now
+    /// makes, are the new bits.
+    pub fn hand_to_game(&mut self, on: bool) -> Option<u8> {
+        if self.to_game == on {
+            return None;
+        }
+        self.to_game = on;
+        self.settle()
+    }
+
+    fn settle(&mut self) -> Option<u8> {
         let held = |bit: u8, along: i16, pressed: bool| {
             let past = if self.bits & bit != 0 { Self::RELEASE } else { Self::PRESS };
             if pressed { along > past } else { along < -past }
         };
         let mut bits = 0;
+        if self.to_game {
+            self.bits = 0;
+            return Some(0);
+        }
         if held(1, self.y, false) { bits |= 1; }
         if held(2, self.x, true) { bits |= 2; }
         if held(4, self.y, true) { bits |= 4; }
@@ -107,6 +131,8 @@ pub struct BrickInput {
     hat: u8,
     /// The Brick Pro's left stick; None on the Brick, which has none.
     stick: Option<StickPad>,
+    /// D-pad presses let go of (or made) as the stick changes hands, for the next poll.
+    pending: Vec<RawEvent>,
     held: u16,
     triggers: [bool; 2],
     exit_since: Option<Millis>,
@@ -183,6 +209,7 @@ impl BrickInput {
                 power: DeviceInput::open(root),
                 hat: 0,
                 stick: (slot_power::model() == slot_power::Model::BrickPro).then(StickPad::default),
+                pending: Vec::new(),
                 held: 0,
                 triggers: [false; 2],
                 exit_since: None,
@@ -197,8 +224,22 @@ impl BrickInput {
 }
 
 impl InputSource for BrickInput {
+    fn stick(&self) -> Option<(i16, i16)> {
+        self.stick.map(|s| s.position())
+    }
+
+    fn set_stick_to_game(&mut self, on: bool) {
+        if let Some(stick) = &mut self.stick {
+            let before = self.hat | stick.bits;
+            if let Some(bits) = stick.hand_to_game(on) {
+                self.pending.extend(hat_events(before, self.hat | bits));
+            }
+        }
+    }
+
     fn poll(&mut self, now: Millis) -> Vec<RawEvent> {
         let mut out = self.power.poll(now);
+        out.append(&mut self.pending);
         let mut event = Event([0; 56]);
         while unsafe { (self.poll)(&mut event) } == 1 {
             let kind = u32::from_ne_bytes(event.0[0..4].try_into().unwrap());
@@ -292,6 +333,17 @@ impl Drop for BrickInput {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stick_handed_to_the_game_lets_go_of_the_d_pad_and_presses_nothing() {
+        let mut s = StickPad::default();
+        assert_eq!(s.axis(0, 30000), Some(2));
+        assert_eq!(s.hand_to_game(true), Some(0), "the right press was not let go");
+        assert_eq!(s.axis(1, -30000), Some(0));
+        assert_eq!(s.position(), (30000, -30000));
+        assert_eq!(s.hand_to_game(true), None);
+        assert_eq!(s.hand_to_game(false), Some(1 | 2), "back as the D-pad, where it stands");
+    }
     #[test]
     fn the_stick_presses_past_half_way_and_lets_go_under_a_quarter() {
         let mut s = StickPad::default();

@@ -29,6 +29,10 @@ struct Host {
     format: PixelFormat,
     audio: Vec<i16>,
     inputs: [u16; 2],
+    /// Player 1's left analog stick.
+    stick: (i16, i16),
+    /// The pad plugged into port 1: a joypad, unless the core is told otherwise.
+    device: c_uint,
     system_dir: CString,
     save_dir: CString,
     rumble: Rumble,
@@ -496,7 +500,15 @@ unsafe extern "C" fn audio_batch(data: *const i16, frames: usize) -> usize {
 
 unsafe extern "C" fn input_poll() {}
 
-unsafe extern "C" fn input_state(port: c_uint, device: c_uint, _index: c_uint, id: c_uint) -> i16 {
+unsafe extern "C" fn input_state(port: c_uint, device: c_uint, index: c_uint, id: c_uint) -> i16 {
+    if device == DEVICE_ANALOG {
+        return with_host(|h| match (port, index, id) {
+            (0, ANALOG_LEFT, ANALOG_X) => h.stick.0,
+            (0, ANALOG_LEFT, ANALOG_Y) => h.stick.1,
+            _ => 0,
+        })
+        .unwrap_or(0);
+    }
     if device != DEVICE_JOYPAD {
         return 0;
     }
@@ -561,6 +573,11 @@ impl LibretroCore {
         self.host.video = vec![0; (w * h * 4) as usize];
     }
 
+    /// The pad in port 1, as the core numbers its kinds (a PlayStation's DualShock, say).
+    pub fn set_device(&mut self, device: c_uint) {
+        self.host.device = device;
+    }
+
     /// Every frame stretched over the whole canvas (see `Host::fill`).
     pub fn set_fill(&mut self, fill: bool) {
         self.host.fill = fill;
@@ -616,6 +633,8 @@ impl LibretroCore {
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
+            stick: (0, 0),
+            device: DEVICE_JOYPAD,
             system_dir: cdir(system_dir)?,
             save_dir: cdir(save_dir)?,
             rumble: Rumble::default(),
@@ -748,7 +767,7 @@ impl RetroCore for LibretroCore {
             fps: av.timing.fps,
             sample_rate: av.timing.sample_rate,
         };
-        unsafe { (self.api.set_controller_port_device)(0, DEVICE_JOYPAD) };
+        unsafe { (self.api.set_controller_port_device)(0, self.host.device) };
         Ok(())
     }
 
@@ -880,6 +899,10 @@ impl RetroCore for LibretroCore {
         (of > 0).then_some((at.min(of - 1), of))
     }
 
+    fn set_stick(&mut self, x: i16, y: i16) {
+        self.host.stick = (x, y);
+    }
+
     fn want_disc(&mut self, at: u32) {
         self.wanted_disc = Some(at);
     }
@@ -920,6 +943,8 @@ mod tests {
             format: PixelFormat::Xrgb8888,
             audio: Vec::new(),
             inputs: [0; 2],
+            stick: (0, 0),
+            device: DEVICE_JOYPAD,
             system_dir: CString::new(".").unwrap(),
             save_dir: CString::new(".").unwrap(),
             rumble: Rumble::default(),
@@ -1820,6 +1845,17 @@ mod tests {
         assert_eq!(px(0, 8), vec![127, 127, 127], "224 lines start 8 down");
         assert_eq!(px(128, 4), vec![0, 0, 0], "the band above the picture is not cleared");
         assert_eq!(px(128, 233), vec![0, 0, 0], "the band below the picture is not cleared");
+    }
+
+    #[test]
+    fn the_left_stick_is_read_as_player_ones_analog_stick() {
+        let mut host = host_with(HashMap::new(), false);
+        host.stick = (1200, -3400);
+        let _active = Active::bind(&mut host);
+        let read = |port, index, id| unsafe { input_state(port, DEVICE_ANALOG, index, id) };
+        assert_eq!((read(0, ANALOG_LEFT, ANALOG_X), read(0, ANALOG_LEFT, ANALOG_Y)), (1200, -3400));
+        assert_eq!(read(1, ANALOG_LEFT, ANALOG_X), 0, "player 2 has no stick");
+        assert_eq!(read(0, 1, ANALOG_X), 0, "there is no right stick");
     }
 
     #[test]

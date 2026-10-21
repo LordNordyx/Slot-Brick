@@ -855,7 +855,9 @@ impl Frontend {
 
     pub fn advance(&mut self, input: &mut dyn InputSource) {
         let now = self.now();
+        input.set_stick_to_game(self.session.stick_to_game());
         let mut events = input.poll(now);
+        self.session.set_stick(input.stick());
         if !events.is_empty() {
             self.last_input=Instant::now();
             #[cfg(feature = "brick")]

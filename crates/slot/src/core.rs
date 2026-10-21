@@ -109,6 +109,11 @@ fn open_named(
                     opened.set_canvas(w, h);
                 }
                 opened.set_fill(core == Core::PcsxRearmed);
+                // A DualShock: what DualShock games want, what plain ones run on as well, and
+                // what carries rumble.
+                if core == Core::PcsxRearmed {
+                    opened.set_device(slot_retro::DEVICE_DUALSHOCK);
+                }
                 apply_core_options(
                     &mut opened,
                     core,
