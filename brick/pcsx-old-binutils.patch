@@ -1,0 +1,18 @@
+diff --git a/libpcsxcore/new_dynarec/linkage_arm64.S b/libpcsxcore/new_dynarec/linkage_arm64.S
+index 2142bd6..a3f4ea0 100644
+--- a/libpcsxcore/new_dynarec/linkage_arm64.S
++++ b/libpcsxcore/new_dynarec/linkage_arm64.S
+@@ -126,11 +126,11 @@ FUNCTION(cc_interrupt):
+ 	ldr	w22, [rFP, #LO_pcaddr]
+ 	add	rCC, w0, rCC
+ 	str	rCC, [rFP, #LO_cycle]		/* PCSX cycles */
+-	mov	x21, lr
++	mov	x21, x30
+ 1:
+ 	add	x0, rFP, #LO_reg_cop0           /* CP0 */
+ 	bl	gen_interupt
+-	mov	lr, x21
++	mov	x30, x21
+ 	ldr	rCC, [rFP, #LO_cycle]
+ 	ldr	w0, [rFP, #LO_pcaddr]
+ 	ldr	w1, [rFP, #LO_next_interupt]

@@ -50,6 +50,7 @@ enum Backing {
     Gb(GbShell),
     Nes(NesShell),
     Snes(SnesShell),
+    Disc,
 }
 
 fn backing(cart: &Cart) -> Backing {
@@ -57,6 +58,7 @@ fn backing(cart: &Cart) -> Backing {
         slot_store::Platform::Nes if nes_famicom_of(cart) => Backing::Nes(NesShell::Famicom),
         slot_store::Platform::Nes => Backing::Nes(NesShell::Nes),
         slot_store::Platform::Snes => Backing::Snes(snes_shell_of(cart).unwrap_or(SnesShell::Us)),
+        slot_store::Platform::Ps1 => Backing::Disc,
         _ => gb_shell_of(cart).map_or(Backing::Gba, Backing::Gb),
     }
 }
@@ -73,6 +75,7 @@ pub struct Shelf {
     famicom_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
     snes_pal_shadow: Option<TexId>,
+    disc_shadow: Option<TexId>,
     /// Each cart's shadow shape: reading it needs the ROM, so it is read once, not per frame.
     shells: Vec<Backing>,
     /// Which carts are favorites, starred on the shelf, and the star.
@@ -100,6 +103,7 @@ impl Shelf {
             famicom_shadow: None,
             snes_shadow: None,
             snes_pal_shadow: None,
+            disc_shadow: None,
             ride: 0.0,
             vel: 0.0,
             held: None,
@@ -164,6 +168,10 @@ impl Shelf {
             SnesShell::Us => self.snes_shadow = Some(face),
             SnesShell::Pal => self.snes_pal_shadow = Some(face),
         }
+    }
+
+    pub fn set_disc_shadow(&mut self, face: TexId) {
+        self.disc_shadow = Some(face);
     }
 
     pub fn set_faces(&mut self, faces: Vec<TexId>) {
@@ -435,6 +443,7 @@ impl Shelf {
                     Some(Backing::Nes(NesShell::Famicom)) => self.famicom_shadow,
                     Some(Backing::Snes(SnesShell::Us)) => self.snes_shadow,
                     Some(Backing::Snes(SnesShell::Pal)) => self.snes_pal_shadow,
+                    Some(Backing::Disc) => self.disc_shadow,
                     Some(Backing::Gba) | None => self.shadow,
                 };
                 if let Some(tex) = backing {
@@ -473,12 +482,17 @@ impl Shelf {
                     }
                 }
             });
-            // A favorite's star sits on its top right corner, a little over the edge.
+            // A favorite's star sits on its top right corner, a little over the edge; on a
+            // disc, on its rim there.
             if let (true, Some((tex, sw, sh))) = (self.favorite(i), self.star) {
                 let (sw, sh) = (sw as f32 * scale, sh as f32 * scale);
+                let (cx, cy) = match self.shells.get(i) {
+                    Some(Backing::Disc) => (x + w * 0.854, y + h * 0.146),
+                    _ => (x + w - sw * 0.25, y + sh * 0.25),
+                };
                 out.push(Draw::Tex {
-                    x: (x + w - sw * 0.75).round(),
-                    y: (y - sh * 0.25).round(),
+                    x: (cx - sw / 2.0).round(),
+                    y: (cy - sh / 2.0).round(),
                     w: sw,
                     h: sh,
                     tex,

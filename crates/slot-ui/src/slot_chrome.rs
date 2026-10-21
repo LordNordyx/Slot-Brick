@@ -30,6 +30,11 @@ const SCOOP_D: f32 = RECESS_H - (SCOOP_Y - BAY_Y);
 const SCOOP_Y: f32 = SLIT_Y + SLIT_H;
 
 const RECESS_H: f32 = 42.0;
+/// The disc slot's slit: where the cart slot's opens, a little thinner.
+#[cfg(feature = "brick")]
+const DISC_SLIT_Y: f32 = SLIT_Y;
+#[cfg(feature = "brick")]
+const DISC_SLIT_H: f32 = 7.0;
 const RIM_W: f32 = 2.0;
 const CX: f32 = OUT_W as f32 / 2.0;
 const SCOOP_FLAT: f32 = 4.0;
@@ -76,6 +81,9 @@ const SEATED_Y: f32 = BAY_Y + 4.0;
 fn catch_at(foot: f32, seated_foot: f32) -> f32 {
     (LIP_Y - foot) / (seated_foot - foot)
 }
+
+/// How many times a disc turns on its way in.
+const DISC_TURNS: f32 = 3.0;
 
 const CATCH_IN: f32 = 0.42;
 const CATCH_OUT: f32 = 0.62;
@@ -128,6 +136,16 @@ impl SlotChrome<'_> {
         let y = foot0 + (seated_foot - foot0) * travel - ch;
         let cart_alpha = if seat >= 1.0 { chrome } else { 1.0 };
         out.push(match self.face {
+            // A disc spins up as it goes in, and down as it comes out.
+            Some(tex) if self.cart.platform == slot_store::Platform::Ps1 => Draw::Turned {
+                x,
+                y,
+                w: cw,
+                h: ch,
+                tex,
+                alpha: cart_alpha,
+                turn: DISC_TURNS * std::f32::consts::TAU * seat * seat,
+            },
             Some(tex) => Draw::Tex {
                 x,
                 y,
@@ -200,12 +218,50 @@ fn band(x: f32, y: f32, w: f32, h: f32, c: [f32; 4], alpha: f32) -> Draw {
 // between these layers to preserve insertion and ejection occlusion.
 #[cfg(feature = "brick")]
 static ART: OnceLock<(TexId, TexId)> = OnceLock::new();
+/// The disc slot's two layers: a slot-loading drive's slit, where the cartridge slot's scoop was.
+#[cfg(feature = "brick")]
+static DISC_ART: OnceLock<(TexId, TexId)> = OnceLock::new();
+/// How far the slot has turned into a disc slot: 0 a cartridge slot, 1 a disc slot.
+static DISC_MIX: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn set_disc_slot(mix: f32) {
+    DISC_MIX.store(mix.clamp(0.0, 1.0).to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+fn disc_mix() -> f32 {
+    f32::from_bits(DISC_MIX.load(std::sync::atomic::Ordering::Relaxed))
+}
+
 #[cfg(feature = "brick")]
 pub fn upload_slot_art(mut upload: impl FnMut(u32,u32,&[u8])->TexId) {
     if ART.get().is_some() {return;}
     if let (Some(back),Some(front))=(slot_art_face(false),slot_art_face(true)) {
         let _=ART.set((upload(back.w,back.h,&back.rgba),upload(front.w,front.h,&front.rgba)));
     }
+    if let (Some(back),Some(front))=(disc_slot_face(false),disc_slot_face(true)) {
+        let _=DISC_ART.set((upload(back.w,back.h,&back.rgba),upload(front.w,front.h,&front.rgba)));
+    }
+}
+
+/// The disc slot: a flat face with a thin slit the width of the cart slot's mouth, a shadow
+/// inside it, and a lip of light under it. Drawn over the cartridge slot as it fades in.
+#[cfg(feature = "brick")]
+fn disc_slot_face(front: bool) -> Option<crate::cart::CartFace> {
+    let hex=|c: [u8;3]|format!("#{:02x}{:02x}{:02x}",c[0],c[1],c[2]);
+    let t=theme();
+    let (housing,opening,edge)=(hex(t.housing),hex(t.opening),hex(t.edge));
+    let local=|y:f32|y-BAND_Y;
+    let (top,h)=(local(DISC_SLIT_Y),DISC_SLIT_H);
+    let r=h/2.0;
+    let body=if front {
+        format!("<path fill-rule='evenodd' fill='{housing}' d='M0,0 H{OUT_W} V{MOUTH_H} H0 Z M{},{top} H{} A{r},{r} 0 0 1 {},{} H{} A{r},{r} 0 0 1 {},{top} Z'/>\
+            <rect x='{}' y='{}' width='{}' height='1' fill='{edge}'/>",
+            MOUTH_X+r,MOUTH_X+MOUTH_W-r,MOUTH_X+MOUTH_W-r,top+h,MOUTH_X+r,MOUTH_X+r,
+            MOUTH_X+r,top+h,MOUTH_W-2.0*r)
+    } else {
+        format!("<rect x='{MOUTH_X}' y='{top}' width='{MOUTH_W}' height='{h}' fill='{opening}'/><rect x='{MOUTH_X}' y='{top}' width='{MOUTH_W}' height='{}' fill='url(#shade)'/>",h/2.0)
+    };
+    raster(&body)
 }
 #[cfg(feature = "brick")]
 pub fn slot_art_face(front: bool) -> Option<crate::cart::CartFace> {
@@ -235,6 +291,13 @@ pub fn slot_art_face(front: bool) -> Option<crate::cart::CartFace> {
         let _=write!(body,"<path fill='{opening}' d='M{MOUTH_X},{} H{} V{} H{far} {} H{MOUTH_X} Z'/>",local(SLIT_Y),MOUTH_X+MOUTH_W,local(SCOOP_Y),curve(0.0,true));
         let _=write!(body,"<rect x='{MOUTH_X}' y='{}' width='{MOUTH_W}' height='3' fill='url(#shade)'/>",local(SLIT_Y));
     }
+    raster(&body)
+}
+
+/// Slot art, as an SVG body the width of the screen and the height of the slot's band, drawn at
+/// twice the screen's resolution.
+#[cfg(feature = "brick")]
+fn raster(body: &str) -> Option<crate::cart::CartFace> {
     let svg=format!("<svg xmlns='http://www.w3.org/2000/svg' width='{OUT_W}' height='{MOUTH_H}'><defs><linearGradient id='shade' x2='0' y2='1'><stop stop-color='black' stop-opacity='.25'/><stop offset='1' stop-color='black' stop-opacity='0'/></linearGradient></defs>{body}</svg>");
     let tree=usvg::Tree::from_str(&svg,&usvg::Options::default()).ok()?;
     let (w,h)=(OUT_W*2,(MOUTH_H*2.0) as u32);
@@ -252,6 +315,12 @@ pub fn slot_art_face(front: bool) -> Option<crate::cart::CartFace> {
 fn draw_art(front: bool, alpha: f32, out: &mut Vec<Draw>) -> bool {
     let Some(&(back,fore))=ART.get() else {return false;};
     if alpha>0.0 {out.push(Draw::Tex{x:0.0,y:BAND_Y,w:OUT_W as f32,h:MOUTH_H,tex:if front {fore}else{back},alpha});}
+    // The disc slot over it, as far as it has come in: opaque where the cart slot is open, so
+    // drawn on top it closes the scoop and leaves the slit.
+    let mix=disc_mix();
+    if let (true,Some(&(back,fore)))=(mix>0.0&&alpha>0.0,DISC_ART.get()) {
+        out.push(Draw::Tex{x:0.0,y:BAND_Y,w:OUT_W as f32,h:MOUTH_H,tex:if front {fore}else{back},alpha:alpha*mix});
+    }
     true
 }
 

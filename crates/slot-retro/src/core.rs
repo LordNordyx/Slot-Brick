@@ -23,6 +23,8 @@ impl ButtonMask {
     pub const X: u16 = 1 << 9;
     pub const L: u16 = 1 << 10;
     pub const R: u16 = 1 << 11;
+    pub const L2: u16 = 1 << 12;
+    pub const R2: u16 = 1 << 13;
 
     pub fn without_turbo(self) -> ButtonMask {
         ButtonMask(self.0 & !(Self::X | Self::Y))
@@ -111,6 +113,20 @@ pub trait RetroCore: Send {
     }
     fn pump_link(&mut self) {}
     fn stop_link(&mut self) {}
+    /// A disc-based game's discs: which one is in (from 0), and how many there are.
+    fn discs(&self) -> Option<(u32, u32)> {
+        None
+    }
+    /// Puts disc `at` in, opening and closing the lid around it.
+    fn set_disc(&mut self, _at: u32) -> bool {
+        false
+    }
+    /// The disc the player chose to start with: put in by `settle_disc` once the game has
+    /// loaded and any saved state is in, as a state made on another disc brings that disc back.
+    fn want_disc(&mut self, _at: u32) {}
+    /// The left analog stick, -32768..32767 across then down.
+    fn set_stick(&mut self, _x: i16, _y: i16) {}
+    fn settle_disc(&mut self) {}
 }
 
 #[cfg(test)]

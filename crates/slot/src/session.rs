@@ -148,6 +148,8 @@ impl Session {
     }
 
     pub fn feed(&mut self, events: impl IntoIterator<Item = RawEvent>, now: Millis) {
+        self.gestures
+            .set_triggers_to_game(self.has_core() && self.app.platform() == Platform::Ps1);
         let mut actions = Vec::new();
         for ev in events {
             actions.extend(self.gestures.feed(ev, now));
@@ -166,6 +168,17 @@ impl Session {
         self.rewinding = false;
         self.fast = false;
         self.sync_pad();
+    }
+
+    /// A PlayStation game takes a Brick Pro's stick as its DualShock's left stick.
+    pub fn stick_to_game(&self) -> bool {
+        self.has_core() && self.app.platform() == Platform::Ps1 && self.app.game_visible()
+    }
+
+    pub fn set_stick(&mut self, at: Option<(i16, i16)>) {
+        if let (Some(emu), true) = (&self.emu, self.stick_to_game()) {
+            emu.set_stick(at.unwrap_or_default());
+        }
     }
 
     fn sync_pad(&mut self) {
@@ -261,6 +274,11 @@ impl Session {
                 if let Some(emu) = &self.emu {
                     emu.set_option(key, value);
                 }
+            }
+        }
+        if let Some(on) = self.app.take_ps1_dithering() {
+            if let (Some(emu), Platform::Ps1) = (&self.emu, self.app.platform()) {
+                emu.set_option("pcsx_rearmed_dithering", crate::core::dithering(on));
             }
         }
         if let Some((stem, serial)) = self.app.take_link_reload() {
@@ -466,7 +484,7 @@ impl Session {
         let player = self.app.link_player();
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
-        let opened = open_core(
+        let mut opened = open_core(
             &self.root,
             core,
             serial,
@@ -474,6 +492,9 @@ impl Session {
             palette,
             player,
         );
+        if let Some(disc) = self.app.chosen_disc().filter(|_| platform == Platform::Ps1) {
+            opened.core.want_disc(disc);
+        }
         self.app.set_named_core(opened.named);
         let sav = persist::read_sav(&self.root, platform, stem);
         let ring = self.sink.ring();
@@ -482,7 +503,11 @@ impl Session {
             None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
         };
         emu.set_volume(self.app.output_volume());
-        emu.set_native_xy(platform == Platform::Snes);
+        if platform == Platform::Ps1 {
+            emu.set_option("pcsx_rearmed_dithering", crate::core::dithering(self.app.ps1_dithering()));
+        }
+        // The SNES and PlayStation pads have X and Y of their own: no turbo on them.
+        emu.set_native_xy(matches!(platform, Platform::Snes | Platform::Ps1));
         emu.set_driven(self.driven);
         // Logged in to RetroAchievements: this game earns achievements (softcore).
         if let Some(account) = crate::ra::load(&self.root) {
@@ -492,6 +517,7 @@ impl Session {
                 Platform::Gbc => slot_cheevos::Console::Gbc,
                 Platform::Nes => slot_cheevos::Console::Nes,
                 Platform::Snes => slot_cheevos::Console::Snes,
+                Platform::Ps1 => slot_cheevos::Console::Ps1,
             };
             emu.achievements(&account.user, &account.token, console);
         }

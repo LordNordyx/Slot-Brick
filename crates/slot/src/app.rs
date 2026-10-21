@@ -74,6 +74,8 @@ const SLOT_NAME_IN_MS: Millis = 200;
 const SLOT_NAME_HOLD_MS: Millis = 1200;
 const SLOT_NAME_OUT_MS: Millis = 800;
 const SLOT_NAME_ALPHA: f32 = 0.4;
+/// How long the slot takes to turn from a cartridge slot into a disc slot, or back.
+const DISC_SLOT_MS: Millis = 300;
 
 /// How far through its fade a name `t` ms after it came up is: in, held, then out.
 fn fade_level(t: Millis) -> f32 {
@@ -307,6 +309,13 @@ pub struct App {
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
     core_picker: Option<CorePicker>,
+    /// A PlayStation game of several discs, fanned out to pick the one to put in.
+    disc_picker: Option<crate::disc_picker::DiscPicker>,
+    /// Each fanned disc's face, once built; asked for while `disc_faces_wanted`.
+    disc_faces: Vec<TexId>,
+    disc_faces_wanted: bool,
+    /// The disc picked for the game going in (from 0), and its face, which goes in with it.
+    chosen_disc: Option<(u32, Option<TexId>)>,
     /// START on a cart: its plastic and shape.
     cart_menu: Option<CartMenu>,
     /// The cart's plastic while the core picker is open: Up/Down change it there.
@@ -357,6 +366,8 @@ pub struct App {
     snapshot: Option<Box<dyn Snapshot>>,
     core: Core,
     colour_pending: Option<bool>,
+    /// Screen → PlayStation → Dithering changed, for the running core to take up.
+    ps1_dithering_changed: bool,
     palette_live: bool,
     palette_pending: Option<GbPalette>,
     link_player: Option<u8>,
@@ -434,6 +445,9 @@ pub struct App {
     title_card: Option<(TexId, u32, u32)>,
     /// When the title card last came up, for its fade (as the slot's name fades).
     title_card_shown: Option<Millis>,
+    /// How far the slot has turned into a disc slot (0 a cartridge slot, 1 a disc slot): it
+    /// is one on the PlayStation's shelf and while a PlayStation game is in.
+    disc_slot: f32,
     star_face: Option<(TexId, u32, u32)>,
     /// System → Auto Clock: the time server being asked, and when to ask next.
     #[cfg(feature = "brick")]
@@ -512,6 +526,10 @@ impl App {
             power_menu: None,
             power_menu_faces: Vec::new(),
             core_picker: None,
+            disc_picker: None,
+            disc_faces: Vec::new(),
+            disc_faces_wanted: false,
+            chosen_disc: None,
             cart_menu: None,
             picker_look: None,
             cart_menu_faces: None,
@@ -555,6 +573,7 @@ impl App {
             played: slot_ui::Printed::default(),
             title_card: None,
             title_card_shown: None,
+            disc_slot: 0.0,
             star_face: None,
             #[cfg(feature = "brick")]
             clock_sync: None,
@@ -567,6 +586,7 @@ impl App {
             snapshot: None,
             core: Core::default(),
             colour_pending: None,
+            ps1_dithering_changed: false,
             palette_live: false,
             palette_pending: None,
             link_player: None,
@@ -889,6 +909,20 @@ impl App {
         self.shelf_named = None;
     }
 
+    /// The slot turns into a disc slot on the PlayStation's shelf, and back on the others.
+    fn turn_slot(&mut self, dt: f32) {
+        let disc = match &self.phase {
+            Phase::Shelf | Phase::QuickMenu { .. } => {
+                self.shelves.get(self.shelf_at).is_some_and(|(p, _)| *p == Platform::Ps1)
+            }
+            _ => self.seated_cart().is_some_and(|c| c.platform == Platform::Ps1),
+        };
+        let step = dt * 1000.0 / DISC_SLOT_MS as f32;
+        let to = if disc { 1.0 } else { 0.0 };
+        self.disc_slot += (to - self.disc_slot).clamp(-step, step);
+        slot_ui::set_disc_slot(ease(self.disc_slot));
+    }
+
     fn slot_name_alpha(&self) -> f32 {
         let Some(at) = self.shelf_named else {
             return 0.0;
@@ -1060,6 +1094,8 @@ impl App {
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
             QuickRow::NesShader => Some(shader_value(self.state.shader_nes)),
             QuickRow::SnesShader => Some(shader_value(self.state.shader_snes)),
+            QuickRow::Ps1Shader => Some(shader_value(self.state.shader_ps1)),
+            QuickRow::Ps1Dithering => Some(QuickValue::flag(self.state.ps1_dithering)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::AutoSave => QuickValue::minutes(self.state.autosave_min),
@@ -1081,7 +1117,7 @@ impl App {
                 false => QuickValue::Minutes,
             }),
             QuickRow::LibraryTitleCard => Some(QuickValue::flag(self.state.title_card)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
 
@@ -1118,6 +1154,12 @@ impl App {
         for (_, shelf) in &mut self.shelves {
             shelf.set_snes_shadow(slot_ui::SnesShell::Us, us);
             shelf.set_snes_shadow(slot_ui::SnesShell::Pal, pal);
+        }
+    }
+
+    pub fn set_disc_shadow(&mut self, face: TexId) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_disc_shadow(face);
         }
     }
 
@@ -1322,6 +1364,10 @@ impl App {
         self.core = core;
     }
 
+    pub fn platform(&self) -> Platform {
+        self.platform
+    }
+
     pub fn set_platform(&mut self, platform: Platform) {
         self.platform = platform;
     }
@@ -1519,8 +1565,10 @@ impl App {
         self.link.as_ref().map(|s| s.client_id)
     }
 
+    /// Rewind snapshots the game every other frame: cheap for a cart, but a PlayStation's
+    /// state is megabytes, more than the Brick can copy thirty times a second.
     pub fn may_rewind(&self) -> bool {
-        self.state.rewind && !self.link_active()
+        self.records_rewind() && !self.link_active()
     }
 
     pub fn turbo(&self) -> bool {
@@ -1528,7 +1576,7 @@ impl App {
     }
 
     pub fn records_rewind(&self) -> bool {
-        self.state.rewind
+        self.state.rewind && self.platform != Platform::Ps1
     }
 
     /// The canvas the running core draws into.
@@ -1659,16 +1707,17 @@ impl App {
             Platform::Gb | Platform::Gbc => self.state.shader_gb,
             Platform::Nes => self.state.shader_nes,
             Platform::Snes => self.state.shader_snes,
+            Platform::Ps1 => self.state.shader_ps1,
         }
     }
 
     /// Colour correction for the system being played: the Game Boys share one, the GBA has its
-    /// own, and a NES or SNES has no LCD colour to correct.
+    /// own, and a NES, SNES or PlayStation has no LCD colour to correct.
     pub fn colour_correction(&self) -> bool {
         match self.platform {
             Platform::Gb | Platform::Gbc => self.state.colour_correction_gb,
             Platform::Gba => self.state.colour_correction_gba,
-            Platform::Nes | Platform::Snes => false,
+            Platform::Nes | Platform::Snes | Platform::Ps1 => false,
         }
     }
 
@@ -1763,6 +1812,15 @@ impl App {
 
     pub fn take_colour_correction(&mut self) -> Option<bool> {
         self.colour_pending.take()
+    }
+
+    /// The PlayStation's dithering, when it changed since last asked.
+    pub fn take_ps1_dithering(&mut self) -> Option<bool> {
+        std::mem::take(&mut self.ps1_dithering_changed).then_some(self.state.ps1_dithering)
+    }
+
+    pub fn ps1_dithering(&self) -> bool {
+        self.state.ps1_dithering
     }
 
     pub fn gb_palette(&self) -> Option<GbPalette> {
@@ -1934,6 +1992,7 @@ impl App {
                     }
                 }
                 _ if self.core_picker.is_some() => self.core_picker_input(action),
+                _ if self.disc_picker.is_some() => self.disc_picker_input(action),
                 Action::GbaDown(Btn::Up) => self.jump_letter(-1),
                 Action::GbaDown(Btn::Down) => self.jump_letter(1),
                 Action::ShelfLeft | Action::GbaDown(Btn::Left) => self.shelf_mut().hold_left(now),
@@ -1944,10 +2003,10 @@ impl App {
                 Action::GbaDown(Btn::A) => self.play_held = Some(now),
                 Action::GbaUp(Btn::A) => {
                     if self.play_held.take().is_some() {
-                        self.insert(!self.state.eject_save);
+                        self.play(!self.state.eject_save);
                     }
                 }
-                Action::Insert => self.insert(!self.state.eject_save),
+                Action::Insert => self.play(!self.state.eject_save),
                 Action::GbaDown(Btn::L1) => self.switch_shelf(-1),
                 Action::GbaDown(Btn::R1) => self.switch_shelf(1),
                 Action::GbaDown(Btn::Y) => self.toggle_favorite(),
@@ -2042,6 +2101,7 @@ impl App {
             | QuickRow::ScreenGba
             | QuickRow::ScreenNes
             | QuickRow::ScreenSnes
+            | QuickRow::ScreenPs1
             | QuickRow::Game
             | QuickRow::System
             | QuickRow::Library
@@ -2063,11 +2123,14 @@ impl App {
             | QuickRow::GbShader
             | QuickRow::NesShader
             | QuickRow::SnesShader
+            | QuickRow::Ps1Shader
+            | QuickRow::Ps1Dithering
             | QuickRow::GbOverlay
             | QuickRow::GbcOverlay
             | QuickRow::GbaOverlay
             | QuickRow::NesOverlay
             | QuickRow::SnesOverlay
+            | QuickRow::Ps1Overlay
             | QuickRow::GbPalettes
             | QuickRow::AutoClock
             | QuickRow::LibrarySort
@@ -2125,13 +2188,21 @@ impl App {
                 }
                 s.shader_gb = to;
             }
-            QuickRow::NesShader | QuickRow::SnesShader => {
-                let shader = if row == QuickRow::NesShader { &mut s.shader_nes } else { &mut s.shader_snes };
+            QuickRow::NesShader | QuickRow::SnesShader | QuickRow::Ps1Shader => {
+                let shader = match row {
+                    QuickRow::NesShader => &mut s.shader_nes,
+                    QuickRow::SnesShader => &mut s.shader_snes,
+                    _ => &mut s.shader_ps1,
+                };
                 let to = shader.step(&Shader::NES, right);
                 if to == *shader {
                     return;
                 }
                 *shader = to;
+            }
+            QuickRow::Ps1Dithering => {
+                s.ps1_dithering = !s.ps1_dithering;
+                self.ps1_dithering_changed = true;
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
@@ -2167,7 +2238,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
         }
         self.persist();
     }
@@ -2186,6 +2257,7 @@ impl App {
             Platform::Gb | Platform::Gbc => (&mut self.state.shader_gb, &Shader::GB[..]),
             Platform::Nes => (&mut self.state.shader_nes, &Shader::NES[..]),
             Platform::Snes => (&mut self.state.shader_snes, &Shader::NES[..]),
+            Platform::Ps1 => (&mut self.state.shader_ps1, &Shader::NES[..]),
         };
         *shader = shader.step(choices, right);
         let said = match *shader {
@@ -2424,6 +2496,14 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.turn_slot(dt);
+        let now = self.now();
+        if let Some(picker) = &mut self.disc_picker {
+            picker.update(dt);
+            if picker.finished(now) {
+                self.disc_picker = None;
+            }
+        }
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
             self.shelf_named = Some(self.now());
@@ -2996,6 +3076,15 @@ impl App {
             Phase::Shelf => {
                 draw_backdrop(self.wallpaper, out);
                 match (self.core_picker_shown(), self.selected_stem()) {
+                    // A game's discs fanned out: the rest of the shelf steps back behind them.
+                    _ if self.disc_picker.is_some() => {
+                        let picker = self.disc_picker.as_ref().expect("checked above");
+                        let open = ease(picker.openness(self.now()));
+                        self.shelf().draw_row(Some(&picker.stem), 0.0, CORE_PICKER_RECEDE * open, 1.0, out);
+                        let fallback = self.shelf().find(&picker.stem).and_then(|(_, f)| f);
+                        picker.draw(&self.disc_faces, fallback, self.now(), out);
+                        draw_empty_slot(out);
+                    }
                     (Some(picker), Some(stem)) => {
                         let open = ease(picker.openness(self.now()));
                         let dim = 1.0 + (CORE_PICKER_DIM - 1.0) * open;
@@ -3119,6 +3208,8 @@ impl App {
         let Some((cart, face)) = self.shelf().find(stem) else {
             return;
         };
+        // A disc picked from a game's several goes in wearing its own face.
+        let face = self.chosen_disc.and_then(|(_, f)| f).filter(|_| cart.platform == Platform::Ps1).or(face);
         let alpha = self.alert_alpha();
         let (rest, scale) = self.shelf().selected_at();
         SlotChrome {
@@ -3500,6 +3591,95 @@ impl App {
         shelf.carts.get(shelf.index).map(|c| c.rom.as_path())
     }
 
+    /// A game of several discs fans them out to pick one; any other goes straight in.
+    fn play(&mut self, clean: bool) {
+        self.chosen_disc = None;
+        let discs = self
+            .shelf()
+            .carts
+            .get(self.shelf().index)
+            .filter(|c| c.platform == Platform::Ps1)
+            .map(|c| (c.stem.clone(), slot_store::ps1::discs(&c.rom)));
+        match discs {
+            Some((stem, discs)) if discs.len() > 1 && self.on_shelf() => {
+                self.play_held = None;
+                let last = self
+                    .root
+                    .as_ref()
+                    .and_then(|r| slot_store::ini::value(r, crate::disc_picker::DISCS_FILE, &stem))
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .map_or(0, |n| n.saturating_sub(1));
+                self.disc_picker = Some(crate::disc_picker::DiscPicker::open(stem, discs, last, clean, self.now()));
+                self.disc_faces.clear();
+                self.disc_faces_wanted = true;
+            }
+            _ => self.insert(clean),
+        }
+    }
+
+    fn disc_picker_input(&mut self, action: Action) {
+        let now = self.now();
+        let Some(picker) = &mut self.disc_picker else {
+            return;
+        };
+        if picker.closing() {
+            return;
+        }
+        match action {
+            Action::ShelfLeft | Action::GbaDown(Btn::Left) if !picker.step(-1) => self.refuse(),
+            Action::ShelfRight | Action::GbaDown(Btn::Right) if !picker.step(1) => self.refuse(),
+            Action::GbaDown(Btn::A) | Action::Insert => {
+                let (at, clean) = (picker.selected(), picker.clean);
+                if let Some(root) = &self.root {
+                    let n = (at + 1).to_string();
+                    if let Err(e) = slot_store::ini::write(root, crate::disc_picker::DISCS_FILE, &picker.stem, &n) {
+                        eprintln!("slot: discs: {e}");
+                    }
+                }
+                self.disc_picker = None;
+                self.chosen_disc = Some((at as u32, self.disc_faces.get(at).copied()));
+                self.insert(clean);
+            }
+            Action::GbaDown(Btn::B) => picker.close(now),
+            _ => {}
+        }
+    }
+
+    /// The fanned discs whose faces are to be built: each a copy of the game's cart, as that
+    /// disc (from 1), wearing its own picture if it has one, else the game's.
+    pub fn disc_faces_wanted(&mut self) -> Option<Vec<(Cart, usize)>> {
+        if !std::mem::take(&mut self.disc_faces_wanted) {
+            return None;
+        }
+        let picker = self.disc_picker.as_ref()?;
+        let game = self.shelf().carts.iter().find(|c| c.stem == picker.stem)?.clone();
+        let root = self.root.clone();
+        Some(
+            picker
+                .discs
+                .iter()
+                .enumerate()
+                .map(|(i, disc)| {
+                    let mut cart = game.clone();
+                    let stem = disc.file_stem().and_then(|s| s.to_str()).unwrap_or(&game.stem).to_string();
+                    let own = root.as_ref().and_then(|r| slot_store::labels_of(r, Platform::Ps1, &stem).0);
+                    cart.label = own.or(game.label.clone());
+                    cart.stem = stem;
+                    (cart, i + 1)
+                })
+                .collect(),
+        )
+    }
+
+    pub fn set_disc_faces(&mut self, faces: Vec<TexId>) {
+        self.disc_faces = faces;
+    }
+
+    /// The disc picked to go in, from 0.
+    pub fn chosen_disc(&self) -> Option<u32> {
+        self.chosen_disc.map(|(at, _)| at)
+    }
+
     fn insert(&mut self, clean: bool) {
         if !self.on_shelf() {
             return;
@@ -3537,7 +3717,7 @@ impl App {
             return;
         }
         if self.now().saturating_sub(at) >= PLAY_HOLD_MS {
-            self.insert(true);
+            self.play(true);
         }
     }
 
@@ -5813,6 +5993,8 @@ impl CartMenu {
             Platform::Snes => vec![CartRow::Shape, CartRow::Reset],
             Platform::Gb | Platform::Gbc => vec![CartRow::Colour, CartRow::Finish, CartRow::Shape, CartRow::Reset],
             Platform::Gba => vec![CartRow::Colour, CartRow::Finish, CartRow::Reset],
+            // A stand-in cart (see slot_ui::PS1_SHELL): nothing of it to choose yet.
+            Platform::Ps1 => vec![CartRow::Reset],
         };
         let mut menu = CartMenu {
             stem: cart.stem.clone(),

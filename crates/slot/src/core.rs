@@ -102,10 +102,17 @@ fn open_named(
                 let platform = match core {
                     Core::Fceumm => Some(Platform::Nes),
                     Core::Snes9x => Some(Platform::Snes),
+                    Core::PcsxRearmed => Some(Platform::Ps1),
                     Core::Mgba | Core::Gpsp => None,
                 };
                 if let Some((w, h)) = platform.map(Platform::canvas) {
                     opened.set_canvas(w, h);
+                }
+                opened.set_fill(core == Core::PcsxRearmed);
+                // A DualShock: what DualShock games want, what plain ones run on as well, and
+                // what carries rumble.
+                if core == Core::PcsxRearmed {
+                    opened.set_device(slot_retro::DEVICE_DUALSHOCK);
                 }
                 apply_core_options(
                     &mut opened,
@@ -164,8 +171,16 @@ pub fn colour_option(which: Core, on: bool) -> Option<(&'static str, &'static st
             "gpsp_color_correction",
             if on { "enabled" } else { "disabled" },
         )),
-        // A NES or SNES drew on a TV, with no LCD to correct for.
-        Core::Fceumm | Core::Snes9x => None,
+        // A NES, SNES or PlayStation drew on a TV, with no LCD to correct for.
+        Core::Fceumm | Core::Snes9x | Core::PcsxRearmed => None,
+    }
+}
+
+/// PCSX ReARMed's dithering option, on or off.
+pub fn dithering(on: bool) -> &'static str {
+    match on {
+        true => "enabled",
+        false => "disabled",
     }
 }
 
@@ -204,6 +219,19 @@ pub fn apply_core_options(
             ("fceumm_overscan_v_bottom", "8"),
             ("fceumm_overscan_h_left", "0"),
             ("fceumm_overscan_h_right", "0"),
+        ] {
+            core.set_option(key, value);
+        }
+    }
+    if which == Core::PcsxRearmed {
+        for (key, value) in [
+            // The player's BIOS from Slot/BIOS when there is one, the core's own otherwise.
+            ("pcsx_rearmed_bios", "auto"),
+            ("pcsx_rearmed_show_bios_bootlogo", "disabled"),
+            // Memory card 1 is the game's save RAM, kept in Saves/PS1 like a cart's battery save.
+            ("pcsx_rearmed_memcard1", "libretro"),
+            ("pcsx_rearmed_frameskip_type", "auto"),
+            ("pcsx_rearmed_vibration", "enabled"),
         ] {
             core.set_option(key, value);
         }

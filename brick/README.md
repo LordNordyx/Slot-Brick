@@ -39,8 +39,8 @@ doesn't flash anything to the device.
 | ---------------- | --------------------------------------- |
 | `Left` / `Right` | Browse games                            |
 | `Up` / `Down`    | Previous / next letter                  |
-| `L1` / `R1`      | Switch shelves (GBA, GB, GBC, NES, SNES) |
-| Tap `A`          | Resume from the last save state         |
+| `L1` / `R1`      | Switch shelves (GBA, GB, GBC, NES, SNES, PlayStation) |
+| Tap `A`          | Resume from the last save state (a game of several discs: fan them out, pick one, `A` again) |
 | Hold `A`         | Start the game fresh                    |
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
 | `Y`              | Favorite: a star on the cart, or off again |
@@ -65,8 +65,8 @@ doesn't flash anything to the device.
 | `SELECT + Up` / `Down`      | Brightness                                          |
 | `SELECT + Left` / `Right`   | Blue light filter                                   |
 | `L1` / `R1`                 | GB/GBC/NES: stretched / original picture            |
-| Hold `L2`                   | Rewind                                              |
-| Hold `R2`                   | Fast-forward (double-tap to lock it on)             |
+| Hold `L2`                   | Rewind (not on PlayStation, whose `L2` is the game's) |
+| Hold `R2`                   | Fast-forward (double-tap to lock it on); PlayStation: `HOME + R2` |
 
 ### System
 
@@ -110,6 +110,23 @@ cart; Slot reads where a game was sold from the ROM, so a ripped `Terranigma.sfc
 on SNES), so `SELECT + X` switches the picture between original and full screen. Cart Art fetches
 SNES labels too, and RetroAchievements work.
 
+**PlayStation (experimental):** put games in `Slot/Games/PS1`: `.cue` with its `.bin` tracks,
+`.chd`, `.pbp`, `.iso`, or for a game of several discs an `.m3u` listing them. A game may have a
+folder of its own; each shows once on the shelf. PlayStation games are discs, not carts: on their
+shelf the slot turns into a disc slot, and a disc spins as it goes in. For a game of several discs
+`A` fans its discs out; pick one with `Left` / `Right` and `A` puts it in. The fan opens on the
+disc you played last. To change discs when a game asks, hold `HOME` to eject, then put the next
+disc in: the game carries on with it. They run on PCSX ReARMed, with your BIOS when there is one in
+`Slot/BIOS` (`scph5501.bin` and the like), else the core's own. `L2` and `R2` are the game's, so
+fast-forward is `HOME + R2`, and there is no rewind: a PlayStation's state is too large to keep
+snapshots of on the Brick. Every game gets a DualShock; on a Brick Pro the left stick is its left
+stick in game. Games that need more buttons or sticks than the Brick has still start, and play as
+far as its buttons allow. Each game's memory card is kept in `Slot/Saves/PS1`. **HOME → Screen →
+PlayStation** has Shader, Dithering (on as the PlayStation drew, off for smoother colour) and
+Overlay. Cart Art fetches disc scans (below), or put your own round picture in `Slot/Labels/PS1`;
+a disc of a game of several can have its own, named after that disc's file. RetroAchievements
+work, `.chd` included. Not yet tested on a Brick: reports welcome ([#41](../../issues/41)).
+
 **Cart art:** connect to Wi-Fi, then open **HOME → Cart Art** (greyed out while Wi-Fi is off).
 **GET CART ART** gives every game with no label a scan of its real cartridge label; labels you
 already have are never replaced. The scans come from the slot art set behind
@@ -128,6 +145,8 @@ a game has only one, both carts show it. SNES games on the rounder Super Famicom
 that cart's label (from the Japanese or European release), and either kind of SNES cart falls
 back to the other's label when its own has none. Carts of another shape (Tengen, gold Zelda,
 unlicensed) keep their file-name label, as do games LaunchBox has no cart picture of.
+PlayStation games get LaunchBox's scan of the disc, kept whole. A game of several discs has a
+scan of each, but which is which isn't recorded, so all its discs share one.
 
 `Slot/Logs/cart-art.txt` lists each game and what it got. Below GET CART ART, every game with a
 label is listed: press A twice on one to delete its label, then GET CART ART fetches a new one.
@@ -163,7 +182,7 @@ make there. On the clock screen shown at first start, the date and time fill the
 once Wi-Fi connects, unless you have already changed them.
 
 **Brick Pro (experimental):** Slot tells a Brick Pro from a Brick by itself. Its left stick
-works as the D-pad, in menus and in games, and **HOME → System → LEDs** gains a **Sticks** row
+works as the D-pad, in menus and in games (in a PlayStation game, as the DualShock's left stick), and **HOME → System → LEDs** gains a **Sticks** row
 for the lights around the sticks (**Triggers** sets the shoulder lights at the back). The right
 stick, the stick clicks and the F1/F2 keys do nothing yet. Not yet tested on a real Brick Pro.
 

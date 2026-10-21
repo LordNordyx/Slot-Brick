@@ -84,6 +84,8 @@ enum Cmd {
 
 struct Shared {
     input: AtomicU16,
+    /// The left stick, x in the low half and y in the high: a PlayStation game's DualShock.
+    stick: AtomicU32,
     speed: AtomicU8,
     observed: AtomicU8,
     state: AtomicU8,
@@ -160,6 +162,7 @@ impl EmuHandle {
         let frames = Frames::new((cw * ch * 4) as usize);
         let shared = Arc::new(Shared {
             input: AtomicU16::new(0),
+            stick: AtomicU32::new(0),
             speed: AtomicU8::new(Speed::Paused as u8),
             observed: AtomicU8::new(Speed::Paused as u8),
             state: AtomicU8::new(CoreState::Loading as u8),
@@ -319,6 +322,10 @@ impl EmuHandle {
     pub fn set_input(&self, mask: ButtonMask) {
         let before = self.shared.input.swap(mask.0, Ordering::Relaxed);
         crate::latency::applied(before, mask.0);
+    }
+
+    pub fn set_stick(&self, (x, y): (i16, i16)) {
+        self.shared.stick.store(x as u16 as u32 | (y as u16 as u32) << 16, Ordering::Relaxed);
     }
 
     pub fn input(&self) -> ButtonMask {
@@ -554,6 +561,7 @@ impl Worker {
                 self.shared.resume_refused.store(true, Ordering::Release);
             }
         }
+        core.settle_disc();
         let av = core.av_info();
         let device_hz = match ring.sample_rate() {
             0 => av.sample_rate,
@@ -680,6 +688,8 @@ impl Worker {
                 self.shared.clocked.notify_all();
             }
             let input = ButtonMask(self.shared.input.load(Ordering::Relaxed));
+            let stick = self.shared.stick.load(Ordering::Relaxed);
+            core.set_stick(stick as u16 as i16, (stick >> 16) as u16 as i16);
             crate::latency::emu_frame(input.0);
             let mut span = 1u32;
             let ceiling = match speed {

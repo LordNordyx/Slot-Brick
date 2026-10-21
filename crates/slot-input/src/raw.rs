@@ -31,4 +31,10 @@ pub type Millis = u64;
 
 pub trait InputSource {
     fn poll(&mut self, now: Millis) -> Vec<RawEvent>;
+    /// Where an analog stick stands, -32768..32767 across then down, on a pad that has one.
+    fn stick(&self) -> Option<(i16, i16)> {
+        None
+    }
+    /// The stick to the game as a stick (a PlayStation game's DualShock), not as the D-pad.
+    fn set_stick_to_game(&mut self, _on: bool) {}
 }

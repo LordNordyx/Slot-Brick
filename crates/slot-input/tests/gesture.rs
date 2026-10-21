@@ -581,3 +581,20 @@ fn brick_home_and_a_shoulder_step_the_overlay_and_cost_the_game_and_the_menu_not
     // L1 alone is the game's again.
     assert_eq!(g.feed(RawEvent::Down(Btn::L1), 6000), vec![Action::GbaDown(Btn::L1)]);
 }
+
+#[test]
+fn a_playstation_game_gets_its_triggers_and_home_moves_rewind_and_fast_forward() {
+    let mut g = Gestures::brick();
+    g.set_triggers_to_game(true);
+    assert_eq!(g.feed(Down(L2), 0), vec![GbaDown(L2)]);
+    assert_eq!(g.feed(Up(L2), 50), vec![GbaUp(L2)]);
+    assert_eq!(g.feed(Down(R2), 100), vec![GbaDown(R2)]);
+    assert_eq!(g.feed(Up(R2), 150), vec![GbaUp(R2)]);
+    assert!(g.feed(Down(Menu), 1_000).is_empty());
+    assert_eq!(g.feed(Down(R2), 1_050), vec![FfStart]);
+    assert_eq!(g.feed(Up(R2), 1_400), vec![FfStop]);
+    assert_eq!(g.feed(Down(L2), 1_500), vec![RewindStart]);
+    assert_eq!(g.feed(Up(L2), 1_800), vec![RewindStop]);
+    assert!(g.feed(Up(Menu), 1_900).is_empty(), "HOME used in a chord still opened the menu");
+    assert!(g.tick(5_000).is_empty());
+}

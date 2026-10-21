@@ -46,9 +46,10 @@ impl Cart {
                     self.title = title;
                 }
             }
-            // The file name is the title: an iNES header names no game, and a SNES header's
-            // sits at one of several places a copier header can shift.
-            Platform::Nes | Platform::Snes => {}
+            // The file name is the title: an iNES header names no game, a SNES header's
+            // sits at one of several places a copier header can shift, and a disc's ID is
+            // a catalogue number, not a name.
+            Platform::Nes | Platform::Snes | Platform::Ps1 => {}
         }
     }
 }
@@ -83,8 +84,14 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
     let mut carts = Vec::new();
     for platform in Platform::ALL {
         let dir = root.join("Games").join(platform.dir_name());
-        let entries = match std::fs::read_dir(&dir) {
-            Ok(d) => d,
+        let roms: Vec<PathBuf> = match std::fs::read_dir(&dir) {
+            // A PlayStation game may be several files, and in a folder of its own.
+            Ok(_) if platform == Platform::Ps1 => crate::ps1::games(&dir),
+            Ok(d) => d
+                .filter_map(|e| e.ok())
+                .filter(|e| platform.accepts(&e.path()) && is_file(e))
+                .map(|e| e.path())
+                .collect(),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => {
                 eprintln!("slot: scan: {}: {e}", dir.display());
@@ -95,12 +102,8 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
         let labels = listing(&labels_dir);
         let famicom_dir = labels_dir.join(FAMICOM_LABELS);
         let famicom = if platform == Platform::Nes { listing(&famicom_dir) } else { HashMap::new() };
-        for entry in entries {
-            let Ok(entry) = entry else {
-                continue;
-            };
-            let rom = entry.path();
-            if is_hidden(&rom) || !platform.accepts(&rom) || !is_file(&entry) {
+        for rom in roms {
+            if is_hidden(&rom) {
                 continue;
             }
             let Some(stem) = rom.file_stem().and_then(|s| s.to_str()) else {

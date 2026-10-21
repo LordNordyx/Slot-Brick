@@ -85,7 +85,7 @@ fn the_rows_run_in_the_order_the_user_chose() {
     assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Library", "Wi-Fi", "Cart Art", "RetroAchievements", "Update", "System"]);
     #[cfg(feature="brick")]
     assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["LEDs", "Date & Time", "Auto Clock", "About"]);
-    assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES"]);
+    assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES", "PlayStation"]);
     assert_eq!(
         QuickRow::SCREEN_GB.map(QuickRow::label),
         ["Shader", "Color Correction", "GB Palettes", "GB Overlay", "GBC Overlay"]
@@ -93,10 +93,11 @@ fn the_rows_run_in_the_order_the_user_chose() {
     assert_eq!(QuickRow::SCREEN_GBA.map(QuickRow::label), ["Shader", "Color Correction", "Overlay"]);
     assert_eq!(QuickRow::SCREEN_NES.map(QuickRow::label), ["Shader", "Overlay"]);
     assert_eq!(QuickRow::SCREEN_SNES.map(QuickRow::label), ["Shader", "Overlay"]);
+    assert_eq!(QuickRow::SCREEN_PS1.map(QuickRow::label), ["Shader", "Dithering", "Overlay"]);
     // Each Overlay row picks the overlay for its own system.
     use slot_store::Platform;
     let systems: Vec<_> = QuickRow::ALL.into_iter().filter_map(QuickRow::overlay_of).collect();
-    assert_eq!(systems, [Platform::Gb, Platform::Gbc, Platform::Gba, Platform::Nes, Platform::Snes]);
+    assert_eq!(systems, [Platform::Gb, Platform::Gbc, Platform::Gba, Platform::Nes, Platform::Snes, Platform::Ps1]);
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
         [
@@ -128,7 +129,8 @@ fn the_rows_run_in_the_order_the_user_chose() {
             QuickRow::ScreenSnes,
             QuickRow::Update,
             QuickRow::System,
-            QuickRow::Library
+            QuickRow::Library,
+            QuickRow::ScreenPs1
         ]
     );
     for page in [
@@ -233,4 +235,12 @@ fn a_value_gets_the_room_beside_its_label_and_less_of_it_beside_the_carets() {
     assert!(lit > 200 && dim > lit, "dim {dim}, lit {lit}");
     // A longer label leaves less room.
     assert!(quick_value_room(quick_label_face(QuickRow::GbcOverlay).w, None) < dim);
+}
+
+#[test]
+fn each_row_sits_in_all_at_its_own_index() {
+    // Arrays built from QuickRow::ALL are read by QuickRow::index: the two orders must agree.
+    for (i, row) in QuickRow::ALL.into_iter().enumerate() {
+        assert_eq!(row.index(), i, "{row:?}");
+    }
 }

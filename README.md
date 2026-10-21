@@ -37,6 +37,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | Feature | Details |
 | :--- | :--- |
 | **NES and SNES** | Their own shelves of NES and SNES cartridges, running on FCEUmm and Snes9x. No BIOS needed. |
+| **PlayStation (experimental)** | A shelf of discs that spin into a disc slot, on PCSX ReARMed: `.cue`/`.bin`, `.chd`, `.pbp`, `.iso` and `.m3u`, with a disc picker for games of several discs. Not yet tested on a Brick ([#41](../../issues/41)). |
 | **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
 | **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
@@ -109,7 +110,7 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | :--- | :--- |
 | `Left` / `Right` | Browse the carousel |
 | `Up` / `Down` | Jump to the previous / next letter |
-| `L1` / `R1` | Switch between the GBA, GB, GBC, NES, and SNES shelves |
+| `L1` / `R1` | Switch between the GBA, GB, GBC, NES, SNES and PlayStation shelves |
 | Tap `A` | Resume the last save state |
 | Hold `A` | Start the game fresh |
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
@@ -134,9 +135,9 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | `SELECT` + `L2` / `R2` | **GB:** previous / next colour palette |
 | `SELECT` + `Up` / `Down` | Adjust brightness |
 | `SELECT` + `Left` / `Right` | Adjust the blue light filter |
-| `L1` / `R1` | **GB / GBC / NES:** switch between stretched / original picture. On SNES they are the game's own buttons |
-| Hold `L2` | Rewind |
-| Hold `R2` | Fast-forward |
+| `L1` / `R1` | **GB / GBC / NES:** switch between stretched / original picture. On SNES and PlayStation they are the game's own buttons |
+| Hold `L2` | Rewind (not on PlayStation, where `L2` is the game's) |
+| Hold `R2` | Fast-forward (**PlayStation:** `HOME` + `R2`, as `R2` is the game's) |
 | Double-tap `R2` | Lock fast-forward on; press again to unlock |
 
 ### System

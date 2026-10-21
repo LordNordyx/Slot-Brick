@@ -89,6 +89,10 @@ pub struct Gestures {
     r2_refused: bool,
     r2_last_release: Option<Millis>,
     rewinding: bool,
+    /// A PlayStation game is running: its pad has L2 and R2 of its own, so the triggers go to
+    /// the game, and fast forward moves to HOME+R2 (HOME+L2 asks for a rewind, which a
+    /// PlayStation game doesn't record).
+    triggers_to_game: bool,
 }
 
 fn ramp_due(down: Option<Millis>, last: Option<Millis>, now: Millis) -> bool {
@@ -108,6 +112,10 @@ impl Gestures {
 
     pub fn brick() -> Self {
         Self { home_chords: true, ..Self::default() }
+    }
+
+    pub fn set_triggers_to_game(&mut self, on: bool) {
+        self.triggers_to_game = on;
     }
 
     pub fn ff_latched(&self) -> bool {
@@ -172,6 +180,17 @@ impl Gestures {
     }
 
     fn down(&mut self, b: Btn, now: Millis) -> Vec<Action> {
+        if let (true, Some(bit)) = (self.triggers_to_game, trigger_bit(b)) {
+            if self.menu_down_at.is_none() {
+                return vec![Action::GbaDown(b)];
+            }
+            self.chord_held |= bit;
+            self.menu_eject_fired = true; // consume Home: no tap menu or hold eject
+            return match b {
+                Btn::L2 => self.rewind_start(),
+                _ => self.ff_down(now),
+            };
+        }
         if let (true, Some(_), Some((bit, action))) = (self.home_chords, self.menu_down_at, home_chord(b)) {
             if self.chord_held & bit != 0 { return Vec::new(); }
             self.chord_held |= bit;
@@ -210,6 +229,18 @@ impl Gestures {
     }
 
     fn up(&mut self, b: Btn, now: Millis) -> Vec<Action> {
+        if let Some(bit) = trigger_bit(b) {
+            if self.chord_held & bit != 0 {
+                self.chord_held &= !bit;
+                return match b {
+                    Btn::L2 => self.rewind_stop(),
+                    _ => self.ff_up(now),
+                };
+            }
+            if self.triggers_to_game {
+                return vec![Action::GbaUp(b)];
+            }
+        }
         if b == Btn::X && self.chord_held & HOME_X != 0 {
             self.chord_held &= !HOME_X;
             return Vec::new();
@@ -443,6 +474,15 @@ impl Gestures {
 const HOME_X: u16 = 2048;
 /// Brick Home chords: Home with A (next shader), B (LEDs) or a shoulder (overlay), and the bit
 /// each holds while down. A and B share their bits with the Select chords on those buttons.
+/// HOME+L2 / HOME+R2 while the triggers belong to the game: held, as the triggers alone are.
+fn trigger_bit(b: Btn) -> Option<u16> {
+    match b {
+        Btn::L2 => Some(16384),
+        Btn::R2 => Some(32768),
+        _ => None,
+    }
+}
+
 fn home_chord(b: Btn) -> Option<(u16, Action)> {
     Some(match b {
         Btn::A => (512, Action::ShaderNext),
