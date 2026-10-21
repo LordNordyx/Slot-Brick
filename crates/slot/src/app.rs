@@ -74,6 +74,18 @@ const SLOT_NAME_IN_MS: Millis = 200;
 const SLOT_NAME_HOLD_MS: Millis = 1200;
 const SLOT_NAME_OUT_MS: Millis = 800;
 const SLOT_NAME_ALPHA: f32 = 0.4;
+
+/// How far through its fade a name `t` ms after it came up is: in, held, then out.
+fn fade_level(t: Millis) -> f32 {
+    if t < SLOT_NAME_IN_MS {
+        t as f32 / SLOT_NAME_IN_MS as f32
+    } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS {
+        1.0
+    } else {
+        let out = t - SLOT_NAME_IN_MS - SLOT_NAME_HOLD_MS;
+        1.0 - (out as f32 / SLOT_NAME_OUT_MS as f32).min(1.0)
+    }
+}
 const CORE_PICKER_DIM: f32 = 0.614;
 const CORE_LEGEND_Y: f32 = 386.0;
 /// The core picker's legend keeps this far from the screen's edges.
@@ -418,6 +430,10 @@ pub struct App {
     play_ms: Millis,
     /// The selected game's play time, printed beside the battery on the shelf.
     played: slot_ui::Printed,
+    /// The selected game's name on its card under the cart: the face and its size.
+    title_card: Option<(TexId, u32, u32)>,
+    /// When the title card last came up, for its fade (as the slot's name fades).
+    title_card_shown: Option<Millis>,
     star_face: Option<(TexId, u32, u32)>,
     /// System → Auto Clock: the time server being asked, and when to ask next.
     #[cfg(feature = "brick")]
@@ -537,6 +553,8 @@ impl App {
             play_tick: None,
             play_ms: 0,
             played: slot_ui::Printed::default(),
+            title_card: None,
+            title_card_shown: None,
             star_face: None,
             #[cfg(feature = "brick")]
             clock_sync: None,
@@ -775,6 +793,33 @@ impl App {
         slot_store::played_text(secs, self.state.play_time_hours)
     }
 
+    /// The selected game's name, as its title card under the cart prints it.
+    pub fn title_card_text(&self) -> Option<String> {
+        if !self.state.title_card || !matches!(self.phase, Phase::Shelf) || self.cart_menu.is_some() || self.core_picker.is_some() {
+            return None;
+        }
+        let cart = self.shelf().carts.get(self.shelf().index)?;
+        Some(slot_ui::label_text(cart))
+    }
+
+    /// A new name on the card: it fades in, holds, and fades out. Already showing, it holds
+    /// again rather than fading in from nothing, so scrolling through a shelf doesn't flicker.
+    pub fn set_title_card_face(&mut self, face: Option<(TexId, u32, u32)>) {
+        self.title_card = face;
+        let now = self.now();
+        self.title_card_shown = match self.title_card_alpha() > 0.0 {
+            true => Some(now.saturating_sub(SLOT_NAME_IN_MS)),
+            false => Some(now),
+        };
+    }
+
+    fn title_card_alpha(&self) -> f32 {
+        let Some(at) = self.title_card_shown else {
+            return 0.0;
+        };
+        ease(fade_level(self.now().saturating_sub(at)))
+    }
+
     pub fn set_played_face(&mut self, face: Option<(TexId, u32)>) {
         self.played = match face {
             Some((tex, w)) => slot_ui::Printed::new(tex, w),
@@ -848,16 +893,7 @@ impl App {
         let Some(at) = self.shelf_named else {
             return 0.0;
         };
-        let t = self.now().saturating_sub(at);
-        let level = if t < SLOT_NAME_IN_MS {
-            t as f32 / SLOT_NAME_IN_MS as f32
-        } else if t < SLOT_NAME_IN_MS + SLOT_NAME_HOLD_MS {
-            1.0
-        } else {
-            let out = t - SLOT_NAME_IN_MS - SLOT_NAME_HOLD_MS;
-            1.0 - (out as f32 / SLOT_NAME_OUT_MS as f32).min(1.0)
-        };
-        SLOT_NAME_ALPHA * ease(level)
+        SLOT_NAME_ALPHA * ease(fade_level(self.now().saturating_sub(at)))
     }
 
     fn next_shelf(&self, by: i32) -> Option<usize> {
@@ -1044,6 +1080,7 @@ impl App {
                 true => QuickValue::Hours,
                 false => QuickValue::Minutes,
             }),
+            QuickRow::LibraryTitleCard => Some(QuickValue::flag(self.state.title_card)),
             QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
         }
     }
@@ -2036,6 +2073,7 @@ impl App {
             | QuickRow::LibrarySort
             | QuickRow::LibraryShow
             | QuickRow::LibraryPlayTime
+            | QuickRow::LibraryTitleCard
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
@@ -2120,6 +2158,7 @@ impl App {
                 return;
             }
             QuickRow::LibraryPlayTime => s.play_time_hours = !s.play_time_hours,
+            QuickRow::LibraryTitleCard => s.title_card = !s.title_card,
             QuickRow::AutoClock => {
                 s.auto_clock = !s.auto_clock;
                 // Turned on: the clock is set as soon as Wi-Fi allows.
@@ -2388,6 +2427,8 @@ impl App {
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
             self.shelf_named = Some(self.now());
+            // The card comes up with the slot's name, and fades with it.
+            self.title_card_shown = Some(self.now());
         }
         self.timers();
         self.poll_link();
@@ -2963,6 +3004,9 @@ impl App {
                         draw_empty_slot(out);
                     }
                     _ => {
+                        if let Some(foot) = self.shelf().selected_foot() {
+                            slot_ui::draw_title_card(self.title_card, foot, self.title_card_alpha(), out);
+                        }
                         self.shelf().draw(self.shelf_shake(), out);
                         draw_slot_name(self.shelf_platform, self.slot_name_alpha(), out);
                     }

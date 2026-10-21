@@ -59,10 +59,11 @@ pub enum QuickRow {
     LibrarySort,
     LibraryShow,
     LibraryPlayTime,
+    LibraryTitleCard,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 46] = [
+    pub const ALL: [QuickRow; 47] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -109,6 +110,7 @@ impl QuickRow {
         QuickRow::LibrarySort,
         QuickRow::LibraryShow,
         QuickRow::LibraryPlayTime,
+        QuickRow::LibraryTitleCard,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -133,8 +135,9 @@ impl QuickRow {
     }
     pub fn led_setting(self) -> bool { Self::LIGHTS_PRO.contains(&self) }
 
-    /// Library: how the shelves are ordered, and whether they hold only the favorites.
-    pub const LIBRARY: [QuickRow; 3] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryPlayTime];
+    /// Library: how the shelves are ordered, whether they hold only the favorites, and what is
+    /// printed around them.
+    pub const LIBRARY: [QuickRow; 4] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryPlayTime, QuickRow::LibraryTitleCard];
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 4] = [QuickRow::ScreenGb, QuickRow::ScreenGba, QuickRow::ScreenNes, QuickRow::ScreenSnes];
@@ -193,7 +196,7 @@ impl QuickRow {
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown => &QuickRow::GAME,
             QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::About => &QuickRow::SYSTEM,
-            QuickRow::LibrarySort | QuickRow::LibraryShow | QuickRow::LibraryPlayTime => &QuickRow::LIBRARY,
+            QuickRow::LibrarySort | QuickRow::LibraryShow | QuickRow::LibraryPlayTime | QuickRow::LibraryTitleCard => &QuickRow::LIBRARY,
             _ => &QuickRow::MAIN,
         }
     }
@@ -252,6 +255,7 @@ impl QuickRow {
             QuickRow::LibrarySort => "Sort By",
             QuickRow::LibraryShow => "Show",
             QuickRow::LibraryPlayTime => "Play Time",
+            QuickRow::LibraryTitleCard => "Title Card",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Screen",

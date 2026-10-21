@@ -1,7 +1,8 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- Play time: how long you have played the selected game shows beside the battery on the shelf, in minutes or in hours and minutes (HOME → Library → Play Time).
+- Title card: when you pick a game, its name shows on a card under its cart for a moment, then fades. Turn it off under HOME → Library → Title Card.
+- Play time: how long you have played the selected game shows beside the battery on the shelf, in minutes ("200M") or in hours and minutes ("3H20M", HOME → Library → Play Time).
 - Favorites: Y stars a game (a gold star on its cart), and HOME → Library → Show: Favorites shows only those.
 - Sort the shelves with SELECT, or under HOME → Library → Sort By: A–Z, last played, or most played.
 - Brick Pro (experimental, not yet tested on one): Slot recognises it, its left stick works as the D-pad, and System → LEDs has a Sticks row for the lights around its sticks.
