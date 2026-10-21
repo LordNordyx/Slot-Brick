@@ -46,6 +46,9 @@ struct Host {
     /// pictures are 256 to 640 wide and 240 or 480 tall, and each fills a 4:3 screen),
     /// rather than copied in and halved to fit.
     fill: bool,
+    /// In fill mode, the frame column each canvas column takes, kept while the frame and
+    /// canvas widths (the key) hold.
+    fill_columns: ((usize, usize), Vec<usize>),
     /// For a disc-based core: how it swaps discs.
     disk: Option<DiskControl>,
 }
@@ -396,16 +399,27 @@ unsafe fn fill_canvas(h: &mut Host, data: *const c_void, width: c_uint, height: 
     if w == 0 || hgt == 0 {
         return;
     }
+    if h.fill_columns.0 != (w, cw) {
+        h.fill_columns = ((w, cw), (0..cw).map(|x| x * w / cw).collect());
+    }
     let format = h.format;
+    let mut last = None;
     for y in 0..ch {
-        let src = (data as *const u8).add(y * hgt / ch * pitch);
+        let line = y * hgt / ch;
         let row = y * cw * 4;
+        // A line drawn twice (a 240-line picture on a 480-line canvas) is copied, not redone.
+        if last == Some(line) {
+            h.video.copy_within(row - cw * 4..row, row);
+            continue;
+        }
+        last = Some(line);
+        let src = (data as *const u8).add(line * pitch);
         if format == PixelFormat::Xrgb8888 && w == cw {
             ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cw * 4);
             continue;
         }
-        for x in 0..cw {
-            let [b, g, r] = pixel(format, src, x * w / cw);
+        for (x, &from) in h.fill_columns.1.iter().enumerate() {
+            let [b, g, r] = pixel(format, src, from);
             let o = row + x * 4;
             h.video[o..o + 4].copy_from_slice(&[b, g, r, 0]);
         }
@@ -575,6 +589,7 @@ impl LibretroCore {
             declared: std::collections::HashMap::new(),
             memory_map: Vec::new(),
             fill: false,
+            fill_columns: ((0, 0), Vec::new()),
             disk: None,
         });
         unsafe {
@@ -855,6 +870,7 @@ mod tests {
             declared: HashMap::new(),
             memory_map: Vec::new(),
             fill: false,
+            fill_columns: ((0, 0), Vec::new()),
             disk: None,
         })
     }
