@@ -74,6 +74,8 @@ const SLOT_NAME_IN_MS: Millis = 200;
 const SLOT_NAME_HOLD_MS: Millis = 1200;
 const SLOT_NAME_OUT_MS: Millis = 800;
 const SLOT_NAME_ALPHA: f32 = 0.4;
+/// How long the slot takes to turn from a cartridge slot into a disc slot, or back.
+const DISC_SLOT_MS: Millis = 300;
 
 /// How far through its fade a name `t` ms after it came up is: in, held, then out.
 fn fade_level(t: Millis) -> f32 {
@@ -436,6 +438,9 @@ pub struct App {
     title_card: Option<(TexId, u32, u32)>,
     /// When the title card last came up, for its fade (as the slot's name fades).
     title_card_shown: Option<Millis>,
+    /// How far the slot has turned into a disc slot (0 a cartridge slot, 1 a disc slot): it
+    /// is one on the PlayStation's shelf and while a PlayStation game is in.
+    disc_slot: f32,
     star_face: Option<(TexId, u32, u32)>,
     /// System → Auto Clock: the time server being asked, and when to ask next.
     #[cfg(feature = "brick")]
@@ -557,6 +562,7 @@ impl App {
             played: slot_ui::Printed::default(),
             title_card: None,
             title_card_shown: None,
+            disc_slot: 0.0,
             star_face: None,
             #[cfg(feature = "brick")]
             clock_sync: None,
@@ -892,6 +898,20 @@ impl App {
         self.shelf_named = None;
     }
 
+    /// The slot turns into a disc slot on the PlayStation's shelf, and back on the others.
+    fn turn_slot(&mut self, dt: f32) {
+        let disc = match &self.phase {
+            Phase::Shelf | Phase::QuickMenu { .. } => {
+                self.shelves.get(self.shelf_at).is_some_and(|(p, _)| *p == Platform::Ps1)
+            }
+            _ => self.seated_cart().is_some_and(|c| c.platform == Platform::Ps1),
+        };
+        let step = dt * 1000.0 / DISC_SLOT_MS as f32;
+        let to = if disc { 1.0 } else { 0.0 };
+        self.disc_slot += (to - self.disc_slot).clamp(-step, step);
+        slot_ui::set_disc_slot(ease(self.disc_slot));
+    }
+
     fn slot_name_alpha(&self) -> f32 {
         let Some(at) = self.shelf_named else {
             return 0.0;
@@ -1123,6 +1143,12 @@ impl App {
         for (_, shelf) in &mut self.shelves {
             shelf.set_snes_shadow(slot_ui::SnesShell::Us, us);
             shelf.set_snes_shadow(slot_ui::SnesShell::Pal, pal);
+        }
+    }
+
+    pub fn set_disc_shadow(&mut self, face: TexId) {
+        for (_, shelf) in &mut self.shelves {
+            shelf.set_disc_shadow(face);
         }
     }
 
@@ -2458,6 +2484,7 @@ impl App {
 
     pub fn update(&mut self, dt: f32) {
         self.clock += dt as f64 * 1000.0;
+        self.turn_slot(dt);
         if self.name_pending && self.shelf_platform.face.is_some() {
             self.name_pending = false;
             self.shelf_named = Some(self.now());

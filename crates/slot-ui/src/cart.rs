@@ -352,8 +352,9 @@ const SNES_SEATED_H: u32 = 157;
 
 pub fn seated_box(platform: Platform) -> (u32, u32) {
     match platform {
-        // A PlayStation game stands in as a GBA cart for now (see shell::PS1_SHELL).
-        Platform::Gba | Platform::Ps1 => (SEATED_W, SEATED_H),
+        Platform::Gba => (SEATED_W, SEATED_H),
+        // A disc goes in as wide as a cart.
+        Platform::Ps1 => (SEATED_W, SEATED_W),
         Platform::Gb | Platform::Gbc => (SEATED_W, GB_SEATED_H),
         Platform::Nes => (SEATED_W, NES_SEATED_H),
         Platform::Snes => (SEATED_W, SNES_SEATED_H),
@@ -361,6 +362,9 @@ pub fn seated_box(platform: Platform) -> (u32, u32) {
 }
 
 pub fn cart_box(platform: Platform) -> (u32, u32) {
+    if platform == Platform::Ps1 {
+        return (crate::disc::DISC_PX, crate::disc::DISC_PX);
+    }
     let s = spec(match platform {
         Platform::Gba | Platform::Ps1 => Shape::Gba,
         Platform::Gb | Platform::Gbc => Shape::Gb(GbShell::Notched),
@@ -401,11 +405,18 @@ pub fn cart_face(cart: &Cart) -> CartFace {
 }
 
 pub fn label_size(cart: &Cart) -> (u32, u32) {
+    // A disc's art is printed over all of it.
+    if cart.platform == Platform::Ps1 {
+        return (crate::disc::DISC_PX, crate::disc::DISC_PX);
+    }
     let (_, _, lw, lh) = spec(shape_of(cart)).label;
     (lw, lh)
 }
 
 pub fn cart_face_with(cart: &Cart, art: Option<Vec<u8>>) -> CartFace {
+    if cart.platform == Platform::Ps1 {
+        return crate::disc::disc_face(cart, art);
+    }
     let s = spec(shape_of(cart));
     let shell = shell_for(cart);
     let mut face = shell_face(&s, &shell);

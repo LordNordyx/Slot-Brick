@@ -574,6 +574,9 @@ impl Frontend {
             compositor.create_texture(face.w, face.h, &face.rgba)
         });
         self.session.app_mut().set_snes_cart_shadows(us, pal);
+        let disc = slot_ui::disc_shadow();
+        let disc = compositor.create_texture(disc.w, disc.h, &disc.rgba);
+        self.session.app_mut().set_disc_shadow(disc);
         let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);
