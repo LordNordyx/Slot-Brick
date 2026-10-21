@@ -111,6 +111,14 @@ pub trait RetroCore: Send {
     }
     fn pump_link(&mut self) {}
     fn stop_link(&mut self) {}
+    /// A disc-based game's discs: which one is in (from 0), and how many there are.
+    fn discs(&self) -> Option<(u32, u32)> {
+        None
+    }
+    /// Puts disc `at` in, opening and closing the lid around it.
+    fn set_disc(&mut self, _at: u32) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

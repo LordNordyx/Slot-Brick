@@ -42,6 +42,12 @@ struct Host {
     declared: std::collections::HashMap<String, Vec<String>>,
     /// The core's SET_MEMORY_MAPS descriptors; their pointers live as long as the game.
     memory_map: Vec<MemoryDescriptor>,
+    /// Every frame stretched to fill the canvas, whatever its size (the PlayStation's
+    /// pictures are 256 to 640 wide and 240 or 480 tall, and each fills a 4:3 screen),
+    /// rather than copied in and halved to fit.
+    fill: bool,
+    /// For a disc-based core: how it swaps discs.
+    disk: Option<DiskControl>,
 }
 
 thread_local! {
@@ -214,6 +220,13 @@ unsafe extern "C" fn environment(cmd: c_uint, data: *mut c_void) -> bool {
             })
             .is_some()
         }
+        SET_DISK_CONTROL_INTERFACE => {
+            if data.is_null() {
+                return false;
+            }
+            let control = std::ptr::read(data as *const DiskControl);
+            with_host(|h| h.disk = Some(control)).is_some()
+        }
         SET_MEMORY_MAPS => {
             if data.is_null() {
                 return false;
@@ -334,6 +347,10 @@ unsafe extern "C" fn video_refresh(
         return;
     }
     with_host(|h| {
+        if h.fill {
+            fill_canvas(h, data, width, height, pitch);
+            return;
+        }
         let (cw, ch) = h.canvas;
         // A frame larger than the canvas (a SNES hi-res mode: 512 wide, or 448 lines
         // interlaced) is halved to fit: pixels averaged across, as a TV blended them, and
@@ -370,6 +387,29 @@ unsafe extern "C" fn video_refresh(
             }
         }
     });
+}
+
+/// The frame stretched over the whole canvas, nearest pixel: no borders, whatever its size.
+unsafe fn fill_canvas(h: &mut Host, data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
+    let (cw, ch) = (h.canvas.0 as usize, h.canvas.1 as usize);
+    let (w, hgt) = (width as usize, height as usize);
+    if w == 0 || hgt == 0 {
+        return;
+    }
+    let format = h.format;
+    for y in 0..ch {
+        let src = (data as *const u8).add(y * hgt / ch * pitch);
+        let row = y * cw * 4;
+        if format == PixelFormat::Xrgb8888 && w == cw {
+            ptr::copy_nonoverlapping(src, h.video.as_mut_ptr().add(row), cw * 4);
+            continue;
+        }
+        for x in 0..cw {
+            let [b, g, r] = pixel(format, src, x * w / cw);
+            let o = row + x * 4;
+            h.video[o..o + 4].copy_from_slice(&[b, g, r, 0]);
+        }
+    }
 }
 
 /// Pixel `i` of a frame row as blue, green, red.
@@ -467,6 +507,11 @@ impl LibretroCore {
         self.host.video = vec![0; (w * h * 4) as usize];
     }
 
+    /// Every frame stretched over the whole canvas (see `Host::fill`).
+    pub fn set_fill(&mut self, fill: bool) {
+        self.host.fill = fill;
+    }
+
     pub fn set_option(&mut self, key: &str, value: &str) {
         if !self.host.declared.is_empty() {
             match self.host.declared.get(key) {
@@ -529,6 +574,8 @@ impl LibretroCore {
             options_dirty: false,
             declared: std::collections::HashMap::new(),
             memory_map: Vec::new(),
+            fill: false,
+            disk: None,
         });
         unsafe {
             let _a = Active::bind(&mut host);
@@ -600,14 +647,23 @@ impl RetroCore for LibretroCore {
 
     fn load(&mut self, rom: &Path) -> Result<(), CoreError> {
         self.unload();
-        self.rom = std::fs::read(rom)?;
+        let mut system = SystemInfo::default();
+        unsafe { (self.api.get_system_info)(&mut system) };
+        // A core that reads the game itself (a disc image, hundreds of MB) gets its path only.
+        self.rom = match system.need_fullpath {
+            true => Vec::new(),
+            false => std::fs::read(rom)?,
+        };
         self.rom_path = Some(
             CString::new(rom.as_os_str().as_encoded_bytes())
                 .map_err(|_| CoreError::Load("rom path contains a nul".into()))?,
         );
         let info = GameInfo {
             path: self.rom_path.as_ref().map_or(ptr::null(), |p| p.as_ptr()),
-            data: self.rom.as_ptr() as *const c_void,
+            data: match self.rom.is_empty() {
+                true => ptr::null(),
+                false => self.rom.as_ptr() as *const c_void,
+            },
             size: self.rom.len(),
             meta: ptr::null(),
         };
@@ -751,6 +807,25 @@ impl RetroCore for LibretroCore {
         let _a = Active::bind(&mut self.host);
         unsafe { halt_link() };
     }
+
+    fn discs(&self) -> Option<(u32, u32)> {
+        let disk = self.host.disk?;
+        let (index, count) = (disk.get_image_index?, disk.get_num_images?);
+        let (at, of) = unsafe { (index(), count()) };
+        (of > 0).then_some((at.min(of - 1), of))
+    }
+
+    fn set_disc(&mut self, at: u32) -> bool {
+        let Some(disk) = self.host.disk else {
+            return false;
+        };
+        let (Some(eject), Some(set)) = (disk.set_eject_state, disk.set_image_index) else {
+            return false;
+        };
+        let _a = Active::bind(&mut self.host);
+        // As a player would: open the lid, change the disc, close it.
+        unsafe { eject(true) && set(at) && eject(false) }
+    }
 }
 
 #[cfg(test)]
@@ -779,6 +854,8 @@ mod tests {
             options_dirty,
             declared: HashMap::new(),
             memory_map: Vec::new(),
+            fill: false,
+            disk: None,
         })
     }
 
@@ -1663,6 +1740,23 @@ mod tests {
         assert_eq!(px(0, 8), vec![127, 127, 127], "224 lines start 8 down");
         assert_eq!(px(128, 4), vec![0, 0, 0], "the band above the picture is not cleared");
         assert_eq!(px(128, 233), vec![0, 0, 0], "the band below the picture is not cleared");
+    }
+
+    #[test]
+    fn in_fill_mode_any_frame_size_stretches_over_the_whole_canvas() {
+        let mut host = host_with(HashMap::new(), false);
+        host.canvas = (640, 480);
+        host.video = vec![1; 640 * 480 * 4];
+        host.fill = true;
+        let _active = Active::bind(&mut host);
+        // 368x240, the left half white: it covers the canvas, its left half white.
+        let (w, h) = (368usize, 240usize);
+        let frame: Vec<u8> = (0..w * h).flat_map(|i| if i % w < w / 2 { [255; 4] } else { [0; 4] }).collect();
+        unsafe { video_refresh(frame.as_ptr() as *const c_void, w as c_uint, h as c_uint, w * 4) };
+        let video = unsafe { with_host(|h| h.video.clone()) }.unwrap();
+        let px = |x: usize, y: usize| video[(y * 640 + x) * 4];
+        assert_eq!((px(0, 0), px(318, 479)), (255, 255), "the left half is not white to its edges");
+        assert_eq!((px(322, 0), px(639, 479)), (0, 0), "the right half is not dark to its edges");
     }
 
     #[test]
