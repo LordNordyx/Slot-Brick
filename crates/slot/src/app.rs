@@ -16,9 +16,9 @@ use slot_store::{
 use slot_ui::{
     board_from, board_zoom, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
     draw_sticker, ease, grown, lid_at, lid_from, lift_of, on_board, shelf_cart_at, ClockPicker,
-    Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, Placed, Polaroids, PowerChoice,
-    QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome, TexId, Toast,
-    CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT, PEEL_MS,
+    Draw, FfState, GbShell, Hud, HudKind, Icon, LinkBadge, Millis, PauseChoice, Placed, Polaroids,
+    PowerChoice, QuickMenu, QuickMenuFaces, QuickRow, QuickValue, Refusal, Shelf, SlotChrome,
+    TexId, Toast, CART_W, CHIP_H, CHIP_U, CHIP_V, CHIP_W, HINT_EDGE, HINT_H, HOP_LIFT, PEEL_MS,
     SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
@@ -308,6 +308,8 @@ pub struct App {
     shutdown_faces: Vec<(TexId, u32, u32)>,
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
+    pause_menu: Option<usize>,
+    pause_menu_faces: Vec<(TexId, u32, u32)>,
     core_picker: Option<CorePicker>,
     /// A PlayStation game of several discs, fanned out to pick the one to put in.
     disc_picker: Option<crate::disc_picker::DiscPicker>,
@@ -525,6 +527,8 @@ impl App {
             wifi_faces: None,
             power_menu: None,
             power_menu_faces: Vec::new(),
+            pause_menu: None,
+            pause_menu_faces: Vec::new(),
             core_picker: None,
             disc_picker: None,
             disc_faces: Vec::new(),
@@ -1506,7 +1510,7 @@ impl App {
     /// Home+L1 / Home+R1: the previous or next overlay for the system being played, named as it
     /// goes on. With no overlays for it, there is nothing to change to.
     fn step_overlay_in_game(&mut self, right: bool) {
-        if !matches!(self.phase, Phase::Playing { .. }) || self.game_menu_open() || self.power_menu.is_some() {
+        if !matches!(self.phase, Phase::Playing { .. }) || self.menu_over_game() {
             return;
         }
         if !self.step_overlay(self.platform, right) {
@@ -1520,7 +1524,7 @@ impl App {
     /// Home+X on the Brick: GBA between its true 3:2 shape and 4:3 full screen.
     /// Remembered per game, like the L1/R1 choice for GB/GBC.
     fn toggle_gba_picture(&mut self) {
-        if !matches!(self.phase, Phase::Playing { .. }) || self.game_menu_open() || self.power_menu.is_some() {
+        if !matches!(self.phase, Phase::Playing { .. }) || self.menu_over_game() {
             return;
         }
         // Consoles whose L and R are the game's take this shortcut instead.
@@ -1762,6 +1766,15 @@ impl App {
         self.power_menu
     }
 
+    pub fn pause_menu(&self) -> Option<usize> {
+        self.pause_menu
+            .filter(|_| matches!(self.phase, Phase::Playing { .. }))
+    }
+
+    fn menu_over_game(&self) -> bool {
+        self.game_menu_open() || self.power_menu.is_some() || self.pause_menu().is_some()
+    }
+
     pub fn core_picker(&self) -> Option<Core> {
         self.core_picker.map(|p| p.seat())
     }
@@ -1972,6 +1985,9 @@ impl App {
         if self.game_menu.is_some() {
             return self.game_menu_input(action);
         }
+        if self.pause_menu().is_some() {
+            return self.pause_menu_input(action);
+        }
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
@@ -2023,6 +2039,7 @@ impl App {
                 }
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
+                Action::QuickMenu => self.open_pause_menu(),
                 Action::Polaroids => self.open_polaroids(),
                 Action::SaveState => self.save_state(),
                 Action::LoadState => self.load_newest(),
@@ -2274,7 +2291,7 @@ impl App {
     fn adjust(&mut self, action: Action) -> bool {
         if action == Action::LedToggle {
             #[cfg(feature = "brick")]
-            if matches!(self.phase, Phase::Playing { .. }) && !self.game_menu_open() && self.power_menu.is_none() {
+            if matches!(self.phase, Phase::Playing { .. }) && !self.menu_over_game() {
                 if let Some(leds) = &mut self.brick_leds {
                     if let Err(e) = leds.toggle() { eprintln!("slot: LED shortcut: {e}"); self.refuse(); }
                 }
@@ -3013,7 +3030,7 @@ impl App {
 
     fn draw_scene(&self, out: &mut Vec<Draw>) {
         if let Some(index) = self.power_menu {
-            self.draw_power_menu(index, out);
+            draw_menu_screen(&self.power_menu_faces, index, out);
             return;
         }
         if self.shutting_down() {
@@ -3176,6 +3193,9 @@ impl App {
         if let Some(menu) = self.game_menu {
             self.draw_game_menu(menu, out);
         }
+        if let Some(index) = self.pause_menu() {
+            draw_menu_screen(&self.pause_menu_faces, index, out);
+        }
         self.hud.draw(self.now(), out);
     }
 
@@ -3268,6 +3288,10 @@ impl App {
         self.power_menu_faces = faces;
     }
 
+    pub fn set_pause_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
+        self.pause_menu_faces = faces;
+    }
+
     pub fn set_core_board_faces(&mut self, board: TexId, lid: TexId) {
         self.core_board_face = Some(board);
         self.core_lid_face = Some(lid);
@@ -3321,22 +3345,6 @@ impl App {
 
     pub fn link_sprites_ready(&self) -> bool {
         self.link_sprites.is_some()
-    }
-
-    fn draw_power_menu(&self, index: usize, out: &mut Vec<Draw>) {
-        out.push(Draw::Rect {
-            x: 0.0,
-            y: 0.0,
-            w: OUT_W as f32,
-            h: OUT_H as f32,
-            colour: slot_ui::opening(),
-        });
-        draw_menu_rows(
-            &self.power_menu_faces,
-            Some(index),
-            centred_top(self.power_menu_faces.len()),
-            out,
-        );
     }
 
     fn core_picker_shown(&self) -> Option<CorePicker> {
@@ -3693,6 +3701,7 @@ impl App {
             return;
         };
         self.play_held = None;
+        self.pause_menu = None;
         self.refusal = None;
         self.refused_from = None;
         self.phase = Phase::Inserting {
@@ -3890,6 +3899,53 @@ impl App {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn open_pause_menu(&mut self) {
+        if self.link_active() {
+            return self.refuse();
+        }
+        self.pause_menu = Some(0);
+    }
+
+    fn pause_menu_input(&mut self, action: Action) {
+        let Some(index) = self.pause_menu else {
+            return;
+        };
+        let last = PauseChoice::ALL.len() - 1;
+        match action {
+            Action::GbaDown(Btn::Up) => {
+                self.pause_menu = Some(if index == 0 { last } else { index - 1 })
+            }
+            Action::GbaDown(Btn::Down) => {
+                self.pause_menu = Some(if index >= last { 0 } else { index + 1 })
+            }
+            Action::GbaDown(Btn::B) | Action::QuickMenu => self.pause_menu = None,
+            // The second tap of a double-tap: the switcher, as from the game.
+            Action::Polaroids => {
+                self.pause_menu = None;
+                self.open_polaroids();
+            }
+            Action::Eject => self.leave_paused(Self::eject),
+            Action::GbaDown(Btn::A) => match PauseChoice::ALL[index] {
+                PauseChoice::Resume => self.pause_menu = None,
+                PauseChoice::SaveState => {
+                    self.pause_menu = None;
+                    self.save_state();
+                }
+                PauseChoice::LoadState => self.leave_paused(Self::open_polaroids),
+                PauseChoice::Quit => self.leave_paused(Self::eject),
+            },
+            _ => {}
+        }
+    }
+
+    /// Refused, the menu stays up; otherwise it goes with the game.
+    fn leave_paused(&mut self, go: fn(&mut Self)) {
+        go(self);
+        if !matches!(self.phase, Phase::Playing { .. }) {
+            self.pause_menu = None;
         }
     }
 
@@ -5517,6 +5573,17 @@ fn free_stamp(ring: &StateRing, now: i64) -> String {
 
 fn centred_top(rows: usize) -> f32 {
     (OUT_H as f32 - POWER_MENU_PITCH * rows as f32) / 2.0
+}
+
+fn draw_menu_screen(faces: &[(TexId, u32, u32)], index: usize, out: &mut Vec<Draw>) {
+    out.push(Draw::Rect {
+        x: 0.0,
+        y: 0.0,
+        w: OUT_W as f32,
+        h: OUT_H as f32,
+        colour: slot_ui::opening(),
+    });
+    draw_menu_rows(faces, Some(index), centred_top(faces.len()), out);
 }
 
 fn draw_menu_rows(

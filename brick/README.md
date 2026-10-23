@@ -51,6 +51,7 @@ doesn't flash anything to the device.
 
 | Button                      | Action                                              |
 | --------------------------- | --------------------------------------------------- |
+| `HOME`                      | Pause: Resume, Save / Load State, Quit Game         |
 | Hold `HOME`                 | Save, eject and return to the carousel              |
 | Double-tap `HOME`           | Save state switcher                                 |
 | `HOME + B` or `SELECT + B`  | LEDs on / off                                       |

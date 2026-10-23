@@ -24,6 +24,32 @@ impl PowerChoice {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PauseChoice {
+    Resume,
+    SaveState,
+    LoadState,
+    Quit,
+}
+
+impl PauseChoice {
+    pub const ALL: [PauseChoice; 4] = [
+        PauseChoice::Resume,
+        PauseChoice::SaveState,
+        PauseChoice::LoadState,
+        PauseChoice::Quit,
+    ];
+
+    pub fn text(self) -> &'static str {
+        match self {
+            PauseChoice::Resume => "RESUME",
+            PauseChoice::SaveState => "SAVE STATE",
+            PauseChoice::LoadState => "LOAD STATE",
+            PauseChoice::Quit => "QUIT GAME",
+        }
+    }
+}
+
 pub(crate) const MENU_PX: f32 = 30.0;
 const MENU_MIN_PX: f32 = 18.0;
 pub(crate) const MENU_H: u32 = 40;
