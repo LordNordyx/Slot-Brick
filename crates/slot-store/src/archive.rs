@@ -3,6 +3,7 @@
 mod sevenz;
 pub mod zip;
 
+use std::collections::HashSet;
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -311,4 +312,39 @@ fn from_line(path: &Path, rom: &Entry) -> io::Result<String> {
         meta.len(),
         rom.crc
     ))
+}
+
+/// The files a shelf lists from its folder: its ROMs, then each archive holding one ROM for it
+/// whose name no ROM or earlier archive has, a .zip before a .7z, so two never share saves.
+pub(crate) fn shelf(platform: Platform, files: Vec<PathBuf>) -> Vec<PathBuf> {
+    let key = |p: &Path| {
+        p.file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_lowercase)
+    };
+    let (mut roms, mut archives): (Vec<PathBuf>, Vec<PathBuf>) = files
+        .into_iter()
+        .filter(|p| !crate::is_hidden(p))
+        .filter(|p| platform.accepts(p) || (platform.takes_archives() && is_archive(p)))
+        .partition(|p| platform.accepts(p));
+    let mut taken: HashSet<String> = roms.iter().filter_map(|p| key(p)).collect();
+    archives.sort_by_key(|p| (kind(p) != Some(Kind::Zip), p.clone()));
+    for archive in archives {
+        let Some(name) = key(&archive) else { continue };
+        if taken.contains(&name) {
+            eprintln!(
+                "slot: scan: {}: skipped, a game of the same name is on the shelf",
+                archive.display()
+            );
+            continue;
+        }
+        match entry(&archive, platform) {
+            Ok(_) => {
+                taken.insert(name);
+                roms.push(archive);
+            }
+            Err(why) => eprintln!("slot: scan: {}: skipped, it {why}", archive.display()),
+        }
+    }
+    roms
 }

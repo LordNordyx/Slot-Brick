@@ -1,15 +1,12 @@
 //! Where a NES or SNES ROM was sold, read from the ROM itself: a ripped cart's file name often
 //! has no "(Japan)" or "(Europe)" in it.
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 /// The SNES header's destination code (0x00 Japan, 0x01 North America, 0x02 Europe, ...), from
 /// whichever of the LoROM, HiROM and ExHiROM headers checks out. A copier's 512-byte header
 /// before the ROM is skipped.
 pub fn snes_destination(rom: &Path) -> Option<u8> {
-    let mut f = File::open(rom).ok()?;
-    let len = f.metadata().ok()?.len();
+    let len = crate::archive::len(rom).ok()?;
     let skip = if len % 1024 == 512 { 512 } else { 0 };
     let mut fallback = None;
     for at in [0x7fc0u64, 0xffc0, 0x40_ffc0] {
@@ -17,8 +14,7 @@ pub fn snes_destination(rom: &Path) -> Option<u8> {
             continue;
         }
         let mut h = [0u8; 0x20];
-        f.seek(SeekFrom::Start(skip + at)).ok()?;
-        f.read_exact(&mut h).ok()?;
+        crate::archive::read_at(rom, skip + at, &mut h).ok()?;
         let complement = u16::from_le_bytes([h[0x1c], h[0x1d]]);
         let checksum = u16::from_le_bytes([h[0x1e], h[0x1f]]);
         let destination = h[0x19];
@@ -50,7 +46,7 @@ const FAMICOM_ONLY: &[u16] = &[18, 19, 21, 22, 23, 24, 25, 26, 65, 67, 73, 75, 8
 /// The iNES mapper number, None when the file has no iNES header.
 pub fn nes_mapper(rom: &Path) -> Option<u16> {
     let mut h = [0u8; 16];
-    File::open(rom).ok()?.read_exact(&mut h).ok()?;
+    crate::archive::read_at(rom, 0, &mut h).ok()?;
     if &h[..4] != b"NES\x1a" {
         return None;
     }
