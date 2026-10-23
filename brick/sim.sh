@@ -138,7 +138,8 @@ case "$cmd" in
     unit)
         build
         docker_run "$IMAGE" cargo test --locked --release --target-dir "$SIM" \
-            -p slot -p slot-power --no-default-features --features sim --lib --test led
+            -p slot -p slot-power --no-default-features --features sim --lib --test led --test archive_launch
+        docker_run "$IMAGE" cargo test --locked --release --target-dir "$SIM" -p slot-store
         ;;
     *) sed -n '2,10p' "$0"; exit 2 ;;
 esac

@@ -89,7 +89,10 @@ pub fn scan(root: &Path) -> Result<Vec<Cart>, StoreError> {
             Ok(_) if platform == Platform::Ps1 => crate::ps1::games(&dir),
             Ok(d) => crate::archive::shelf(
                 platform,
-                d.filter_map(|e| e.ok()).filter(is_file).map(|e| e.path()).collect(),
+                d.filter_map(|e| e.ok())
+                    .filter(is_file)
+                    .map(|e| e.path())
+                    .collect(),
             ),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
             Err(e) => {

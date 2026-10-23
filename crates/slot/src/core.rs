@@ -145,11 +145,8 @@ pub fn palette_for(
 }
 
 pub fn dmg_only(rom: &Path) -> bool {
-    use std::io::Read;
     let mut header = [0u8; 0x150];
-    std::fs::File::open(rom)
-        .and_then(|mut f| f.read_exact(&mut header))
-        .is_ok_and(|_| header[0x143] & 0x80 == 0)
+    slot_store::archive::read_at(rom, 0, &mut header).is_ok_and(|_| header[0x143] & 0x80 == 0)
 }
 
 fn report_missing(core: Core, paths: &[PathBuf]) {
