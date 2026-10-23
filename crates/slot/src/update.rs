@@ -292,7 +292,7 @@ pub fn install(base: &str, m: &Manifest, card: &Path, progress: &Progress) -> Re
     let dir = card.join(DIR);
     let _ = fs::remove_dir_all(&dir);
     let need = m.size * 3 + (16 << 20);
-    if let Some(free) = free_space(card) {
+    if let Some(free) = slot_store::free_space(card) {
         if free < need {
             return Err(format!("Needs {} MB free on the SD card", need.div_ceil(1 << 20)));
         }
@@ -346,16 +346,6 @@ fn download(base: &str, m: &Manifest, dir: &Path, progress: &Progress) -> Result
     }
     file.sync_all().map_err(|e| format!("Cannot write to the SD card: {e}"))?;
     Ok(path)
-}
-
-fn free_space(path: &Path) -> Option<u64> {
-    use std::os::unix::ffi::OsStrExt;
-    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
-    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
-    match unsafe { libc::statvfs(c.as_ptr(), &mut st) } {
-        0 => Some(st.f_bavail as u64 * st.f_frsize as u64),
-        _ => None,
-    }
 }
 
 /// Slot's own files on the card, which an update replaces. Everything else is the player's:

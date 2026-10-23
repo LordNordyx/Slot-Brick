@@ -212,3 +212,93 @@ fn zip_and_7z_are_archives_in_any_case_and_nothing_else_is() {
         assert!(!ar::is_archive(std::path::Path::new(name)), "{name}");
     }
 }
+
+#[test]
+fn a_zipped_rom_is_unpacked_under_its_archives_name_and_kept_for_next_time() {
+    let d = tempfile::tempdir().unwrap();
+    let cache = d.path().join("Unpacked");
+    let zip = write(
+        &d,
+        "Pocket Zip.zip",
+        &std::fs::read(fixture("rom.zip")).unwrap(),
+    );
+    let out = ar::playable(&zip, &cache).unwrap();
+    assert_eq!(out, cache.join("Pocket Zip.gb"));
+    assert_eq!(std::fs::read(&out).unwrap(), rom());
+    let when = std::fs::metadata(&out).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    assert_eq!(ar::playable(&zip, &cache).unwrap(), out);
+    assert_eq!(
+        std::fs::metadata(&out).unwrap().modified().unwrap(),
+        when,
+        "it unpacked again"
+    );
+}
+
+#[test]
+fn starting_another_archive_deletes_the_last_one_unpacked() {
+    let d = tempfile::tempdir().unwrap();
+    let cache = d.path().join("Unpacked");
+    let zip = write(&d, "A.zip", &std::fs::read(fixture("rom.zip")).unwrap());
+    let sevenz = write(&d, "B.7z", &std::fs::read(fixture("rom-lzma2.7z")).unwrap());
+    let first = ar::playable(&zip, &cache).unwrap();
+    let second = ar::playable(&sevenz, &cache).unwrap();
+    assert!(!first.exists());
+    assert_eq!(std::fs::read(&second).unwrap(), rom());
+}
+
+#[test]
+fn a_plain_rom_is_played_where_it_is_and_leaves_the_cache_alone() {
+    let d = tempfile::tempdir().unwrap();
+    let cache = d.path().join("Unpacked");
+    let zip = write(&d, "A.zip", &std::fs::read(fixture("rom.zip")).unwrap());
+    let kept = ar::playable(&zip, &cache).unwrap();
+    let plain = write(&d, "B.gb", &rom());
+    assert_eq!(ar::playable(&plain, &cache).unwrap(), plain);
+    assert!(kept.exists());
+}
+
+#[test]
+fn an_archive_changed_since_is_unpacked_again() {
+    let d = tempfile::tempdir().unwrap();
+    let cache = d.path().join("Unpacked");
+    let zip = write(&d, "A.zip", &zip_of(&[("a.gb", b"first")], true));
+    ar::playable(&zip, &cache).unwrap();
+    std::fs::write(&zip, zip_of(&[("a.gb", b"second!")], true)).unwrap();
+    assert_eq!(
+        std::fs::read(ar::playable(&zip, &cache).unwrap()).unwrap(),
+        b"second!"
+    );
+}
+
+#[test]
+fn a_rom_that_fails_its_checksum_is_refused_and_leaves_nothing_behind() {
+    let d = tempfile::tempdir().unwrap();
+    let cache = d.path().join("Unpacked");
+    let mut bytes = zip_of(&[("a.gb", b"some rom")], true);
+    let dir = bytes
+        .windows(4)
+        .position(|w| w == 0x0201_4b50u32.to_le_bytes())
+        .unwrap();
+    bytes[dir + 16] ^= 0xff;
+    let zip = write(&d, "A.zip", &bytes);
+    assert!(ar::playable(&zip, &cache).is_err());
+    assert_eq!(std::fs::read_dir(&cache).map(|r| r.count()).unwrap_or(0), 0);
+}
+
+#[test]
+fn a_damaged_7z_is_refused() {
+    let d = tempfile::tempdir().unwrap();
+    let mut bytes = std::fs::read(fixture("rom-lzma2.7z")).unwrap();
+    bytes[40] ^= 0xff;
+    let sevenz = write(&d, "A.7z", &bytes);
+    let cache = d.path().join("Unpacked");
+    assert!(ar::playable(&sevenz, &cache).is_err());
+    assert_eq!(std::fs::read_dir(&cache).map(|r| r.count()).unwrap_or(0), 0);
+}
+
+#[test]
+fn free_space_is_known_for_a_folder_that_exists() {
+    let d = tempfile::tempdir().unwrap();
+    assert!(slot_store::free_space(d.path()).is_some_and(|n| n > 0));
+}

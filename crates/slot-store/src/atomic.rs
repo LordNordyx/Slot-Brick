@@ -34,6 +34,17 @@ fn write_then_rename(tmp: &Path, path: &Path, bytes: &[u8]) -> std::io::Result<(
     std::fs::rename(tmp, path)
 }
 
+/// Bytes free on the file system that holds `path`, for Slot to write to.
+pub fn free_space(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    match unsafe { libc::statvfs(c.as_ptr(), &mut st) } {
+        0 => Some(st.f_bavail as u64 * st.f_frsize as u64),
+        _ => None,
+    }
+}
+
 const NAME_MAX: usize = 255;
 
 fn temp_path(path: &Path) -> PathBuf {

@@ -4,10 +4,15 @@ mod sevenz;
 pub mod zip;
 
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom};
-use std::path::Path;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use crate::platform::Platform;
+
+/// Where a zipped game's ROM is unpacked to, under Slot/. Only the last one is kept.
+pub const UNPACKED_DIR: &str = "System/Cache/Unpacked";
+const FROM_FILE: &str = "from.txt";
 
 /// The ROM inside an archive, as its index lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,4 +224,91 @@ pub fn crc32(path: &Path) -> io::Result<u32> {
             n => hasher.update(&buf[..n]),
         }
     }
+}
+
+/// The file a core should load: a plain ROM itself, or an archive's ROM unpacked into `dir` as
+/// `<archive's name>.<ROM's extension>`. The same archive, unchanged, is not unpacked again;
+/// any other unpacked ROM is deleted first.
+pub fn playable(path: &Path, dir: &Path) -> io::Result<PathBuf> {
+    if !is_archive(path) {
+        return Ok(path.to_path_buf());
+    }
+    let rom = rom_of(path)?;
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| refused(path, Skip::Damaged))?;
+    let ext = Path::new(&rom.name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("rom")
+        .to_ascii_lowercase();
+    let out = dir.join(format!("{stem}.{ext}"));
+    let from = from_line(path, &rom.entry())?;
+    let kept = std::fs::read_to_string(dir.join(FROM_FILE)).is_ok_and(|t| t == from)
+        && std::fs::metadata(&out).is_ok_and(|m| m.len() == rom.size);
+    if kept {
+        return Ok(out);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+    std::fs::create_dir_all(dir)?;
+    if crate::free_space(dir).is_some_and(|free| free < rom.size) {
+        return Err(io::Error::new(
+            io::ErrorKind::StorageFull,
+            format!(
+                "{} needs {} MB free on the SD card",
+                path.display(),
+                rom.size.div_ceil(1 << 20)
+            ),
+        ));
+    }
+    let part = dir.join(format!(".{stem}.{ext}.part"));
+    let unpacked = with_rom(path, |entry, r| {
+        let mut file = File::create(&part)?;
+        let mut hasher = crc32fast::Hasher::new();
+        let mut buf = vec![0u8; 256 << 10];
+        let mut written = 0u64;
+        loop {
+            let n = r.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+            file.write_all(&buf[..n])?;
+            written += n as u64;
+        }
+        if written != entry.size || hasher.finalize() != entry.crc {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "{} is damaged (its checksum does not match)",
+                    path.display()
+                ),
+            ));
+        }
+        file.sync_all()
+    });
+    if let Err(e) = unpacked {
+        let _ = std::fs::remove_file(&part);
+        return Err(e);
+    }
+    std::fs::rename(&part, &out)?;
+    crate::atomic_write(&dir.join(FROM_FILE), from.as_bytes())?;
+    Ok(out)
+}
+
+/// What the unpacked ROM came from: the archive, its size and age, and the ROM's checksum.
+fn from_line(path: &Path, rom: &Entry) -> io::Result<String> {
+    let meta = std::fs::metadata(path)?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_nanos());
+    Ok(format!(
+        "{}\t{}\t{mtime}\t{:08X}\n",
+        path.display(),
+        meta.len(),
+        rom.crc
+    ))
 }
