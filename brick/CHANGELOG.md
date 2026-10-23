@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Zipped games: put `.zip` or `.7z` ROMs in `Slot/Games/GB`, `GBC`, `GBA`, `NES` or `SNES` and they play like the plain ROM, under the archive's name. Zip a ROM under its own name and it keeps its saves, states, label and play time. Each archive needs exactly one ROM in it; it is unpacked into `Slot/System/Cache/Unpacked` when you start it, and only the last one is kept. PlayStation games stay as they are.
 - PlayStation (experimental, not yet tested on a Brick): put games in `Slot/Games/PS1` (`.cue`/`.bin`, `.chd`, `.pbp`, `.iso`, or an `.m3u` for a game of several discs) and they get a shelf of their own, as discs. The slot turns into a disc slot, and the disc spins as it goes in. They run on PCSX ReARMed, with your BIOS from `Slot/BIOS` if you have one.
 - PlayStation games of several discs: A fans the discs out; pick one with left / right and A puts it in. To change discs mid-game, eject and put in the next one: the game carries on with it.
 - PlayStation: L2 and R2 are the game's own buttons, so fast-forward is HOME + R2. No rewind for PlayStation games. A Brick Pro's left stick is the DualShock's left stick in game. Memory cards are saved in `Slot/Saves/PS1`, one per game. HOME → Screen → PlayStation has Shader, Dithering and Overlay.
