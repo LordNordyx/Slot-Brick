@@ -4,7 +4,8 @@ use std::fs::File;
 use std::io::Read;
 
 use common::{fixture, zip_of};
-use slot_store::archive::zip;
+use slot_store::archive::{self as ar, zip, Skip};
+use slot_store::Platform;
 
 fn unzipped(path: &std::path::Path) -> Vec<(String, Vec<u8>)> {
     let mut file = File::open(path).unwrap();
@@ -95,4 +96,119 @@ fn deflated_data_longer_than_the_index_says_stops_at_the_declared_size() {
         .read_to_end(&mut data)
         .unwrap();
     assert_eq!(data.len(), 100);
+}
+
+fn rom() -> Vec<u8> {
+    std::fs::read(fixture("rom.gb")).unwrap()
+}
+
+fn write(d: &tempfile::TempDir, name: &str, bytes: &[u8]) -> std::path::PathBuf {
+    let path = d.path().join(name);
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+#[test]
+fn every_archive_a_tool_makes_names_its_rom_size_and_checksum() {
+    for name in [
+        "rom.zip",
+        "rom-stored.zip",
+        "rom-7zip.zip",
+        "rom-descriptor.zip",
+        "rom-mac.zip",
+        "rom-lzma.7z",
+        "rom-lzma2.7z",
+    ] {
+        let e = ar::entry(&fixture(name), Platform::Gb).unwrap_or_else(|s| panic!("{name}: {s}"));
+        assert_eq!(
+            (e.name.as_str(), e.size, e.crc),
+            ("rom.gb", 0x400, crc32fast::hash(&rom())),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn an_archive_slot_cannot_open_says_why() {
+    for (name, why) in [
+        ("rom-encrypted.zip", Skip::Encrypted),
+        ("rom-encrypted.7z", Skip::Encrypted),
+        ("rom-hidden.7z", Skip::Encrypted),
+        ("rom-bzip2.zip", Skip::Method),
+        ("rom-ppmd.7z", Skip::Method),
+    ] {
+        assert_eq!(ar::entry(&fixture(name), Platform::Gb), Err(why), "{name}");
+    }
+}
+
+#[test]
+fn an_archive_needs_exactly_one_rom_and_one_for_the_shelf() {
+    let d = tempfile::tempdir().unwrap();
+    let none = write(&d, "none.zip", &zip_of(&[("readme.txt", b"hi")], true));
+    let two = write(
+        &d,
+        "two.zip",
+        &zip_of(&[("a.gb", b"a"), ("b.gbc", b"b")], true),
+    );
+    let mixed = write(
+        &d,
+        "mixed.7z",
+        &common::sevenz_of(&[("a.gb", b"a"), ("b.nes", b"b")]),
+    );
+    let notes = write(
+        &d,
+        "notes.zip",
+        &zip_of(
+            &[("readme.txt", b"hi"), ("game.gb", b"rom"), ("dir/", b"")],
+            false,
+        ),
+    );
+    assert_eq!(ar::entry(&none, Platform::Gb), Err(Skip::NoRom));
+    assert_eq!(ar::entry(&two, Platform::Gb), Err(Skip::SeveralRoms));
+    assert_eq!(ar::entry(&mixed, Platform::Gb), Err(Skip::SeveralRoms));
+    assert_eq!(ar::entry(&notes, Platform::Gb).unwrap().name, "game.gb");
+    assert_eq!(ar::entry(&notes, Platform::Nes), Err(Skip::NoRom));
+    assert_eq!(ar::entry(&notes, Platform::Ps1), Err(Skip::NoRom));
+}
+
+#[test]
+fn a_rom_reads_the_same_plain_zipped_or_7zd() {
+    for path in [
+        fixture("rom.gb"),
+        fixture("rom.zip"),
+        fixture("rom-stored.zip"),
+        fixture("rom-lzma2.7z"),
+        fixture("rom-lzma.7z"),
+    ] {
+        let mut title = [0u8; 7];
+        ar::read_at(&path, 0x134, &mut title).unwrap();
+        assert_eq!(&title, b"ZIPTEST", "{}", path.display());
+        assert_eq!(ar::len(&path).unwrap(), 0x400);
+        assert_eq!(ar::crc32(&path).unwrap(), crc32fast::hash(&rom()));
+        let mut past = [0u8; 2];
+        assert!(
+            ar::read_at(&path, 0x3ff, &mut past).is_err(),
+            "{}",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn a_crc_of_a_plain_file_is_the_one_no_intro_lists() {
+    let d = tempfile::tempdir().unwrap();
+    assert_eq!(
+        ar::crc32(&write(&d, "check.gb", b"123456789")).unwrap(),
+        0xCBF4_3926
+    );
+}
+
+#[test]
+fn zip_and_7z_are_archives_in_any_case_and_nothing_else_is() {
+    for name in ["a.zip", "a.ZIP", "a.7z", "a.7Z"] {
+        assert!(ar::is_archive(std::path::Path::new(name)), "{name}");
+    }
+    for name in ["a.gb", "a.zip.gb", "zip", "a.rar"] {
+        assert!(!ar::is_archive(std::path::Path::new(name)), "{name}");
+    }
 }
