@@ -1,3 +1,4 @@
+pub mod archive;
 mod atomic;
 pub mod cart_shell;
 mod config;
