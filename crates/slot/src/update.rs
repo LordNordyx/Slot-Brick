@@ -378,63 +378,33 @@ fn safe(rel: &str) -> bool {
 /// Unpacks Slot's own files from the card zip (zip-card.py's: everything under SD-CARD/,
 /// stored or deflated) into `into`.
 pub fn stage(zip: &Path, into: &Path) -> std::io::Result<usize> {
+    use slot_store::archive::zip as cardzip;
     let bad = |what: &str| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("damaged zip ({what})"));
-    let data = fs::read(zip)?;
-    let u16_at = |at: usize| data.get(at..at + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize);
-    let u32_at = |at: usize| data.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize);
-    let tail = data.len().saturating_sub(22 + 65535);
-    let end = (tail..data.len().saturating_sub(21))
-        .rev()
-        .find(|&i| u32_at(i) == Some(0x0605_4b50))
-        .ok_or_else(|| bad("no directory"))?;
-    let count = u16_at(end + 10).ok_or_else(|| bad("directory"))?;
-    let mut at = u32_at(end + 16).ok_or_else(|| bad("directory"))?;
+    let mut file = fs::File::open(zip)?;
     let mut written = 0;
-    for _ in 0..count {
-        if u32_at(at) != Some(0x0201_4b50) {
-            return Err(bad("entry"));
-        }
-        let field = |off: usize| u16_at(at + off).ok_or_else(|| bad("entry"));
-        let made_by = field(4)? >> 8;
-        let method = field(10)?;
-        let packed = u32_at(at + 20).ok_or_else(|| bad("entry"))?;
-        let size = u32_at(at + 24).ok_or_else(|| bad("entry"))?;
-        let (name_len, extra_len, comment_len) = (field(28)?, field(30)?, field(32)?);
-        let attrs = u32_at(at + 38).ok_or_else(|| bad("entry"))?;
-        let local = u32_at(at + 42).ok_or_else(|| bad("entry"))?;
-        let name = data.get(at + 46..at + 46 + name_len).ok_or_else(|| bad("entry"))?;
-        let name = std::str::from_utf8(name).map_err(|_| bad("name"))?.to_string();
-        at += 46 + name_len + extra_len + comment_len;
-        let Some(rel) = name.strip_prefix("SD-CARD/") else { continue };
+    for entry in cardzip::index(&mut file)? {
+        let Some(rel) = entry.name.strip_prefix("SD-CARD/") else { continue };
         if rel.is_empty() || rel.ends_with('/') || !ours(rel) {
             continue;
         }
         if !safe(rel) {
             return Err(bad("name"));
         }
-        if u32_at(local) != Some(0x0403_4b50) {
-            return Err(bad("entry"));
-        }
-        let start = local + 30 + u16_at(local + 26).ok_or_else(|| bad("entry"))? + u16_at(local + 28).ok_or_else(|| bad("entry"))?;
-        let raw = data.get(start..start + packed).ok_or_else(|| bad("entry"))?;
-        let bytes = match method {
-            0 => raw.to_vec(),
-            8 => miniz_oxide::inflate::decompress_to_vec_with_limit(raw, size).map_err(|_| bad("data"))?,
-            _ => return Err(bad("method")),
-        };
-        if bytes.len() != size {
+        let mut bytes = Vec::with_capacity(entry.size as usize);
+        cardzip::reader(&mut file, &entry)?.read_to_end(&mut bytes)?;
+        if bytes.len() as u64 != entry.size {
             return Err(bad("size"));
         }
         let path = into.join(rel);
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
         }
-        let mut file = fs::File::create(&path)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        if made_by == 3 {
+        let mut out = fs::File::create(&path)?;
+        out.write_all(&bytes)?;
+        out.sync_all()?;
+        if entry.made_by == 3 {
             use std::os::unix::fs::PermissionsExt;
-            let mode = (attrs >> 16) as u32 & 0o777;
+            let mode = (entry.attrs >> 16) & 0o777;
             if mode != 0 {
                 let _ = fs::set_permissions(&path, fs::Permissions::from_mode(mode));
             }
