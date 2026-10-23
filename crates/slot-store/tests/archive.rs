@@ -118,6 +118,7 @@ fn every_archive_a_tool_makes_names_its_rom_size_and_checksum() {
         "rom-mac.zip",
         "rom-lzma.7z",
         "rom-lzma2.7z",
+        "rom-python.7z",
     ] {
         let e = ar::entry(&fixture(name), Platform::Gb).unwrap_or_else(|s| panic!("{name}: {s}"));
         assert_eq!(

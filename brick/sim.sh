@@ -98,6 +98,9 @@ run_scenarios() {
         name=$(basename "$script" .sim)
         run="$SIM/run/$name"
         fresh "$run"
+        # A scenario needing more on its card than the rest gets it from NAME.card.sh.
+        card="brick/sim/scenarios/$name.card.sh"
+        [ ! -f "$card" ] || sh "$card" "$run/card/Slot"
         model=; case "$name" in pro-*) model=pro ;; esac
         if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" -e SLOT_SIM_MODEL="$model" \
             -e SLOT_SIM_TIME="$SIM_TIME" -e SLOT_SIM_SCRIPT="/src/$script" \

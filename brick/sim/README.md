@@ -126,7 +126,10 @@ task sim:unit                 # the sim build's own unit tests
 | `grab NAME` | save the screen as it is this moment, unsettled and with no golden: for animations |
 
 Each scenario starts on a fresh card with six stand-in carts and the clock fixed at
-2026-01-01 00:00, so a run is the same every time. Screenshots land in
+2026-01-01 00:00, so a run is the same every time. A scenario that needs more on its card gets it
+from `scenarios/NAME.card.sh`, run with the card's `Slot` folder once the card is made: see
+`compressed.card.sh`, which adds zipped and 7z'd copies of Pocket Test with
+`brick/sim/make-archive.py`. Screenshots land in
 `target-sim/out/SCENARIO/`. A `snap` that differs writes `NAME.diff.png` with the changed
 pixels in magenta.
 

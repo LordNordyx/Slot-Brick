@@ -1,0 +1,23 @@
+# Pocket Test zipped and 7z'd (compressed.card.sh) plays under mGBA as the plain ROM does; a
+# damaged zip is refused and the shelf stays put.
+press a
+phase Shelf
+press r1          # GBA -> GB, on Pocket 7z
+grab gb-shelf
+press a
+phase Playing 20000
+grab playing-7z
+hold menu 1500    # save state, eject
+phase Shelf 20000
+press right       # Pocket Broken
+press a
+wait 3000
+phase Shelf
+press right
+press right       # Pocket Zip
+grab on-zip
+press a
+phase Playing 20000
+grab playing-zip
+hold menu 1500
+phase Shelf 20000
