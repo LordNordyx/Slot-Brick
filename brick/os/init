@@ -181,6 +181,10 @@ for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
 done
 if [ -n "$mounted" ]; then
     stamp "card mounted ($mounted)"
+    # Read ahead 2 MB at a time, not the kernel's 128 KB: Slot's program and the GPU's
+    # libraries are read from the card while both start.
+    echo 2048 > "/sys/block/$(basename "${mounted%p*}")/queue/read_ahead_kb" 2>/dev/null
+
 else
     stamp "card NOT mounted: $(cat /run/mount.log)"
     leds FF0000
@@ -236,17 +240,40 @@ if [ -f "$NEW" ]; then
     fi
 fi
 
+# New u-boot settings (an update, or a developer copying them on): slot-os/env.img written to
+# both of the card's settings partitions, checked, removed. They take effect at the next start.
+# Part of an update, the settings as they were are kept with the update's other old files.
+ENVNEW=$CARD/slot-os/env.img
+if [ -f "$ENVNEW" ] && [ "$(stat -c %s "$ENVNEW")" = 131072 ]; then
+    disk=$(basename "${mounted%p*}")
+    for name in env env-redund; do
+        part=$(grep -l "^PARTNAME=$name\$" /sys/class/block/"$disk"p*/uevent 2>/dev/null | head -1)
+        [ -n "$part" ] || continue
+        dev=/dev/$(basename "$(dirname "$part")")
+        if [ "$name" = env ] && [ -f "$UPDATE/pending" ] && [ ! -f "$UPDATE/old/slot-os/env.img" ]; then
+            mkdir -p "$UPDATE/old/slot-os" && head -c 131072 "$dev" > "$UPDATE/old/slot-os/env.img" && sync
+        fi
+        dd if="$ENVNEW" of="$dev" bs=128k conv=fsync 2>/dev/null
+        [ "$(head -c 131072 "$dev" | md5sum)" = "$(md5sum < "$ENVNEW")" ] || stamp "env.img did not read back the same on $dev"
+    done
+    rm -f "$ENVNEW"; sync
+    stamp "u-boot settings written"
+fi
+
 # The GPU driver (pvrsrvkm, dc_sunxi): pvrsrvctl loads both from here.
-( cd /lib/modules/4.9.191 && pvrsrvctl --start ) > /run/gpu.log 2>&1
-stamp GPU driver loaded
+# In the background, beside Slot's own start: Slot opens its sound and reads the games while
+# this loads, and waits for /run/gpu-ready (SLOT_GPU_READY) before it opens the screen.
+export SLOT_GPU_READY=/run/gpu-ready
+( cd /lib/modules/4.9.191 && pvrsrvctl --start > /run/gpu.log 2>&1; : > "$SLOT_GPU_READY" ) &
 
 # The Wi-Fi chip's driver, in the background: it loads the chip's firmware, and Slot only
 # needs wlan0 once Wi-Fi is turned on (brick_wifi.sh waits for it).
 ( cd /lib/modules/4.9.191 && insmod xradio_mac.ko && insmod xradio_core.ko && insmod xradio_wlan.ko ) > /run/wifi.log 2>&1 &
 
 # The mixer: the codec starts with its outputs switched off.
-sh /etc/mixer.sh > /run/alsa.log 2>&1
-stamp mixer set
+# In the background: Slot opens its sound a moment later, and the mixer only has to be set
+# before sound plays.
+sh /etc/mixer.sh > /run/alsa.log 2>&1 &
 
 # For working on Slot OS: a script on the card, run before Slot, its output in Logs/debug.log.
 if [ -f "$CARD/slot-os/debug.sh" ]; then

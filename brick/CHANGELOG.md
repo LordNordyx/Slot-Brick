@@ -6,6 +6,7 @@
 - Rumble works.
 - Brick Pro (experimental): recognised, with its left stick as the D-pad and its own LED row.
 - Faster first screen, and Wi-Fi fixes.
+- Slot shows its shelf sooner; on Slot OS in under 3 seconds.
 
 ## v0.44
 **New since v0.43:**

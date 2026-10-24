@@ -73,6 +73,19 @@ impl Pacer {
     }
 }
 
+/// On Slot OS the GPU driver loads beside Slot's own start (init's SLOT_GPU_READY names the file
+/// it makes once loaded): the screen waits for it, the sound and the games do not.
+fn wait_for_gpu() {
+    let Some(ready) = std::env::var_os("SLOT_GPU_READY").map(PathBuf::from) else {
+        return;
+    };
+    let since = Instant::now();
+    while !ready.exists() && since.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    boot_time(&format!("GPU driver ready (waited {} ms)", since.elapsed().as_millis()));
+}
+
 /// Runs System/sleep.sh without going deaf: a Power press that lands while the
 /// script is still preparing (Wi-Fi stop, sync) cancels the suspend instead of
 /// being swallowed, which used to need a second press to wake. Once the script
@@ -148,8 +161,12 @@ pub fn run() {
     // thread of its own, while the screen and sound open. The first to ask waits for it.
     #[cfg(feature = "brick")]
     let _ = std::thread::Builder::new().name("slot-model".into()).spawn(slot_power::model);
+    // The sound output opens, and the app boots, beside the screen, for Session::boot to take.
+    slot::audio::open_early();
+    slot::app::App::boot_early(root.clone());
     #[cfg(feature = "sim")]
     let sim = slot::sim::start();
+    wait_for_gpu();
     #[cfg(feature = "sim")]
     let surface = FbdevSurface::offscreen(slot::sim::PANEL);
     #[cfg(not(feature = "sim"))]
@@ -193,7 +210,7 @@ pub fn run() {
     slot::brick_wifi::repair_at_boot();
     let mut frontend = Frontend::boot(Box::new(platform));
     boot_time("games and settings read");
-    frontend.upload_faces(&mut compositor);
+    frontend.upload_shelf_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());
     boot_time("faces drawn");
     #[cfg(not(feature = "brick"))]
@@ -352,6 +369,10 @@ pub fn run() {
             drawn = true;
             trace_first_frame();
             boot_time("first frame");
+            // The menus are drawn now, behind the first frame: none opens before the next
+            // frame's input.
+            frontend.upload_menu_faces(&mut compositor);
+            boot_time("menus drawn");
             #[cfg(feature = "brick")]
             slot::update::settle(&slot::update::card_of(&root));
             #[cfg(feature = "brick")]

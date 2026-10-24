@@ -30,6 +30,35 @@ pub fn output_hz() -> u32 {
     }
 }
 
+/// The output, opened on a thread of its own (open_early) while the screen comes up, for
+/// Session::boot to take: opening it costs about a fifth of a second at startup.
+static EARLY: std::sync::Mutex<Option<std::thread::JoinHandle<Box<dyn AudioSink>>>> =
+    std::sync::Mutex::new(None);
+
+pub fn open_early() {
+    match std::thread::Builder::new()
+        .name("slot-audio-open".into())
+        .spawn(opened)
+    {
+        Ok(handle) => *EARLY.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle),
+        Err(e) => eprintln!("slot: audio: {e}"),
+    }
+}
+
+/// The output open_early opened, or opened now if it was not asked for.
+pub fn take_opened() -> Box<dyn AudioSink> {
+    let early = EARLY.lock().unwrap_or_else(|e| e.into_inner()).take();
+    early.and_then(|h| h.join().ok()).unwrap_or_else(opened)
+}
+
+fn opened() -> Box<dyn AudioSink> {
+    let mut sink = open_sink();
+    if let Err(e) = sink.open(output_hz()) {
+        eprintln!("slot: audio: {e}");
+    }
+    sink
+}
+
 #[cfg(feature = "host")]
 pub fn open_sink() -> Box<dyn AudioSink> {
     if std::env::var_os("SLOT_SILENT").is_some() {

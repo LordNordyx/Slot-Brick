@@ -7,7 +7,7 @@
 # "dev <commit>"); left unset, it is "dev <commit>".
 # Output: dist-os/slot-os.img.xz, for Raspberry Pi Imager, balenaEtcher or dd; and
 # dist-os/slot-os-update.zip, what HOME → Update installs on a card already running Slot OS
-# (Slot, slot-os/ with the new boot.img, the boot logo; brick/update-manifest.sh describes it
+# (Slot, slot-os/ with the new boot.img and u-boot settings, the boot logo; brick/update-manifest.sh describes it
 # as update-os.txt).
 set -eu
 cd "$(dirname "$0")/../.."
@@ -29,6 +29,7 @@ rm -rf dist-os/update && mkdir -p dist-os/update/slot-os
 cp -r "$CARD_FILES/Slot" dist-os/update/
 cp -r dist-os/slot-os/. dist-os/update/slot-os/
 cp dist-os/boot.img dist-os/update/slot-os/boot.img
+cp dist-os/env.img dist-os/update/slot-os/env.img
 cp dist-os/bootlogo.bmp dist-os/update/bootlogo.bmp
 rm -f dist-os/slot-os-update.zip
 python3 brick/zip-card.py dist-os/update dist-os/slot-os-update.zip > /dev/null

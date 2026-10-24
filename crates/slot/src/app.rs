@@ -488,6 +488,10 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
         .collect()
 }
 
+/// See App::boot_early. (An App is moved between threads only there, so it must be Send.)
+static EARLY_APP: std::sync::Mutex<Option<std::thread::JoinHandle<App>>> =
+    std::sync::Mutex::new(None);
+
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
         let all_carts = carts.clone();
@@ -644,6 +648,26 @@ impl App {
             brick_switch_at: 0,
             powering_off: false,
         }
+    }
+
+    /// Boots the app on a thread of its own (folders, theme, games, carts, LEDs: about a third
+    /// of a second at startup) while the screen comes up, for take_booted to collect.
+    pub fn boot_early(root: PathBuf) {
+        match std::thread::Builder::new()
+            .name("slot-app-boot".into())
+            .spawn(move || App::boot(&root))
+        {
+            Ok(handle) => *EARLY_APP.lock().unwrap_or_else(|e| e.into_inner()) = Some(handle),
+            Err(e) => eprintln!("slot: app boot: {e}"),
+        }
+    }
+
+    /// The app boot_early booted, or booted now if it was not asked for.
+    pub fn take_booted(root: &Path) -> Self {
+        let early = EARLY_APP.lock().unwrap_or_else(|e| e.into_inner()).take();
+        early
+            .and_then(|h| h.join().ok())
+            .unwrap_or_else(|| App::boot(root))
     }
 
     pub fn boot(root: &Path) -> Self {
