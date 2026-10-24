@@ -1,7 +1,8 @@
 #!/bin/sh
 # Slot OS: the first and only program the kernel starts (PID 1). It loads the GPU driver,
 # mounts the card and runs Slot, again and again, until Slot asks to power off or restart.
-# Everything here lives in RAM; Slot, its cores and the player's files are on the card.
+# Only this script and busybox live in RAM; the system's libraries, the GPU driver, Slot and
+# the player's files are on the card (/lib and /usr point into its slot-os folder).
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 export HOME=/root
 export LD_LIBRARY_PATH=/usr/lib:/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu
@@ -22,21 +23,35 @@ exec < /dev/console > /dev/console 2>&1
 TIMES=/run/boot-times.log
 stamp() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$TIMES"; }
 stamp init started
-# What the screen shows while this runs, for a Brick with no serial cable: white once this
-# script starts, black again once the card is mounted, snow when no card could be mounted.
-# (u-boot showed the card's bootlogo.bmp before, if it got as far as the card.)
-paint() { head -c 3145728 /dev/zero | tr '\000' "$1" > /dev/fb0 2>/dev/null; }
-paint '\377'
+# How far startup got, for a Brick with no serial cable attached: a short buzz and blue
+# LEDs once this script runs, green once the card is mounted; red and a long buzz when no
+# card could be mounted. (u-boot showed the card's bootlogo.bmp before, if it got that far.)
+LEDS=/sys/class/led_anim
+leds() {
+    [ -d "$LEDS" ] || return 0
+    echo 1 > "$LEDS/effect_enable"
+    for f in max_scale max_scale_f1f2 max_scale_lr; do echo 60 > "$LEDS/$f"; done
+    for z in m f1 f2 lr; do
+        echo "$1 " > "$LEDS/effect_rgb_hex_$z"; echo -1 > "$LEDS/effect_cycles_$z"
+        echo 2000 > "$LEDS/effect_duration_$z"; echo 4 > "$LEDS/effect_$z"
+    done 2>/dev/null
+}
+RUMBLE=/sys/class/gpio/gpio227
+buzz() {
+    [ -d "$RUMBLE" ] || echo 227 > /sys/class/gpio/export
+    echo out > "$RUMBLE/direction" && echo 1 > "$RUMBLE/value" && sleep "$1"
+    echo 0 > "$RUMBLE/value"
+} 2>/dev/null
+leds 0000FF
+buzz 0.3
 
-# The GPU driver (pvrsrvkm, dc_sunxi), meanwhile: pvrsrvctl loads both from here.
-( cd /lib/modules/4.9.191 && pvrsrvctl --start >/run/gpu.log 2>&1; stamp GPU driver loaded ) &
-GPU=$!
-
-# The card: its fourth partition, FAT, holds Slot and the player's files. It should be
-# mmcblk0p4 (as for Knulli); failing that, any partition with a Slot folder on it.
+# The card: its fourth partition, FAT, holds Slot, the system's libraries (slot-os) and the
+# player's files. It should be mmcblk0p4 (as for Knulli); failing that, the partition that
+# holds slot-os. Each is looked at read-only first: the Brick's internal storage must never
+# be written to.
 mount_card() {
-    mount -t vfat -o rw,noatime,utf8,shortname=mixed,errors=remount-ro "$1" "$CARD" 2>>/run/mount.log \
-        || mount -t exfat -o rw,noatime "$1" "$CARD" 2>>/run/mount.log
+    mount -t vfat -o ro,noatime,utf8,shortname=mixed,errors=remount-ro "$1" "$CARD" 2>>/run/mount.log \
+        || mount -t exfat -o ro,noatime "$1" "$CARD" 2>>/run/mount.log
 }
 n=0
 while [ ! -b "$DEV" ] && [ "$n" -lt 500 ]; do sleep 0.01; n=$((n + 1)); done
@@ -45,19 +60,26 @@ mounted=
 for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
     [ -b "$dev" ] || continue
     if mount_card "$dev"; then
-        if [ -d "$CARD/Slot" ]; then mounted=$dev; break; fi
+        if [ -d "$CARD/Slot" ] && [ -d "$CARD/slot-os" ] && mount -o remount,rw "$CARD"; then mounted=$dev; break; fi
         umount "$CARD"
     fi
 done
 if [ -n "$mounted" ]; then
     stamp "card mounted ($mounted)"
-    paint '\000'
+    leds 00FF00
 else
     stamp "card NOT mounted: $(cat /run/mount.log)"
-    { ls -l /dev/mmcblk* 2>&1; cat /proc/partitions; } >> /run/mount.log
-    head -c 3145728 /dev/urandom > /dev/fb0 2>/dev/null
+    leds FF0000
+    buzz 1.5
+    # Nothing more can run without the card: a shell on the serial port, for a UART cable.
+    # (PID 1 must never end, or the kernel panics.)
+    setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1' &
+    while :; do sleep 3600; done
 fi
-wait "$GPU"
+
+# The GPU driver (pvrsrvkm, dc_sunxi): pvrsrvctl loads both from here.
+( cd /lib/modules/4.9.191 && pvrsrvctl --start ) > /run/gpu.log 2>&1
+stamp GPU driver loaded
 
 # A shell on the serial port (debug pads), for anyone with a UART adapter attached.
 [ -c /dev/ttyS0 ] && setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1' &

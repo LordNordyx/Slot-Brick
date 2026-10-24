@@ -49,8 +49,17 @@ for elf in "$R"/usr/lib/*.so "$R/usr/bin/pvrsrvctl" "$CARD_FILES"/Slot/System/sl
     done
 done
 [ "$missing" = 0 ]
+# Only busybox and this init stay in RAM, to keep what u-boot loads and the kernel unpacks
+# small. The rest (glibc, ALSA, the GPU's libraries, modules and firmware) goes to the card's
+# slot-os folder, which /lib and /usr point into once init has mounted the card.
+SYS=$WORK/slot-os
+mkdir -p "$SYS"
+cp -rL "$R/lib" "$R/usr" "$SYS/"
+rm -rf "$R/lib" "$R/usr"
+ln -s /mnt/SDCARD/slot-os/lib "$R/lib"
+ln -s /mnt/SDCARD/slot-os/usr "$R/usr"
 ( cd "$R" && find . | LC_ALL=C sort | cpio -o -H newc --quiet ) | gzip -9 -n > "$WORK/initramfs.gz"
-echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R" | cut -f1))"
+echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R" | cut -f1)); on the card: $(du -sh "$SYS" | cut -f1)"
 
 # --- boot.img: TrimUI's kernel (from Knulli's boot.img) with our initramfs -------------------
 python3 "$OS/bootimg.py" "$SRC/knulli-boot.img" "$WORK/initramfs.gz" "$WORK/boot.img"
@@ -61,6 +70,7 @@ dd if=/dev/zero of="$WORK/fat.img" bs=1M count=0 seek="$FAT_MIB" 2>/dev/null
 mkfs.vfat -F 32 -n SLOT "$WORK/fat.img" >/dev/null
 export MTOOLS_SKIP_CHECK=1
 mcopy -s -p -i "$WORK/fat.img" "$CARD_FILES/Slot" ::/
+mcopy -s -p -i "$WORK/fat.img" "$SYS" ::/
 # u-boot shows this from the boot-resource partition as soon as it starts.
 python3 "$OS/bootlogo.py" "$WORK/bootlogo.bmp"
 mcopy -i "$WORK/fat.img" "$WORK/bootlogo.bmp" ::/bootlogo.bmp
