@@ -57,11 +57,16 @@ mount_card() {
 # Whether the file system was left in use (the Brick switched off or reset while it was
 # mounted): the flag the kernel sets on mounting and clears on unmounting, in the boot sector.
 # $1 the partition, $2 its file system (as mounted).
+# Only FAT32 (sectors per FAT at 22 is 0; FAT12/16 keep their flag elsewhere) and exFAT; a
+# byte that cannot be read is not taken for the flag, nor may it stop this script.
+byte() { dd if="$1" bs=1 skip="$2" count=1 2>/dev/null | od -An -tu1 | tr -d ' '; }
 dirty() {
     case "$2" in
-        exfat) [ $(( $(dd if="$1" bs=1 skip=106 count=1 2>/dev/null | od -An -tu1) & 2 )) -ne 0 ] ;;
-        *) [ $(( $(dd if="$1" bs=1 skip=65 count=1 2>/dev/null | od -An -tu1) & 1 )) -ne 0 ] ;;
+        exfat) at=106 bit=2 ;;
+        *) [ "$(byte "$1" 22)$(byte "$1" 23)" = 00 ] || return 1; at=65 bit=1 ;;
     esac
+    flags=$(byte "$1" "$at")
+    [ -n "$flags" ] && [ $((flags & bit)) -ne 0 ]
 }
 # Repairs it. The checkers are in RAM, but glibc is on the card: it is copied to RAM first,
 # as the card cannot be mounted while it is checked.
@@ -196,7 +201,10 @@ fi
 UPDATE=$CARD/.slot-update
 NEW=$CARD/slot-os/boot.img
 if [ -f "$NEW" ]; then
-    BOOT=$(grep -l '^PARTNAME=boot$' /sys/class/block/mmcblk0p*/uevent 2>/dev/null | head -1)
+    # The partition named boot on the card itself: never one of the Brick's internal storage,
+    # which has its own.
+    disk=$(basename "${mounted%p*}")
+    BOOT=$(grep -l '^PARTNAME=boot$' /sys/class/block/"$disk"p*/uevent 2>/dev/null | head -1)
     BOOT=/dev/$(basename "$(dirname "$BOOT")")
     room=$(( $(cat "/sys/class/block/$(basename "$BOOT")/size" 2>/dev/null || echo 0) * 512 ))
     size=$(stat -c %s "$NEW")
@@ -208,15 +216,23 @@ if [ -f "$NEW" ]; then
         if [ -f "$UPDATE/pending" ] && [ ! -f "$UPDATE/old/slot-os/boot.img" ]; then
             mkdir -p "$UPDATE/old/slot-os" && dd if="$BOOT" of="$UPDATE/old/slot-os/boot.img" bs=1M 2>/dev/null && sync
         fi
-        stamp "writing slot-os/boot.img to $BOOT"
-        dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
-        if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$(md5sum < "$NEW" | cut -d' ' -f1)" ]; then
-            rm -f "$NEW"; sync
-            stamp "boot.img written; restarting"
-            cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null
-            umount "$CARD"; reboot -f
-        fi
-        stamp "boot.img did not read back the same; kept for the next start"
+        # The partition as it is, in RAM: should the new image not read back the same three
+        # times, it goes back, so the next start finds a kernel that boots.
+        dd if="$BOOT" of=/run/boot.previous bs=1M 2>/dev/null
+        want=$(md5sum < "$NEW" | cut -d' ' -f1)
+        for try in 1 2 3; do
+            stamp "writing slot-os/boot.img to $BOOT ($try)"
+            dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
+            if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$want" ]; then
+                rm -f "$NEW" /run/boot.previous; sync
+                stamp "boot.img written; restarting"
+                cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null
+                umount "$CARD"; reboot -f
+            fi
+        done
+        dd if=/run/boot.previous of="$BOOT" bs=1M conv=fsync 2>/dev/null
+        rm -f /run/boot.previous
+        stamp "boot.img did not read back the same; the previous one put back, the new one kept for the next start"
     fi
 fi
 
@@ -295,7 +311,6 @@ while :; do
     fi
     case "$status" in
         64) cleanup; poweroff -f ;;
-        65) cleanup; reboot -f ;;
         # Updated: Slot starts again on the new files; a new boot image needs a restart.
         66) quick=0; [ ! -f "$NEW" ] || { cleanup; reboot -f; }; continue ;;
     esac

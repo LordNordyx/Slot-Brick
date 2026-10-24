@@ -221,7 +221,7 @@ fn manifest_name(slot_os: bool) -> &'static str {
 
 /// Where the manifest and the zip are, for each channel.
 fn manifest_url(base: &str, channel: Channel) -> String {
-    let name = manifest_name(std::env::var_os("SLOT_OS").is_some());
+    let name = manifest_name(slot_power::slot_os());
     match channel {
         Channel::Release => format!("{base}/latest/download/{name}"),
         Channel::Dev => format!("{base}/download/dev/{name}"),

@@ -23,7 +23,7 @@ pub const GBA_HZ: u32 = 32_768;
 /// opened at 32768 Hz, ALSA resampled everything a second time, crudely, and the buffer Slot
 /// keeps level ran dry ("starved"), crackling. At 48 kHz Slot's own resampler is the only one.
 pub fn output_hz() -> u32 {
-    if std::env::var_os("SLOT_OS").is_some() {
+    if slot_power::slot_os() {
         48_000
     } else {
         GBA_HZ

@@ -166,7 +166,7 @@ pub fn run() {
         Err(e) => {
             eprintln!("slot: {e}");
             // On Slot OS, what the GPU driver said about it, for the bug report.
-            if std::env::var_os("SLOT_OS").is_some() {
+            if slot_power::slot_os() {
                 if let Ok(out) = std::process::Command::new("dmesg").output() {
                     let log = String::from_utf8_lossy(&out.stdout);
                     let tail: Vec<&str> = log.lines().rev().take(60).collect();
@@ -195,7 +195,6 @@ pub fn run() {
     boot_time("games and settings read");
     frontend.upload_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());
-    boot_time("  bezel");
     boot_time("faces drawn");
     #[cfg(not(feature = "brick"))]
     let mut input = DeviceInput::open(&root);

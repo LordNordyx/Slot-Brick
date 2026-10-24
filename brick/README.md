@@ -243,3 +243,8 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 | Stock menu appears instead of Slot    | Open **Apps → Check** and read `startup-report.txt` on the card     |
 | You want to skip Slot at startup      | Create an empty file `Slot/DISABLE_AUTOBOOT`; delete it to re-enable |
 | You need stock emulators or RetroArch | They aren't included; keep your original card backup                |
+
+---
+
+**Slot OS** cards also carry TrimUI's boot chain, kernel, drivers and firmware (their firmware
+1.1.1) and Debian 12 packages; what each is and its licence is in `slot-os/licenses`.

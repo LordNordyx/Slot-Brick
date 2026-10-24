@@ -119,12 +119,12 @@ pub fn repair_at_boot(){
         if !wanted(&card_root()){eprintln!("wifi: boot: Wi-Fi was turned off; leaving it off");return}
         let quiet=AtomicBool::new(false);
         // Slot OS starts no supplicant of its own: nothing to wait for.
-        let wait=if std::env::var_os("SLOT_OS").is_some(){0}else{FIRMWARE_WAIT_MS};
+        let wait=if slot_power::slot_os(){0}else{FIRMWARE_WAIT_MS};
         STARTING.store(true,Ordering::Relaxed);
         boot_repair(wait,supplicant_answers,online,|up|{
-            // Turned off in the menu meanwhile: the player's choice stands.
-            if !wanted(&card_root()){STARTING.store(false,Ordering::Relaxed);return Ok(())}
-            let r=helper_run(if up{"ensure"}else{"start"},&quiet);STARTING.store(false,Ordering::Relaxed);r},|ms|thread::sleep(Duration::from_millis(ms)));
+            // Turned off in the menu meanwhile (asked again once the helper is ours, as the
+            // menu's own off may have run while this waited): the player's choice stands.
+            let r=helper_run_if(if up{"ensure"}else{"start"},&quiet,||wanted(&card_root()));STARTING.store(false,Ordering::Relaxed);r},|ms|thread::sleep(Duration::from_millis(ms)));
         STARTING.store(false,Ordering::Relaxed);
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
@@ -170,8 +170,11 @@ fn boot_repair(firmware_wait:u64,up:impl Fn()->bool,online:impl Fn()->bool,mut b
 }
 const BOOT_TRIES:u32=3;
 const RETRY_MS:u64=3_000;
-fn helper_run(verb:&str,cancel:&AtomicBool)->Result<()>{
+fn helper_run(verb:&str,cancel:&AtomicBool)->Result<()>{helper_run_if(verb,cancel,||true)}
+/// As helper_run, but only if `still` holds once no other helper is running.
+fn helper_run_if(verb:&str,cancel:&AtomicBool,still:impl Fn()->bool)->Result<()>{
     let _one=HELPER.lock().unwrap_or_else(|e|e.into_inner());
+    if !still(){return Ok(())}
     let root=card_root();
     let Some(script)=helper(&slot_power::hw("/etc/wifi/wifi_init.sh"),&root) else {return Err("Wi-Fi helper missing: System/brick_wifi.sh".into())};
     // Only slot's own helper knows "ensure" and "dhcp"; a firmware one would just print its usage.

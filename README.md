@@ -391,6 +391,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [Brandon T. Kowalski](https://github.com/BrandonKowalski/slot) | Original Slot. frontend and Cart Studio |
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
+| [TrimUI](https://github.com/trimui/firmware_brick), [Debian](https://www.debian.org) | Slot OS (experimental) runs TrimUI's boot chain, kernel, drivers and firmware from their firmware 1.1.1, and Debian 12 packages (glibc, ALSA, busybox, wpa_supplicant, hostapd); licences in `slot-os/licenses` on a Slot OS card |
 
 
 </details>

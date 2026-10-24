@@ -30,7 +30,7 @@ Out in `dist-os/`:
 - **`init`** is PID 1 and the only script in RAM: it feeds the watchdog, mounts the card
   (checking it first if it was left in use), installs a `slot-os/boot.img` it finds there,
   loads the GPU and Wi-Fi drivers, sets the mixer (`mixer.sh`) and runs Slot again and again.
-  Slot's exit code says what next: 64 power off, 65 restart, 66 start again (an update).
+  Slot's exit code says what next: 64 power off, 66 start again (an update).
 - **Updates:** Slot reads `update-os.txt` instead of `update.txt` (`crates/slot/src/update.rs`).
   An update that brings a boot image keeps the old one with the files it replaced, and `init`
   puts them all back if the new Slot never shows a frame.

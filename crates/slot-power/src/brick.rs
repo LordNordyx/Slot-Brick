@@ -7,8 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct BrickPlatform {
     root: PathBuf,
-    /// Whether the rumble motor is on (None until first set; then whether it could be set).
+    /// Whether the rumble motor is on, as last written (None: not known, so the next change
+    /// is written whatever it is).
     rumble: Option<bool>,
+    /// A failed write is logged once.
+    rumble_failed: bool,
 }
 /// The rumble motor hangs on a plain GPIO: on or off, no strength (NextUI's tg5040 does the
 /// same). On stock trimui_inputd exports it; under Slot OS nothing has, so Slot does.
@@ -24,7 +27,11 @@ struct ClockTime {
 }
 impl BrickPlatform {
     pub fn new(root: PathBuf) -> Self {
-        Self { root, rumble: None }
+        Self {
+            root,
+            rumble: None,
+            rumble_failed: false,
+        }
     }
     fn motor(&mut self, on: bool) {
         if self.rumble == Some(on) {
@@ -34,10 +41,11 @@ impl BrickPlatform {
         match set_gpio(&gpio, &crate::hw("/sys/class/gpio/export"), on) {
             Ok(()) => self.rumble = Some(on),
             Err(e) => {
-                if self.rumble.is_none() {
+                if !self.rumble_failed {
                     eprintln!("slot: Brick rumble: {}: {e}", gpio.display());
+                    self.rumble_failed = true;
                 }
-                self.rumble = Some(!on); // Logged once; tried again on the next change.
+                self.rumble = None;
             }
         }
     }

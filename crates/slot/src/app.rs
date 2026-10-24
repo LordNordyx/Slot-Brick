@@ -527,7 +527,7 @@ impl App {
             wifi_faces: None,
             power_menu: None,
             power_menu_faces: Vec::new(),
-            power_off_only: std::env::var_os("SLOT_OS").is_some(),
+            power_off_only: slot_power::slot_os(),
             core_picker: None,
             disc_picker: None,
             disc_faces: Vec::new(),
