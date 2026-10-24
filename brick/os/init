@@ -26,8 +26,9 @@ stamp init started
 # The kernel arms the hardware watchdog at boot (16 s): unless it is fed, the Brick resets,
 # whatever it is writing to the card at the time. Fed every 5 s from here on, as Knulli does.
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
-# When no card with Slot on it can be mounted, nothing will reach the screen: red LEDs and a
-# long buzz say so.
+# The LEDs speak only when something out of the ordinary happens before Slot starts: white
+# while a system update (boot.img) is written; red and a long buzz when no card with Slot on
+# it can be mounted, as nothing will then reach the screen.
 LEDS=/sys/class/led_anim
 leds() {
     [ -d "$LEDS" ] || return 0
@@ -199,6 +200,7 @@ if [ -f "$NEW" ]; then
         stamp "slot-os/boot.img not used: not a boot image, or no room for it in $BOOT"
         mv -f "$NEW" "$NEW.refused"
     else
+        leds FFFFFF
         stamp "writing slot-os/boot.img to $BOOT"
         dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
         if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$(md5sum < "$NEW" | cut -d' ' -f1)" ]; then

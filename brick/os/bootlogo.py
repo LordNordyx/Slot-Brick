@@ -1,7 +1,8 @@
 """Slot OS's boot logo, which u-boot shows until Slot's first frame: 1024x768, 32-bit BMP with
 a V5 header, rows bottom-up (the format TrimUI's u-boot shows).
 
-brick/os/bootlogo.png, if there is one, fitted to the screen and centred on black; else the
+brick/os/bootlogo.png, if there is one, centred on black at its own size (made smaller only if it
+is bigger than the screen); else the
 "slot." wordmark in Slot's own font (Open Sans Bold), white on black.
 Usage: python3 bootlogo.py <out.bmp>"""
 import os, struct, sys
@@ -14,7 +15,9 @@ FONT = os.path.join(HERE, '../../crates/slot-ui/assets/label.ttf')
 
 screen = Image.new('RGB', (W, H), (0, 0, 0))
 if os.path.exists(PICTURE):
-    pic = ImageOps.contain(Image.open(PICTURE).convert('RGBA'), (W, H), Image.LANCZOS)
+    pic = Image.open(PICTURE).convert('RGBA')
+    if pic.width > W or pic.height > H:
+        pic = ImageOps.contain(pic, (W, H), Image.LANCZOS)
     screen.paste(pic, ((W - pic.width) // 2, (H - pic.height) // 2), pic)
 else:
     font = ImageFont.truetype(FONT, 160)
