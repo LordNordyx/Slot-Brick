@@ -35,9 +35,10 @@ mv "$R/usr/sbin/fsck.exfat" "$R/sbin/fsck.exfat"
 mv "$R/sbin/wpa_supplicant" "$R/sbin/wpa_cli" "$R/usr/sbin/"
 find "$R/sbin" ! -type d ! -name fsck.fat ! -name fsck.exfat ! -name sgdisk -delete
 # Of alsa-utils, only what sets up and tests the mixer; of wpasupplicant, the daemon and
-# wpa_cli, which Slot's Wi-Fi helper (brick_wifi.sh) asks whether it answers.
+# wpa_cli, which Slot's Wi-Fi helper (brick_wifi.sh) asks whether it answers; of hostapd,
+# the daemon, for the host of a two-Brick link (slotlink.sh).
 find "$R/usr/bin" "$R/usr/sbin" -type f ! -name amixer ! -name alsactl ! -name aplay ! -name speaker-test \
-    ! -name wpa_supplicant ! -name wpa_cli -delete
+    ! -name wpa_supplicant ! -name wpa_cli ! -name hostapd -delete
 rm -rf "$R/var/run" && mkdir -p "$R/var" && ln -s /run "$R/var/run"
 mkdir -p "$R/etc" "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" "$R/proc" "$R/sys" "$R/dev" "$R/tmp" \
     "$R/run" "$R/root" "$R/mnt/SDCARD" "$R/lib/modules/4.9.191" "$R/lib/firmware" "$R/usr/lib"

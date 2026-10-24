@@ -76,3 +76,4 @@ ip
 ping
 nslookup
 md5sum
+pgrep
