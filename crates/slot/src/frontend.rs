@@ -413,8 +413,8 @@ impl Frontend {
         self.upload_menu_faces(compositor);
     }
 
-    /// What the shelf's first frame shows. The menus' faces (upload_menu_faces) can follow it:
-    /// no menu opens before the next frame's input.
+    /// What the shelf's first frame shows. The rest (upload_menu_faces) can follow it: no menu
+    /// opens, and no toast or alert shows, before the next frame's input.
     pub fn upload_shelf_faces(&mut self, compositor: &mut Compositor) {
         Self::upload_paper(compositor);
         crate::boot_times::mark("  paper");
@@ -433,35 +433,12 @@ impl Frontend {
             })
             .collect();
         self.session.app_mut().set_icon_faces(icons);
-        let link_badges = LinkBadge::FACES
-            .iter()
-            .map(|b| {
-                let (badge, ink) = (
-                    b.badge().expect("a face has a glyph"),
-                    b.colour().expect("and a colour"),
-                );
-                let f = badge_face(badge, HUD_ICON_PX, ink);
-                compositor.create_texture(f.w, f.h, &f.rgba)
-            })
-            .collect();
-        self.session.app_mut().set_link_badge_faces(link_badges);
-        let alert = icon_face(Icon::Alert, ALERT_PX, ALERT_INK);
-        let alert = compositor.create_texture(alert.w, alert.h, &alert.rgba);
-        self.session.app_mut().set_alert_face(alert);
-        crate::boot_times::mark("  icons, badges");
-        let toasts = Toast::all()
-            .into_iter()
-            .map(|t| {
-                let f = toast_face(t);
-                compositor.create_texture(f.w, f.h, &f.rgba)
-            })
-            .collect();
-        self.session.app_mut().set_toast_faces(toasts);
+        crate::boot_times::mark("  icons");
         let legend = legend_faces(compositor, &LEGEND);
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        crate::boot_times::mark("  toasts, legends, clock hint");
+        crate::boot_times::mark("  legends, clock hint");
         let shadow = cart_shadow();
         let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
         self.session.app_mut().set_cart_shadow(id);
@@ -501,8 +478,33 @@ impl Frontend {
         crate::boot_times::mark("  wallpaper");
     }
 
-    /// The power, quick, cart, core and link menus' faces, and the shutdown lines.
+    /// What no first frame shows: the power, quick, cart, core and link menus' faces, the
+    /// shutdown lines, toasts, the link badges and the alert.
     pub fn upload_menu_faces(&mut self, compositor: &mut Compositor) {
+        let link_badges = LinkBadge::FACES
+            .iter()
+            .map(|b| {
+                let (badge, ink) = (
+                    b.badge().expect("a face has a glyph"),
+                    b.colour().expect("and a colour"),
+                );
+                let f = badge_face(badge, HUD_ICON_PX, ink);
+                compositor.create_texture(f.w, f.h, &f.rgba)
+            })
+            .collect();
+        self.session.app_mut().set_link_badge_faces(link_badges);
+        let alert = icon_face(Icon::Alert, ALERT_PX, ALERT_INK);
+        let alert = compositor.create_texture(alert.w, alert.h, &alert.rgba);
+        self.session.app_mut().set_alert_face(alert);
+        let toasts = Toast::all()
+            .into_iter()
+            .map(|t| {
+                let f = toast_face(t);
+                compositor.create_texture(f.w, f.h, &f.rgba)
+            })
+            .collect();
+        self.session.app_mut().set_toast_faces(toasts);
+        crate::boot_times::mark("  toasts, badges, alert");
         let lines = PowerChoice::ALL
             .iter()
             .map(|c| {

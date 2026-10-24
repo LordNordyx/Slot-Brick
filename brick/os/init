@@ -181,6 +181,10 @@ for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
 done
 if [ -n "$mounted" ]; then
     stamp "card mounted ($mounted)"
+    # Read ahead 2 MB at a time, not the kernel's 128 KB: Slot's program and the GPU's
+    # libraries are read from the card while both start.
+    echo 2048 > "/sys/block/$(basename "${mounted%p*}")/queue/read_ahead_kb" 2>/dev/null
+
 else
     stamp "card NOT mounted: $(cat /run/mount.log)"
     leds FF0000
@@ -256,12 +260,11 @@ if [ -f "$ENVNEW" ] && [ "$(stat -c %s "$ENVNEW")" = 131072 ]; then
     stamp "u-boot settings written"
 fi
 
-# Slot's program read into memory meanwhile, so starting it does not wait on the card.
-cat "$ROOT/System/slot" > /dev/null 2>&1 &
-
 # The GPU driver (pvrsrvkm, dc_sunxi): pvrsrvctl loads both from here.
-( cd /lib/modules/4.9.191 && pvrsrvctl --start ) > /run/gpu.log 2>&1
-stamp GPU driver loaded
+# In the background, beside Slot's own start: Slot opens its sound and reads the games while
+# this loads, and waits for /run/gpu-ready (SLOT_GPU_READY) before it opens the screen.
+export SLOT_GPU_READY=/run/gpu-ready
+( cd /lib/modules/4.9.191 && pvrsrvctl --start > /run/gpu.log 2>&1; : > "$SLOT_GPU_READY" ) &
 
 # The Wi-Fi chip's driver, in the background: it loads the chip's firmware, and Slot only
 # needs wlan0 once Wi-Fi is turned on (brick_wifi.sh waits for it).

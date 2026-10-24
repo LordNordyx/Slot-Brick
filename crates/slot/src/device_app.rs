@@ -73,6 +73,19 @@ impl Pacer {
     }
 }
 
+/// On Slot OS the GPU driver loads beside Slot's own start (init's SLOT_GPU_READY names the file
+/// it makes once loaded): the screen waits for it, the sound and the games do not.
+fn wait_for_gpu() {
+    let Some(ready) = std::env::var_os("SLOT_GPU_READY").map(PathBuf::from) else {
+        return;
+    };
+    let since = Instant::now();
+    while !ready.exists() && since.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    boot_time(&format!("GPU driver ready (waited {} ms)", since.elapsed().as_millis()));
+}
+
 /// Runs System/sleep.sh without going deaf: a Power press that lands while the
 /// script is still preparing (Wi-Fi stop, sync) cancels the suspend instead of
 /// being swallowed, which used to need a second press to wake. Once the script
@@ -153,6 +166,7 @@ pub fn run() {
     slot::app::App::boot_early(root.clone());
     #[cfg(feature = "sim")]
     let sim = slot::sim::start();
+    wait_for_gpu();
     #[cfg(feature = "sim")]
     let surface = FbdevSurface::offscreen(slot::sim::PANEL);
     #[cfg(not(feature = "sim"))]
