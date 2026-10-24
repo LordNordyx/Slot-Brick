@@ -66,3 +66,4 @@ less
 od
 hexdump
 blkid
+watchdog

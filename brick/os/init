@@ -23,6 +23,9 @@ exec < /dev/console > /dev/console 2>&1
 TIMES=/run/boot-times.log
 stamp() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$TIMES"; }
 stamp init started
+# The kernel arms the hardware watchdog at boot (16 s): unless it is fed, the Brick resets,
+# whatever it is writing to the card at the time. Fed every 5 s from here on, as Knulli does.
+watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
 # How far startup got, for a Brick with no serial cable attached: a short buzz and blue
 # LEDs once this script runs, green once the card is mounted; red and a long buzz when no
 # card could be mounted. (u-boot showed the card's bootlogo.bmp before, if it got that far.)
@@ -109,6 +112,7 @@ while :; do
     ( cd "$ROOT" && exec ./System/slot ) > "$ROOT/Logs/slot.log" 2>&1
     status=$?
     echo "slot exit code: $status" >> "$ROOT/Logs/slot.log"
+    { echo "--- kernel log after slot ended ($status)"; dmesg | tail -40; } >> "$ROOT/Logs/os.log"
     sync
     case "$status" in
         64) cleanup; poweroff -f ;;
