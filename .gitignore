@@ -8,6 +8,8 @@ dist-brick/
 dist-brick-*/
 # The card, zipped for people to download.
 *.zip
+# Except the test archives slot-store reads.
+!/crates/slot-store/tests/fixtures/*.zip
 brick/core-src/
 brick/core-build/
 target-sim/

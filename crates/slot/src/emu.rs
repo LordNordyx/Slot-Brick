@@ -134,7 +134,7 @@ impl EmuHandle {
         sav: Option<Vec<u8>>,
         resume: Option<Vec<u8>>,
     ) -> Self {
-        Self::spawn_as(core, rom, ring, sav, resume, None)
+        Self::spawn_as(core, rom, None, ring, sav, resume, None)
     }
 
     pub fn spawn_linked(
@@ -145,12 +145,27 @@ impl EmuHandle {
         resume: Option<Vec<u8>>,
         player: u8,
     ) -> Self {
-        Self::spawn_as(core, rom, ring, sav, resume, Some(player))
+        Self::spawn_as(core, rom, None, ring, sav, resume, Some(player))
+    }
+
+    /// A cart from the shelf: an archive's ROM is unpacked into `unpack_into` first, on the
+    /// emulator thread, while the cart goes in.
+    pub fn spawn_game(
+        core: Box<dyn RetroCore>,
+        rom: PathBuf,
+        unpack_into: PathBuf,
+        ring: Arc<Ring>,
+        sav: Option<Vec<u8>>,
+        resume: Option<Vec<u8>>,
+        player: Option<u8>,
+    ) -> Self {
+        Self::spawn_as(core, rom, Some(unpack_into), ring, sav, resume, player)
     }
 
     fn spawn_as(
         core: Box<dyn RetroCore>,
         rom: PathBuf,
+        unpack_into: Option<PathBuf>,
         ring: Arc<Ring>,
         sav: Option<Vec<u8>>,
         resume: Option<Vec<u8>>,
@@ -198,6 +213,7 @@ impl EmuHandle {
             shared: shared.clone(),
             cmds: rx,
             player,
+            unpack_into,
         };
         let worker_link = link.clone();
         let join = std::thread::Builder::new()
@@ -517,6 +533,7 @@ struct Worker {
     shared: Arc<Shared>,
     cmds: Receiver<Cmd>,
     player: Option<u8>,
+    unpack_into: Option<PathBuf>,
 }
 
 impl Worker {
@@ -542,6 +559,19 @@ impl Worker {
         resume: Option<Vec<u8>>,
         link: Link,
     ) {
+        let rom = match &self.unpack_into {
+            Some(dir) => match slot_store::archive::playable(&rom, dir) {
+                Ok(rom) => rom,
+                Err(e) => {
+                    eprintln!("slot: {e}");
+                    self.shared
+                        .state
+                        .store(CoreState::Failed as u8, Ordering::Release);
+                    return;
+                }
+            },
+            None => rom,
+        };
         if let Err(e) = core.load(&rom) {
             eprintln!("slot: {e}");
             self.shared

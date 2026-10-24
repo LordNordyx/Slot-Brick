@@ -7,6 +7,11 @@ license.workspace = true
 
 [dependencies]
 unicode-normalization.workspace = true
+crc32fast.workspace = true
+flate2.workspace = true
+libc.workspace = true
+sevenz-rust2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+sevenz-rust2 = { workspace = true, features = ["compress"] }
