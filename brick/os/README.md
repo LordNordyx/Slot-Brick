@@ -1,73 +1,44 @@
-# Slot OS (prototype)
+# Slot OS
 
 Slot OS boots the TrimUI Brick from the SD card straight into Slot, without TrimUI's own
-system. It never writes to the Brick's internal storage: take the card out, and the Brick
-starts as before. Build it with `sh brick/docker-build.sh && sh brick/os/build.sh`; the image is
-`dist-os/slot-os.img.xz`.
+system, and never writes to the Brick's internal storage. Installing it is in the main
+README (Installation → Slot OS); this is how it is built and how it works.
 
-## Trying it on the card you use now
+## Building
 
-Writing the image **erases the whole card**. These steps save everything first, and put it
-back afterwards. They are for Windows; they take about half an hour, most of it copying.
+    sh brick/docker-build.sh          # Slot's card files, in dist-brick/
+    sh brick/os/build.sh dist-brick   # needs Docker
 
-### 1. Save everything on the card
+Out in `dist-os/`:
 
-1. Put the card in the PC. In File Explorer, open **View → Show → Hidden items**, so the
-   hidden `.slot-boot` folder shows too.
-2. Make a folder on the PC, for example `Documents\Brick backup`, and copy **everything** on
-   the card into it: `Slot`, `Apps`, `.slot-boot` and anything else there.
-3. Check the copy is complete: right-click the card and the backup folder, **Properties**;
-   the sizes and file counts should match.
+- `slot-os.img.xz`: the card image, for Raspberry Pi Imager, balenaEtcher or dd.
+- `slot-os-update.zip`: what HOME → Update installs on a card already running Slot OS.
+  `brick/update-manifest.sh <channel> <version> dist-os/slot-os-update.zip <dir> update-os.txt`
+  describes and signs it.
+- `boot.img`, `slot-os/`, `bootlogo.bmp`: the parts, for trying a change on a card without
+  flashing it (below).
 
-Your saves, save states, settings, games, labels and BIOS are all in `Slot`. Keep this
-backup until you are back on the card as it was.
+## How it fits together
 
-### 2. Write Slot OS to the card
+- **The card:** TrimUI's boot0 and u-boot, the boot partition (TrimUI's 4.9 kernel with our
+  initramfs, `bootimg.py`), u-boot's settings (`env.txt`) and one FAT32 partition holding
+  `Slot/`, `slot-os/` (glibc, ALSA, wpa_supplicant, the GPU and Wi-Fi drivers) and the boot
+  logo (`bootlogo.py`). What comes from where is pinned in `sources.txt` and `Dockerfile`, and
+  listed for players in `NOTICE.txt` (on the card as `slot-os/licenses`).
+- **The FAT32** is made for a 1 TiB partition and told it is 2.5 GiB; on its first start the
+  Brick grows the partition to the card's end and rewrites the size (`init`'s `grow`).
+- **`init`** is PID 1 and the only script in RAM: it feeds the watchdog, mounts the card
+  (checking it first if it was left in use), installs a `slot-os/boot.img` it finds there,
+  loads the GPU and Wi-Fi drivers, sets the mixer (`mixer.sh`) and runs Slot again and again.
+  Slot's exit code says what next: 64 power off, 65 restart, 66 start again (an update).
+- **Updates:** Slot reads `update-os.txt` instead of `update.txt` (`crates/slot/src/update.rs`).
+  An update that brings a boot image keeps the old one with the files it replaced, and `init`
+  puts them all back if the new Slot never shows a frame.
 
-1. Install **Raspberry Pi Imager** (raspberrypi.com/software).
-2. **Choose Device**: *No filtering*. **Choose OS**: scroll down to *Use custom*, and pick
-   `slot-os-prototype.img.xz`. **Choose Storage**: the SD card. Check its size; picking the
-   wrong drive erases that drive.
-3. **Next**, then *No* to customisation, then *Yes* to erase. It writes and then verifies.
-4. Windows may now say *You need to format the disk in drive X: before you can use it*,
-   once or several times. **Always click Cancel.** Those are Slot OS's boot partitions;
-   formatting them breaks the card.
+## Trying a change on a card
 
-The card now shows one drive in Windows, named **SLOT**, with a `Slot` folder. It holds
-1 GB: room for a few games, not your whole collection.
-
-### 3. Put a few games on it
-
-From the backup, copy into the **SLOT** drive:
-
-- a few games, into the matching `Slot\Games\GB`, `GBA`, ... folders;
-- `Slot\BIOS` (needed for PlayStation games);
-- if you want your saves: `Slot\Saves`, `Slot\States` and `Slot\Config`.
-
-Eject the card in Windows before taking it out.
-
-### 4. Start the Brick
-
-Put the card in and turn the Brick on.
-
-- **Slot appears:** try every button (A, B, X, Y in particular), the sound, and
-  HOME → Power Off. Then put the card in the PC and send
-  `Slot\Logs\boot-times.log`, `Slot\Logs\os.log` and `Slot\Logs\slot.log`.
-- **The screen stays black for 30 seconds:** hold Power until the Brick is off. Put the
-  card in the PC and look for `Slot\Logs\os.log`. Send it if it is there; if there is no
-  `Logs` folder at all, say so (Slot OS never got as far as starting).
-
-### 5. Back to how it was
-
-1. Copy anything you want to keep from the **SLOT** drive (saves made while trying Slot OS
-   are in `Slot\Saves` and `Slot\States`) into the backup's `Slot` folder, replacing the
-   older files.
-2. Erase the card back to one ordinary drive. Either:
-   - **SD Card Formatter** (sdcard.org, the SD Association's tool): pick the card, *Quick
-     format*, **Format**. It formats a card over 32 GB as exFAT and a smaller one as FAT32,
-     as cards come from the shop. Or:
-   - **Raspberry Pi Imager**: **Choose OS** → *Erase* → the card → **Next**. It formats the
-     card FAT32. That is fine, unless a single game file is over 4 GB.
-3. Copy everything from the backup folder back onto the card, `.slot-boot` included.
-4. Eject, put it in the Brick, and turn it on: it starts Slot as before. Nothing on the
-   Brick itself was changed, so there is nothing else to undo.
+Copy `dist-brick/Slot/System/slot` to the card's `Slot/System/`, `dist-os/slot-os/` over the
+card's `slot-os/`, and `dist-os/boot.img` to `slot-os/boot.img`: at the next start the Brick
+writes the boot image (white LEDs) and restarts into it. A script at `slot-os/debug.sh` runs
+before Slot, its output in `Slot/Logs/debug.log`. Startup times are in
+`Slot/Logs/boot-times.log`, the kernel's log and the drivers' in `Slot/Logs/os.log`.

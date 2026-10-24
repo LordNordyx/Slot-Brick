@@ -75,7 +75,7 @@ doesn't flash anything to the device.
 | Volume `+` / `−`   | Volume (press both together to mute)   |
 | `Fn` slider        | Mute / unmute                          |
 | Press `Power`      | Sleep / wake                           |
-| Hold `Power`       | Shut down, or exit to the stock OS     |
+| Hold `Power`       | Shut down, or exit to the stock OS (Slot OS: shut down) |
 
 **Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour and a
 solid, see-through or glitter finish for Game Boy and GBA carts, and the shape: original or Color
