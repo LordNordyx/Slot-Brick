@@ -1,6 +1,7 @@
 """Takes from TrimUI's firmware release (TG3040_Brick_firmware_*.zip: an Allwinner IMAGEWTY
-image, trimui_tg3040.awimg) the two parts Slot OS uses: boot.fex (the boot image with TrimUI's
-kernel) and rootfs.fex (their system, ext4, from which make-image.sh takes the drivers, the
+image, trimui_tg3040.awimg) the parts Slot OS uses: boot0_sdcard.fex and boot_package.fex (the
+boot chain: boot0 for an SD card, u-boot and the device tree), boot.fex (the boot image with
+TrimUI's kernel) and rootfs.fex (their system, ext4, from which make-image.sh takes the drivers, the
 GPU libraries and the firmware with debugfs).
 
 Usage: python3 trimui-firmware.py <firmware zip> <out dir>
@@ -9,7 +10,7 @@ import os, shutil, struct, sys, zipfile
 
 src, out = sys.argv[1:3]
 os.makedirs(out, exist_ok=True)
-WANT = {'boot.fex', 'rootfs.fex'}
+WANT = {'boot0_sdcard.fex', 'boot_package.fex', 'boot.fex', 'rootfs.fex'}
 with zipfile.ZipFile(src) as z:
     name = next(n for n in z.namelist() if n.endswith('.awimg'))
     awimg = os.path.join(out, 'firmware.awimg')

@@ -8,17 +8,15 @@ passed on unchanged.
 
 TrimUI's boot chain and kernel
 ------------------------------
-boot0 and the u-boot boot package (u-boot, the secure monitor, the SCP firmware, the device
-tree) are TrimUI's builds for the Brick, as Knulli ships them to boot from an SD card:
-  https://github.com/knulli-cfw/knulli-linux (board/allwinner/a133/trimui-brick,
-  commit 57afa662009641d181f57241bcc480119b131530)
-The u-boot settings (env) are Knulli's too, with the kernel's console messages turned down.
-
-The Linux 4.9.191 kernel in the boot partition is TrimUI's own, from their firmware 1.1.1
-(26 November 2025), the kernel the Brick's stock system runs:
+boot0, the u-boot boot package (u-boot, the secure monitor, the SCP firmware, the device
+tree) and the Linux 4.9.191 kernel in the boot partition are TrimUI's own, from their
+firmware 1.1.1 (26 November 2025), what the Brick's stock system runs:
   https://github.com/trimui/firmware_brick/releases/tag/v1.1.1-20251126
 Linux and u-boot are GPL-2.0 (GPL-2.0.txt). TrimUI has not published their source; it is
 theirs to provide.
+The u-boot settings (env) and the card's layout, which let the Brick start from an SD card,
+are Knulli's (https://github.com/knulli-cfw/knulli-linux), with the kernel's console
+messages turned down.
 
 Kernel modules, firmware and GPU libraries
 ------------------------------------------

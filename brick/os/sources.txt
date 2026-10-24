@@ -1,14 +1,11 @@
 # What Slot OS takes from others, pinned. fetch.sh downloads each file once into
 # .docker-cache/os/ and refuses one whose sha256 differs.
 #
-# TrimUI's boot chain (boot0, the u-boot boot package): the binaries Knulli
-# (github.com/knulli-cfw/knulli-linux) ships for the Brick, at the commit below, as they boot
-# from the SD card. TrimUI publishes no source for them.
-# TrimUI's firmware 1.1.1 (github.com/trimui/firmware_brick): their kernel (the one stock
-# runs), the GPU's and Wi-Fi chip's drivers and firmware, and the GPU libraries
-# (make-image.sh takes them out with trimui-firmware.py).
+# TrimUI's firmware 1.1.1 (github.com/trimui/firmware_brick), the one the Brick's stock system
+# runs: its boot chain (boot0 for an SD card, u-boot and the device tree), kernel, the GPU's and
+# Wi-Fi chip's drivers and firmware, and the GPU libraries. make-image.sh takes them out with
+# trimui-firmware.py. TrimUI publishes no source for them. (The u-boot settings, env.txt, and
+# the card's layout are Knulli's: github.com/knulli-cfw/knulli-linux.)
 #
 # <sha256> <file under .docker-cache/os/> <url>
-fb821279f641d4fa19305bf297a4631f859089dcacddaedcb141d2a5b31a585f boot0.img https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/trimui-brick/partitions/boot0.img
-e5648b959b2f94996d38db4d24cce68c39b386e387945fb7dbf91f84e4a5bb23 boot_package.fex https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/trimui-brick/partitions/boot_package.fex
 488db02176e81ad4fdcf9e0bb4dbf406c883199f5b3521445e038bf81c8916ef TG3040_Brick_firmware_v1.1.1.zip https://github.com/trimui/firmware_brick/releases/download/v1.1.1-20251126/TG3040_Brick_firmware_v1.1.1.zip

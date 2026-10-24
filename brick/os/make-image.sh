@@ -153,8 +153,8 @@ sgdisk -o -j 160 \
     -n 3:0:+1M -c 3:env-redund \
     -n 4:$((FAT_START / 512)):+${FAT_MIB}M -c 4:boot-resource -t 4:0700 -A 4:set:2 \
     "$IMG" >/dev/null
-dd if="$SRC/boot0.img" of="$IMG" bs=1024 seek=128 conv=notrunc 2>/dev/null
-dd if="$SRC/boot_package.fex" of="$IMG" bs=1024 seek=16400 conv=notrunc 2>/dev/null
+dd if="$TRIMUI/boot0_sdcard.fex" of="$IMG" bs=1024 seek=128 conv=notrunc 2>/dev/null
+dd if="$TRIMUI/boot_package.fex" of="$IMG" bs=1024 seek=16400 conv=notrunc 2>/dev/null
 dd if="$WORK/boot.img" of="$IMG" bs=$MIB seek=36 conv=notrunc 2>/dev/null
 dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((36 + BOOT_MIB)) conv=notrunc 2>/dev/null
 dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((37 + BOOT_MIB)) conv=notrunc 2>/dev/null
