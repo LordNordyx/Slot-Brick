@@ -63,7 +63,9 @@ echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R"
 
 # --- boot.img: TrimUI's kernel (from Knulli's boot.img) with our initramfs -------------------
 python3 "$OS/bootimg.py" "$SRC/knulli-boot.img" "$WORK/initramfs.gz" "$WORK/boot.img"
-mkenvimage -r -s 0x20000 -o "$WORK/env.img" "$OS/env.txt"
+# Knulli's u-boot settings, unchanged for now (env.txt); env-fast.txt is the quieter set to
+# move to once the card boots.
+mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$OS/env.txt"
 
 # --- The FAT partition: Slot and the player's folders ----------------------------------------
 dd if=/dev/zero of="$WORK/fat.img" bs=1M count=0 seek="$FAT_MIB" 2>/dev/null
@@ -79,12 +81,16 @@ mcopy -i "$WORK/fat.img" "$WORK/bootlogo.bmp" ::/bootlogo.bmp
 # Knulli's layout for the Brick: boot0 at 128 KiB (the GPT's entries moved to 80 KiB out of
 # its way), u-boot's package at 16 400 KiB, then the partitions u-boot reads by name.
 MIB=1048576
-FAT_START=$((70 * MIB))
+# The boot partition is 15 MiB, as Knulli's: u-boot reads all of it into memory at
+# 0x45000000, and a bigger one may overwrite what u-boot still needs above it.
+BOOT_MIB=15
+[ "$(stat -c %s "$WORK/boot.img")" -le $((BOOT_MIB * MIB)) ] || { echo "boot.img is over $BOOT_MIB MiB" >&2; exit 1; }
+FAT_START=$(((36 + BOOT_MIB + 2) * MIB))
 TOTAL=$((FAT_START + FAT_MIB * MIB + MIB))
 rm -f "$IMG"
 dd if=/dev/zero of="$IMG" bs=1 count=0 seek="$TOTAL" 2>/dev/null
 sgdisk -o -j 160 \
-    -n 1:73728:+32M -c 1:boot \
+    -n 1:73728:+${BOOT_MIB}M -c 1:boot \
     -n 2:0:+1M -c 2:env \
     -n 3:0:+1M -c 3:env-redund \
     -n 4:$((FAT_START / 512)):+${FAT_MIB}M -c 4:boot-resource -t 4:0700 -A 4:set:2 \
@@ -92,7 +98,7 @@ sgdisk -o -j 160 \
 dd if="$SRC/boot0.img" of="$IMG" bs=1024 seek=128 conv=notrunc 2>/dev/null
 dd if="$SRC/boot_package.fex" of="$IMG" bs=1024 seek=16400 conv=notrunc 2>/dev/null
 dd if="$WORK/boot.img" of="$IMG" bs=$MIB seek=36 conv=notrunc 2>/dev/null
-dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=68 conv=notrunc 2>/dev/null
-dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=69 conv=notrunc 2>/dev/null
-dd if="$WORK/fat.img" of="$IMG" bs=$MIB seek=70 conv=notrunc 2>/dev/null
+dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((36 + BOOT_MIB)) conv=notrunc 2>/dev/null
+dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((37 + BOOT_MIB)) conv=notrunc 2>/dev/null
+dd if="$WORK/fat.img" of="$IMG" bs=$MIB seek=$((FAT_START / MIB)) conv=notrunc 2>/dev/null
 sgdisk -p "$IMG" | tail -6
