@@ -22,20 +22,40 @@ exec < /dev/console > /dev/console 2>&1
 TIMES=/run/boot-times.log
 stamp() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$TIMES"; }
 stamp init started
+# What the screen shows while this runs, for a Brick with no serial cable: white once this
+# script starts, black again once the card is mounted, snow when no card could be mounted.
+# (u-boot showed the card's bootlogo.bmp before, if it got as far as the card.)
+paint() { head -c 3145728 /dev/zero | tr '\000' "$1" > /dev/fb0 2>/dev/null; }
+paint '\377'
 
 # The GPU driver (pvrsrvkm, dc_sunxi), meanwhile: pvrsrvctl loads both from here.
 ( cd /lib/modules/4.9.191 && pvrsrvctl --start >/run/gpu.log 2>&1; stamp GPU driver loaded ) &
 GPU=$!
 
-# The card: its fourth partition, FAT, holds Slot and the player's files.
+# The card: its fourth partition, FAT, holds Slot and the player's files. It should be
+# mmcblk0p4 (as for Knulli); failing that, any partition with a Slot folder on it.
+mount_card() {
+    mount -t vfat -o rw,noatime,utf8,shortname=mixed,errors=remount-ro "$1" "$CARD" 2>>/run/mount.log \
+        || mount -t exfat -o rw,noatime "$1" "$CARD" 2>>/run/mount.log
+}
 n=0
 while [ ! -b "$DEV" ] && [ "$n" -lt 500 ]; do sleep 0.01; n=$((n + 1)); done
 mkdir -p "$CARD"
-if mount -t vfat -o rw,noatime,utf8,shortname=mixed,errors=remount-ro "$DEV" "$CARD" 2>/run/mount.log \
-    || mount -t exfat -o rw,noatime "$DEV" "$CARD" 2>>/run/mount.log; then
-    stamp card mounted
+mounted=
+for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
+    [ -b "$dev" ] || continue
+    if mount_card "$dev"; then
+        if [ -d "$CARD/Slot" ]; then mounted=$dev; break; fi
+        umount "$CARD"
+    fi
+done
+if [ -n "$mounted" ]; then
+    stamp "card mounted ($mounted)"
+    paint '\000'
 else
     stamp "card NOT mounted: $(cat /run/mount.log)"
+    { ls -l /dev/mmcblk* 2>&1; cat /proc/partitions; } >> /run/mount.log
+    head -c 3145728 /dev/urandom > /dev/fb0 2>/dev/null
 fi
 wait "$GPU"
 

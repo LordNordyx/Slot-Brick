@@ -35,6 +35,9 @@ aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/pvrsrvkm.ko" "$
 aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/dc_sunxi.ko" "$SRC/dc_sunxi.ko"
 cp "$SRC"/rgx.fw.22.102.54.38 "$SRC"/rgx.sh.22.102.54.38 "$R/lib/firmware/"
 install -m 755 "$OS/init" "$R/init"
+# u-boot's built-in settings, should it not read ours, start /rdinit or /sbin/init.
+ln -sf /init "$R/rdinit"
+ln -sf /init "$R/sbin/init"
 cat "$OS/VERSION" > "$R/etc/slot-os-version"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:
 # EGL, GLES, ALSA) must be here, or the card boots to a black screen.
@@ -58,6 +61,9 @@ dd if=/dev/zero of="$WORK/fat.img" bs=1M count=0 seek="$FAT_MIB" 2>/dev/null
 mkfs.vfat -F 32 -n SLOT "$WORK/fat.img" >/dev/null
 export MTOOLS_SKIP_CHECK=1
 mcopy -s -p -i "$WORK/fat.img" "$CARD_FILES/Slot" ::/
+# u-boot shows this from the boot-resource partition as soon as it starts.
+python3 "$OS/bootlogo.py" "$WORK/bootlogo.bmp"
+mcopy -i "$WORK/fat.img" "$WORK/bootlogo.bmp" ::/bootlogo.bmp
 
 # --- The card -------------------------------------------------------------------------------
 # Knulli's layout for the Brick: boot0 at 128 KiB (the GPT's entries moved to 80 KiB out of
