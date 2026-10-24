@@ -1,19 +1,11 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- Slot OS (experimental): Slot as the Brick's own firmware, on the SD card. The Brick starts straight into Slot in about 4 seconds instead of 9, on TrimUI's own kernel and drivers, and never touches the Brick's internal storage. Flash `slot-os-<version>-sd-card.img.xz` onto a card (README → Installation → Slot OS); the card grows to its full size on first start. HOME → Update updates Slot OS itself too, and puts the previous version back if the new one does not start. Holding Power shuts down.
-- Slot shows its first screen sooner: the symbols font it loads is cut down to the symbols it draws, and telling a Brick from a Brick Pro no longer holds up startup.
-- PlayStation (experimental, not yet tested on a Brick): put games in `Slot/Games/PS1` (`.cue`/`.bin`, `.chd`, `.pbp`, `.iso`, or an `.m3u` for a game of several discs) and they get a shelf of their own, as discs. The slot turns into a disc slot, and the disc spins as it goes in. They run on PCSX ReARMed, with your BIOS from `Slot/BIOS` if you have one.
-- PlayStation games of several discs: A fans the discs out; pick one with left / right and A puts it in. To change discs mid-game, eject and put in the next one: the game carries on with it.
-- PlayStation: L2 and R2 are the game's own buttons, so fast-forward is HOME + R2. No rewind for PlayStation games. A Brick Pro's left stick is the DualShock's left stick in game. Memory cards are saved in `Slot/Saves/PS1`, one per game. HOME → Screen → PlayStation has Shader, Dithering and Overlay.
-- Cart Art fetches PlayStation disc scans, and RetroAchievements work for PlayStation games (`.chd` too).
-- Title card: when you pick a game, its name shows on a card under its cart for a moment, then fades. Turn it off under HOME → Library → Title Card.
-- Play time: how long you have played the selected game shows beside the battery on the shelf, in minutes ("200M") or in hours and minutes ("3H20M", HOME → Library → Play Time).
-- Favorites: Y stars a game (a gold star on its cart), and HOME → Library → Show: Favorites shows only those.
-- Sort the shelves with SELECT, or under HOME → Library → Sort By: A–Z, last played, or most played.
-- Brick Pro (experimental, not yet tested on one): Slot recognises it, its left stick works as the D-pad, and System → LEDs has a Sticks row for the lights around its sticks.
-- Rumble: games that rumble (and the Rumble setting) now drive the Brick's motor.
-- HOME → Wi-Fi: turning Wi-Fi on right after it started could say the request was rejected and stay off; it now waits for a scan or a join already under way instead of restarting Wi-Fi. Turning Wi-Fi off just after startup now stays off.
+- PlayStation (experimental): PS1 games from `Slot/Games/PS1` on a shelf of discs, games of several discs included.
+- Favorites (Y), sorting (SELECT), play time and a title card for the selected game.
+- Rumble works.
+- Brick Pro (experimental): recognised, with its left stick as the D-pad and its own LED row.
+- Faster first screen, and Wi-Fi fixes.
 
 ## v0.44
 **New since v0.43:**
