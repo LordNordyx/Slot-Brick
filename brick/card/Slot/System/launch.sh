@@ -12,6 +12,10 @@ else
     exec > /tmp/slot.log 2>&1
     echo 'WARNING: SD card is not writable'
 fi
+# Uptime at each step of startup (issue #44); boot.sh or Apps/Slot started the log.
+export SLOT_BOOT_TIMES="${SLOT_BOOT_TIMES:-$SLOT_ROOT/Logs/boot-times.log}"
+stamp() { echo "$(cut -d' ' -f1 /proc/uptime 2>/dev/null) $*" >> "$SLOT_BOOT_TIMES" 2>/dev/null; }
+stamp launch.sh started
 printf 'slot Brick v0.44\n'
 date
 uname -a
@@ -49,27 +53,30 @@ cleanup() {
     [ -z "$INPUT_PID" ] || kill "$INPUT_PID" 2>/dev/null || :
 }
 trap cleanup 0
-# Wait for the daemon's virtual joystick instead of checking only framebuffer.
-count=0
-while [ ! -e /dev/input/js0 ] && [ "$count" -lt 30 ]; do
-    sleep 0.1
-    count=$((count + 1))
-done
+# No wait here for the daemon's virtual joystick (/dev/input/js0): Slot sets up its screen
+# and library meanwhile, and only then waits for the joystick itself.
 if [ -f "$SLOT_ROOT/DEBUG_INPUT" ]; then
     export SLOT_TRACE_INPUT=1
 else
     unset SLOT_TRACE_INPUT
 fi
 # CPU policy is temporary and restored by cleanup; no firmware changes.
-sh "$SYS/diagnose.sh" "$SLOT_ROOT/Logs/diagnostics.txt" 2>/dev/null || :
+# The hardware report only changes with the firmware, so it is not redone on every start:
+# only when missing, after an update of Slot (a newer diagnose.sh), or after a crash (which
+# removes it). Then in the background, once Slot is up, so it never delays startup.
+DIAG="$SLOT_ROOT/Logs/diagnostics.txt"
+if [ ! -s "$DIAG" ] || [ "$SYS/diagnose.sh" -nt "$DIAG" ]; then
+    ( sleep 20; nice -n 19 sh "$SYS/diagnose.sh" "$DIAG" ) > /dev/null 2>&1 &
+fi
 if [ "$(uname -m)" != aarch64 ]; then
     echo 'This build requires aarch64 TrimUI Brick firmware.'
     exit 1
 fi
 chmod +x "$SYS/slot"
 sh "$SYS/slotlink.sh" link down || :
-"$SYS/slot" --init-root "$SLOT_ROOT" || echo "WARNING: could not prepare $SLOT_ROOT (continuing)"
+# Slot makes its folders itself as it starts (root::ensure), so it is loaded only once.
 cd "$SLOT_ROOT"
+stamp starting slot
 "$SYS/slot"
 status=$?
 echo "slot exit code: $status"
@@ -79,6 +86,8 @@ if [ "$status" -ge 128 ]; then
     CRASH="$SLOT_ROOT/Logs/crash"
     mkdir -p "$CRASH" && cp "$SLOT_ROOT/Logs/slot.log" "$CRASH/slot-$(date '+%Y-%m-%d_%H-%M-%S').log" \
         && echo "Crash log kept in Logs/crash"
+    # Redo the hardware report on the next start, for the bug report.
+    rm -f "$SLOT_ROOT/Logs/diagnostics.txt"
     ls -1t "$CRASH"/slot-*.log 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
 fi
 sync

@@ -9,6 +9,7 @@ use slot::input::SimInput as BrickInput;
 #[cfg(not(feature = "brick"))]
 use slot::input::DeviceInput;
 use slot_gfx::{Compositor, FbdevSurface, Surface};
+use slot::boot_times::mark as boot_time;
 use slot_power::trace_first_frame;
 #[cfg(feature = "brick")]
 use slot_power::BrickPlatform;
@@ -126,6 +127,7 @@ fn sim_sleep(input: &mut BrickInput, frontend: &Frontend, sim: &slot::sim::Share
 }
 
 pub fn run() {
+    boot_time("started");
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
@@ -166,6 +168,7 @@ pub fn run() {
             std::process::exit(1);
         }
     };
+    boot_time("screen ready");
     #[cfg(not(feature = "brick"))]
     let platform = DevicePlatform::new(root.clone());
     #[cfg(not(feature = "brick"))]
@@ -178,8 +181,11 @@ pub fn run() {
     #[cfg(feature = "brick")]
     slot::brick_wifi::repair_at_boot();
     let mut frontend = Frontend::boot(Box::new(platform));
+    boot_time("games and settings read");
     frontend.upload_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());
+    boot_time("  bezel");
+    boot_time("faces drawn");
     #[cfg(not(feature = "brick"))]
     let mut input = DeviceInput::open(&root);
     #[cfg(feature = "sim")]
@@ -192,6 +198,7 @@ pub fn run() {
             std::process::exit(1);
         }
     };
+    boot_time("joystick ready");
     #[cfg(not(feature = "brick"))]
     let card = root.clone();
     #[cfg(not(feature = "brick"))]
@@ -293,10 +300,16 @@ pub fn run() {
             std::thread::sleep(Duration::from_millis(25));
             continue;
         }
+        if !drawn {
+            boot_time("  first input and update");
+        }
         let frame_ready = frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         #[cfg(not(feature = "brick"))]
         let _ = frame_ready;
         frontend.render(&mut compositor, surface.window_size());
+        if !drawn {
+            boot_time("  first render");
+        }
         let swap = Instant::now();
         let work = swap - began;
         #[cfg(feature = "brick")]
@@ -328,6 +341,7 @@ pub fn run() {
         if !drawn {
             drawn = true;
             trace_first_frame();
+            boot_time("first frame");
             #[cfg(feature = "brick")]
             slot::update::settle(&slot::update::card_of(&root));
             #[cfg(feature = "brick")]

@@ -173,12 +173,26 @@ impl BrickInput {
             if init(JOYSTICK) != 0 {
                 return Err(CStr::from_ptr(error()).to_string_lossy().into_owned());
             }
-            // Cold boot can enumerate the virtual pad after SDL initialization.
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            // On a cold boot trimui_inputd is started just before Slot, and its virtual pad can
+            // appear after SDL has looked: launch.sh no longer waits for it. Pump events for
+            // hot-plug, and look again from scratch every second in case SDL doesn't see it.
+            let started = std::time::Instant::now();
+            let deadline = started + std::time::Duration::from_secs(8);
+            let mut rescan = started + std::time::Duration::from_secs(1);
             while count() < 1 && std::time::Instant::now() < deadline {
                 let mut event = std::mem::zeroed::<Event>();
                 while poll(&mut event) != 0 {}
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                if count() < 1 && std::time::Instant::now() >= rescan {
+                    quit(JOYSTICK);
+                    if init(JOYSTICK) != 0 {
+                        return Err(CStr::from_ptr(error()).to_string_lossy().into_owned());
+                    }
+                    rescan += std::time::Duration::from_secs(1);
+                }
+            }
+            if count() > 0 {
+                eprintln!("slot: Brick joystick found after {} ms", started.elapsed().as_millis());
             }
             if count() < 1 {
                 quit(JOYSTICK);

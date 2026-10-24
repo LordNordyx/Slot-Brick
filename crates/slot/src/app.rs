@@ -646,7 +646,11 @@ impl App {
     pub fn boot(root: &Path) -> Self {
         crate::root::ensure(root);
         slot_ui::set_theme(Theme::read(root));
-        let mut app = App::new(scan(root).unwrap_or_default());
+        crate::boot_times::mark("  folders and theme");
+        let carts = scan(root).unwrap_or_default();
+        crate::boot_times::mark(&format!("  games scanned ({})", carts.len()));
+        let mut app = App::new(carts);
+        crate::boot_times::mark("  carts set up");
         app.root = Some(root.to_path_buf());
         #[cfg(feature = "brick")]
         {
@@ -655,8 +659,10 @@ impl App {
             slot_ui::set_brick_pro(model == slot_power::Model::BrickPro);
             app.brick_leds = Some(crate::brick_led::BrickLeds::open(root));
         }
+        crate::boot_times::mark("  model and LEDs");
         app.state = read_slot_state(root);
         app.library = slot_store::Library::read(root);
+        crate::boot_times::mark("  state and library read");
         app.arrange();
         // At startup, each shelf starts at the top of its order.
         for (_, shelf) in &mut app.shelves {
@@ -668,6 +674,7 @@ impl App {
         } else {
             app.phase = clock_screen(system_secs(), 0, false);
         }
+        crate::boot_times::mark("  shelves arranged");
         app
     }
 

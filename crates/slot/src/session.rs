@@ -39,6 +39,7 @@ impl Session {
         if let Err(e) = sink.open(GBA_HZ) {
             eprintln!("slot: audio: {e}");
         }
+        crate::boot_times::mark("  audio open");
         Session {
             app: App::boot(&root),
             root,

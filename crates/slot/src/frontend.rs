@@ -338,6 +338,7 @@ impl Frontend {
         let mut session = Session::boot(platform.root().to_path_buf());
         label_cache::forget_old(platform.root());
         let stale = label_cache::stale(platform.root(), session.app().carts());
+        crate::boot_times::mark(&format!("  label cache checked ({} new)", stale.len()));
         let rebuild = (!stale.is_empty()).then(|| {
             eprintln!("slot: label cache: {} new labels", stale.len());
             Rebuild::start(platform.root(), stale)
@@ -345,6 +346,7 @@ impl Frontend {
         session
             .app_mut()
             .set_power(Power::new(platform, DOZE_TIMEOUT));
+        crate::boot_times::mark("  power ready");
         Frontend {
             session,
             start: now,
@@ -407,11 +409,14 @@ impl Frontend {
 
     pub fn upload_faces(&mut self, compositor: &mut Compositor) {
         Self::upload_paper(compositor);
+        crate::boot_times::mark("  paper");
         #[cfg(feature = "brick")]
         slot_ui::upload_slot_art(|w,h,rgba|compositor.create_texture(w,h,rgba));
+        crate::boot_times::mark("  slot art");
         if self.rebuild.is_none() {
             self.cart_faces.sync(self.session.app_mut(), compositor);
         }
+        crate::boot_times::mark(&format!("  cart faces synced (label rebuild {})", if self.rebuild.is_some() { "running, skipped" } else { "none" }));
         let icons = Icon::ALL
             .iter()
             .map(|i| {
@@ -435,6 +440,7 @@ impl Frontend {
         let alert = icon_face(Icon::Alert, ALERT_PX, ALERT_INK);
         let alert = compositor.create_texture(alert.w, alert.h, &alert.rgba);
         self.session.app_mut().set_alert_face(alert);
+        crate::boot_times::mark("  icons, badges");
         let lines = PowerChoice::ALL
             .iter()
             .map(|c| {
@@ -486,7 +492,9 @@ impl Frontend {
             carets,
             legend,
         });
+        crate::boot_times::mark("  power and quick menus");
         self.upload_cart_menu_faces(compositor);
+        crate::boot_times::mark("  cart menu");
         let sockets = slot_store::Core::PICKER
             .iter()
             .map(|c| {
@@ -524,6 +532,7 @@ impl Frontend {
         let search = hint_face("Y", "Search");
         let face = (compositor.create_texture(search.w, search.h, &search.rgba), search.w);
         self.session.app_mut().set_core_search_face(face);
+        crate::boot_times::mark("  core picker");
         let roles = menu_faces(compositor, LinkRow::ALL.iter().map(|r| r.text()));
         self.session.app_mut().set_link_menu_faces(roles);
         if let Some(linked) = menu_faces(compositor, ["Linked"].into_iter()).pop() {
@@ -546,6 +555,7 @@ impl Frontend {
         self.session.app_mut().set_link_step_faces(steps);
         let fails = menu_faces(compositor, LinkFail::SHOWN.iter().map(|f| f.line()));
         self.session.app_mut().set_link_fail_faces(fails);
+        crate::boot_times::mark("  link menus");
         let toasts = Toast::all()
             .into_iter()
             .map(|t| {
@@ -558,6 +568,7 @@ impl Frontend {
         self.session.app_mut().set_legend_faces(legend);
         let hint = set_clock_hint_face();
         self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
+        crate::boot_times::mark("  toasts, legends, clock hint");
         let shadow = cart_shadow();
         let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
         self.session.app_mut().set_cart_shadow(id);
@@ -592,7 +603,9 @@ impl Frontend {
         let star = icon_face(Icon::Star, STAR_PX, STAR_INK);
         let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
         self.session.app_mut().set_star_face(star);
+        crate::boot_times::mark("  shadows and HUD icons");
         self.upload_wallpaper(compositor);
+        crate::boot_times::mark("  wallpaper");
     }
 
     /// The cart menu's words, each value dim and lit: built once, as the quick menu's are.
