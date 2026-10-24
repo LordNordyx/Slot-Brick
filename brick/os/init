@@ -84,9 +84,8 @@ fi
 ( cd /lib/modules/4.9.191 && pvrsrvctl --start ) > /run/gpu.log 2>&1
 stamp GPU driver loaded
 
-# The mixer as the Brick needs it (speaker and headphone switches on, volumes), from Knulli:
-# the codec starts muted.
-alsactl -f /etc/asound.state restore > /run/alsa.log 2>&1
+# The mixer: the codec starts with its outputs switched off.
+sh /etc/mixer.sh > /run/alsa.log 2>&1
 stamp mixer set
 
 # For working on Slot OS: a script on the card, run before Slot, its output in Logs/debug.log.

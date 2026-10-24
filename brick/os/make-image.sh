@@ -43,7 +43,7 @@ ln -sf /init "$R/rdinit"
 ln -sf /init "$R/sbin/init"
 cat "$OS/VERSION" > "$R/etc/slot-os-version"
 install -m 644 "$OS/asound.conf" "$R/etc/asound.conf"
-install -m 644 "$SRC/asound.state" "$R/etc/asound.state"
+install -m 755 "$OS/mixer.sh" "$R/etc/mixer.sh"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:
 # EGL, GLES, ALSA) must be here, or the card boots to a black screen.
 missing=0

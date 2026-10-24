@@ -19,6 +19,13 @@ pub use stub::StubSink;
 
 pub const GBA_HZ: u32 = 32_768;
 
+/// The rate the output is opened at. On Slot OS the Brick's codec takes only 44.1/48 kHz:
+/// opened at 32768 Hz, ALSA resampled everything a second time, crudely, and the buffer Slot
+/// keeps level ran dry ("starved"), crackling. At 48 kHz Slot's own resampler is the only one.
+pub fn output_hz() -> u32 {
+    if std::env::var_os("SLOT_OS").is_some() { 48_000 } else { GBA_HZ }
+}
+
 #[cfg(feature = "host")]
 pub fn open_sink() -> Box<dyn AudioSink> {
     if std::env::var_os("SLOT_SILENT").is_some() {
