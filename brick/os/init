@@ -257,7 +257,15 @@ export SLOT_BOOT_TIMES="$TIMES"
 
 export SLOT_ROOT="$ROOT"
 export SLOT_OS=1
-cleanup() { sync; umount "$CARD" 2>/dev/null || mount -o remount,ro "$CARD"; }
+# Before powering off or restarting: every other program ended first (wpa_supplicant and the
+# DHCP client keep Logs/wifi.log open, and an open file keeps the card from being unmounted),
+# so the card is left closed and is not checked at the next start.
+cleanup() {
+    kill -TERM -1 2>/dev/null; sleep 0.3; kill -KILL -1 2>/dev/null
+    sync
+    umount "$CARD" 2>/dev/null || mount -o remount,ro "$CARD" 2>/dev/null \
+        || echo "Slot OS: the card could not be closed: $(cat /proc/mounts | grep " $CARD ")" > /dev/console
+}
 quick=0
 while :; do
     if [ ! -x "$ROOT/System/slot" ]; then
