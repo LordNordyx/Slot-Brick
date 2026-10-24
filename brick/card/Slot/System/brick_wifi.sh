@@ -37,8 +37,11 @@ radio() { # radio block|unblock
     fi
     # Set the kernel switch directly too: Brick firmware has neither tool.
     soft=1; [ "$1" = block ] || soft=0
+    # Only when it changes: on Slot OS, joins stalled after "associated" whenever this was
+    # written again with the value it already had (the menu opening runs `ensure`).
     for r in "$RFKILL"/rfkill*; do
         [ "$(cat "$r/type" 2>/dev/null)" = wlan ] || continue
+        [ "$(cat "$r/soft" 2>/dev/null)" = "$soft" ] && continue
         echo "$soft" > "$r/soft" 2>/dev/null
         echo "radio $1: $(basename "$r") soft=$(cat "$r/soft" 2>/dev/null) hard=$(cat "$r/hard" 2>/dev/null)"
     done
