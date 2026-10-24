@@ -407,7 +407,15 @@ impl Frontend {
         compositor.set_paper(info.width, &rgba);
     }
 
+    /// Everything drawn at startup: the shelf's faces, then the menus'.
     pub fn upload_faces(&mut self, compositor: &mut Compositor) {
+        self.upload_shelf_faces(compositor);
+        self.upload_menu_faces(compositor);
+    }
+
+    /// What the shelf's first frame shows. The menus' faces (upload_menu_faces) can follow it:
+    /// no menu opens before the next frame's input.
+    pub fn upload_shelf_faces(&mut self, compositor: &mut Compositor) {
         Self::upload_paper(compositor);
         crate::boot_times::mark("  paper");
         #[cfg(feature = "brick")]
@@ -441,6 +449,60 @@ impl Frontend {
         let alert = compositor.create_texture(alert.w, alert.h, &alert.rgba);
         self.session.app_mut().set_alert_face(alert);
         crate::boot_times::mark("  icons, badges");
+        let toasts = Toast::all()
+            .into_iter()
+            .map(|t| {
+                let f = toast_face(t);
+                compositor.create_texture(f.w, f.h, &f.rgba)
+            })
+            .collect();
+        self.session.app_mut().set_toast_faces(toasts);
+        let legend = legend_faces(compositor, &LEGEND);
+        self.session.app_mut().set_legend_faces(legend);
+        let hint = set_clock_hint_face();
+        self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
+        crate::boot_times::mark("  toasts, legends, clock hint");
+        let shadow = cart_shadow();
+        let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
+        self.session.app_mut().set_cart_shadow(id);
+        let notched = gb_cart_shadow(GbShell::Notched);
+        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
+        let rounded = gb_cart_shadow(GbShell::Rounded);
+        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
+        self.session.app_mut().set_gb_cart_shadows(notched, rounded);
+        let [nes, famicom] = [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom].map(|shell| {
+            let face = slot_ui::nes_cart_shadow(shell);
+            compositor.create_texture(face.w, face.h, &face.rgba)
+        });
+        self.session.app_mut().set_nes_cart_shadows(nes, famicom);
+        let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
+            let face = slot_ui::snes_cart_shadow(shell);
+            compositor.create_texture(face.w, face.h, &face.rgba)
+        });
+        self.session.app_mut().set_snes_cart_shadows(us, pal);
+        let disc = slot_ui::disc_shadow();
+        let disc = compositor.create_texture(disc.w, disc.h, &disc.rgba);
+        self.session.app_mut().set_disc_shadow(disc);
+        let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
+        let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
+        self.session.app_mut().set_bolt_face(bolt_id);
+        // The shelf's Wi-Fi symbol, in its three states; which one shows is the app's to say.
+        let wifi = [Icon::Wifi, Icon::WifiNoRoute, Icon::WifiOff].map(|icon| {
+            let face = icon_face(icon, slot_ui::WIFI_PX, HUD_INK);
+            (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
+        });
+        self.session.app_mut().set_wifi_faces(wifi);
+        // A favorite's star, gold, outlined so it shows on any plastic.
+        let star = icon_face(Icon::Star, STAR_PX, STAR_INK);
+        let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
+        self.session.app_mut().set_star_face(star);
+        crate::boot_times::mark("  shadows and HUD icons");
+        self.upload_wallpaper(compositor);
+        crate::boot_times::mark("  wallpaper");
+    }
+
+    /// The power, quick, cart, core and link menus' faces, and the shutdown lines.
+    pub fn upload_menu_faces(&mut self, compositor: &mut Compositor) {
         let lines = PowerChoice::ALL
             .iter()
             .map(|c| {
@@ -556,56 +618,6 @@ impl Frontend {
         let fails = menu_faces(compositor, LinkFail::SHOWN.iter().map(|f| f.line()));
         self.session.app_mut().set_link_fail_faces(fails);
         crate::boot_times::mark("  link menus");
-        let toasts = Toast::all()
-            .into_iter()
-            .map(|t| {
-                let f = toast_face(t);
-                compositor.create_texture(f.w, f.h, &f.rgba)
-            })
-            .collect();
-        self.session.app_mut().set_toast_faces(toasts);
-        let legend = legend_faces(compositor, &LEGEND);
-        self.session.app_mut().set_legend_faces(legend);
-        let hint = set_clock_hint_face();
-        self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        crate::boot_times::mark("  toasts, legends, clock hint");
-        let shadow = cart_shadow();
-        let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
-        self.session.app_mut().set_cart_shadow(id);
-        let notched = gb_cart_shadow(GbShell::Notched);
-        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
-        let rounded = gb_cart_shadow(GbShell::Rounded);
-        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
-        self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        let [nes, famicom] = [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom].map(|shell| {
-            let face = slot_ui::nes_cart_shadow(shell);
-            compositor.create_texture(face.w, face.h, &face.rgba)
-        });
-        self.session.app_mut().set_nes_cart_shadows(nes, famicom);
-        let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
-            let face = slot_ui::snes_cart_shadow(shell);
-            compositor.create_texture(face.w, face.h, &face.rgba)
-        });
-        self.session.app_mut().set_snes_cart_shadows(us, pal);
-        let disc = slot_ui::disc_shadow();
-        let disc = compositor.create_texture(disc.w, disc.h, &disc.rgba);
-        self.session.app_mut().set_disc_shadow(disc);
-        let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
-        let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
-        self.session.app_mut().set_bolt_face(bolt_id);
-        // The shelf's Wi-Fi symbol, in its three states; which one shows is the app's to say.
-        let wifi = [Icon::Wifi, Icon::WifiNoRoute, Icon::WifiOff].map(|icon| {
-            let face = icon_face(icon, slot_ui::WIFI_PX, HUD_INK);
-            (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
-        });
-        self.session.app_mut().set_wifi_faces(wifi);
-        // A favorite's star, gold, outlined so it shows on any plastic.
-        let star = icon_face(Icon::Star, STAR_PX, STAR_INK);
-        let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
-        self.session.app_mut().set_star_face(star);
-        crate::boot_times::mark("  shadows and HUD icons");
-        self.upload_wallpaper(compositor);
-        crate::boot_times::mark("  wallpaper");
     }
 
     /// The cart menu's words, each value dim and lit: built once, as the quick menu's are.

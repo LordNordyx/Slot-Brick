@@ -148,6 +148,9 @@ pub fn run() {
     // thread of its own, while the screen and sound open. The first to ask waits for it.
     #[cfg(feature = "brick")]
     let _ = std::thread::Builder::new().name("slot-model".into()).spawn(slot_power::model);
+    // The sound output opens, and the app boots, beside the screen, for Session::boot to take.
+    slot::audio::open_early();
+    slot::app::App::boot_early(root.clone());
     #[cfg(feature = "sim")]
     let sim = slot::sim::start();
     #[cfg(feature = "sim")]
@@ -193,7 +196,7 @@ pub fn run() {
     slot::brick_wifi::repair_at_boot();
     let mut frontend = Frontend::boot(Box::new(platform));
     boot_time("games and settings read");
-    frontend.upload_faces(&mut compositor);
+    frontend.upload_shelf_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());
     boot_time("faces drawn");
     #[cfg(not(feature = "brick"))]
@@ -352,6 +355,10 @@ pub fn run() {
             drawn = true;
             trace_first_frame();
             boot_time("first frame");
+            // The menus are drawn now, behind the first frame: none opens before the next
+            // frame's input.
+            frontend.upload_menu_faces(&mut compositor);
+            boot_time("menus drawn");
             #[cfg(feature = "brick")]
             slot::update::settle(&slot::update::card_of(&root));
             #[cfg(feature = "brick")]

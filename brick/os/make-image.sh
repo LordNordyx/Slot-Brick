@@ -109,19 +109,29 @@ mkdir -p "$SYS"
     ln -s "/mnt/SDCARD/slot-os/$f" "$R/$f"
 done
 cp -r "$LIC" "$SYS/licenses"
-( cd "$R" && find . | LC_ALL=C sort | cpio -o -H newc --quiet ) | gzip -9 -n > "$WORK/initramfs.gz"
-echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R" | cut -f1)); on the card: $(du -sh "$SYS" | cut -f1)"
+# Not compressed: the kernel took a tenth of a second to unpack it gzipped, longer than u-boot
+# takes to read the difference from the card.
+( cd "$R" && find . | LC_ALL=C sort | cpio -o -H newc --quiet ) > "$WORK/initramfs.cpio"
+echo "initramfs: $(du -h "$WORK/initramfs.cpio" | cut -f1); on the card: $(du -sh "$SYS" | cut -f1)"
 
 # --- boot.img: TrimUI's kernel (their firmware's boot.fex) with our initramfs ---------------
-python3 "$OS/bootimg.py" "$TRIMUI/boot.fex" "$WORK/initramfs.gz" "$WORK/boot.img"
+python3 "$OS/bootimg.py" "$TRIMUI/boot.fex" "$WORK/initramfs.cpio" "$WORK/boot.img"
 # TrimUI's u-boot settings (their firmware's env.fex: a CRC, a flag byte, then name=value
-# strings), with the kernel's console messages turned down
-# (loglevel 1, was 8): at 115200 baud, printing them held up the boot.
+# strings), with the kernel's console messages turned down (loglevel 1, was 8: at 115200
+# baud, printing them held up the boot), and four of its built-in drivers skipped, which
+# Slot OS has no use for and which took 0.14 s of its start: RAM disks, loop devices, clock
+# debugging and the video decoder. (Built in, they can only run at boot or never.)
 python3 -c '
 import sys
 data = open(sys.argv[1], "rb").read()[5:]
+skip = " initcall_blacklist=brd_init,loop_init,clk_debug_init,sunxi_cedar_init"
 for line in filter(None, data.split(b"\0")):
-    print(("loglevel=1" if line.startswith(b"loglevel=") else line.decode()))
+    line = line.decode()
+    if line.startswith("loglevel="):
+        line = "loglevel=1"
+    elif line.startswith("setargs_"):
+        line += skip
+    print(line)
 ' "$TRIMUI/env.fex" > "$WORK/env.txt"
 mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$WORK/env.txt"
 
@@ -167,7 +177,7 @@ dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((36 + BOOT_MIB)) conv=notrunc 2>/
 dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((37 + BOOT_MIB)) conv=notrunc 2>/dev/null
 dd if="$WORK/fat.img" of="$IMG" bs=$MIB seek=$((FAT_START / MIB)) conv=notrunc 2>/dev/null
 sgdisk -p "$IMG" | tail -6
-# For a card already running Slot OS: its system folder, and the boot image that init
-# writes to the boot partition when it finds it at slot-os/boot.img.
+# For a card already running Slot OS: its system folder, and the boot image and u-boot
+# settings that init writes when it finds them at slot-os/boot.img and slot-os/env.img.
 OUT=$(dirname "$IMG")
-rm -rf "$OUT/slot-os" && cp -r "$SYS" "$OUT/slot-os" && cp "$WORK/boot.img" "$WORK/bootlogo.bmp" "$OUT/"
+rm -rf "$OUT/slot-os" && cp -r "$SYS" "$OUT/slot-os" && cp "$WORK/boot.img" "$WORK/env.img" "$WORK/bootlogo.bmp" "$OUT/"
