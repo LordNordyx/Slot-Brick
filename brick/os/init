@@ -26,12 +26,8 @@ stamp init started
 # The kernel arms the hardware watchdog at boot (16 s): unless it is fed, the Brick resets,
 # whatever it is writing to the card at the time. Fed every 5 s from here on, as Knulli does.
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
-# How far startup got, for a Brick with no serial cable attached: a short buzz and blue
-# LEDs once this script runs, yellow while the card is checked after the Brick lost power,
-# purple while the card is grown to its full size on first boot, white while a new
-# boot.img is written,
-# green once the card is mounted; red and a long buzz when no
-# card could be mounted. (u-boot showed the card's bootlogo.bmp before, if it got that far.)
+# When no card with Slot on it can be mounted, nothing will reach the screen: red LEDs and a
+# long buzz say so.
 LEDS=/sys/class/led_anim
 leds() {
     [ -d "$LEDS" ] || return 0
@@ -48,8 +44,6 @@ buzz() {
     echo out > "$RUMBLE/direction" && echo 1 > "$RUMBLE/value" && sleep "$1"
     echo 0 > "$RUMBLE/value"
 } 2>/dev/null
-leds 0000FF
-buzz 0.3
 
 # The card: its fourth partition, FAT, holds Slot, the system's libraries (slot-os) and the
 # player's files. It should be mmcblk0p4 (as for Knulli); failing that, the partition that
@@ -114,7 +108,6 @@ grow() {
     [ $((start + max)) -ge $((total - 34)) ] || { end=$((start + max - 1)) room=$((max - size)); }
     grow_part=$((room > 131072)) grow_fs=$((size - sectors > 131072))
     [ "$grow_part" = 1 ] || [ "$grow_fs" = 1 ] || return 0
-    leds FF00FF
     stamp "growing the card ($((size / 2048)) MiB, file system $((sectors / 2048)) MiB, card $((total / 2048)) MiB)"
     umount "$CARD" || return 1
     if [ "$grow_part" = 1 ]; then
@@ -170,7 +163,6 @@ for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
         if [ -d "$CARD/Slot" ] && [ -d "$CARD/slot-os" ]; then
             fs=$(awk -v d="$dev" '$1 == d { print $3 }' /proc/mounts)
             if dirty "$dev" "$fs"; then
-                leds FFFF00
                 stamp "card left in use: checking it"
                 repair "$dev" "$fs" || mount_card "$dev"
                 stamp "card checked"
@@ -183,7 +175,6 @@ for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
 done
 if [ -n "$mounted" ]; then
     stamp "card mounted ($mounted)"
-    leds 00FF00
 else
     stamp "card NOT mounted: $(cat /run/mount.log)"
     leds FF0000
@@ -208,7 +199,6 @@ if [ -f "$NEW" ]; then
         stamp "slot-os/boot.img not used: not a boot image, or no room for it in $BOOT"
         mv -f "$NEW" "$NEW.refused"
     else
-        leds FFFFFF
         stamp "writing slot-os/boot.img to $BOOT"
         dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
         if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$(md5sum < "$NEW" | cut -d' ' -f1)" ]; then

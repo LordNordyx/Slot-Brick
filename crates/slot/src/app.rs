@@ -308,6 +308,8 @@ pub struct App {
     shutdown_faces: Vec<(TexId, u32, u32)>,
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
+    /// Slot OS: no stock OS to exit to, so holding Power shuts down without asking.
+    power_off_only: bool,
     core_picker: Option<CorePicker>,
     /// A PlayStation game of several discs, fanned out to pick the one to put in.
     disc_picker: Option<crate::disc_picker::DiscPicker>,
@@ -525,6 +527,7 @@ impl App {
             wifi_faces: None,
             power_menu: None,
             power_menu_faces: Vec::new(),
+            power_off_only: std::env::var_os("SLOT_OS").is_some(),
             core_picker: None,
             disc_picker: None,
             disc_faces: Vec::new(),
@@ -3868,7 +3871,15 @@ impl App {
             return self.refuse();
         }
         self.flush_resume();
+        if self.power_off_only {
+            return self.begin_power_off();
+        }
         self.power_menu = Some(0);
+    }
+
+    /// As on Slot OS: holding Power shuts down, with no menu.
+    pub fn set_power_off_only(&mut self, on: bool) {
+        self.power_off_only = on;
     }
 
     fn power_menu_input(&mut self, action: Action) {

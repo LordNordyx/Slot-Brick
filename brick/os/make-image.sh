@@ -146,4 +146,4 @@ sgdisk -p "$IMG" | tail -6
 # For a card already running Slot OS: its system folder, and the boot image that init
 # writes to the boot partition when it finds it at slot-os/boot.img.
 OUT=$(dirname "$IMG")
-rm -rf "$OUT/slot-os" && cp -r "$SYS" "$OUT/slot-os" && cp "$WORK/boot.img" "$OUT/boot.img"
+rm -rf "$OUT/slot-os" && cp -r "$SYS" "$OUT/slot-os" && cp "$WORK/boot.img" "$WORK/bootlogo.bmp" "$OUT/"
