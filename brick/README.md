@@ -75,7 +75,7 @@ doesn't flash anything to the device.
 | Volume `+` / `−`   | Volume (press both together to mute)   |
 | `Fn` slider        | Mute / unmute                          |
 | Press `Power`      | Sleep / wake                           |
-| Hold `Power`       | Shut down, or exit to the stock OS     |
+| Hold `Power`       | Shut down, or exit to the stock OS (Slot OS: shut down) |
 
 **Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour and a
 solid, see-through or glitter finish for Game Boy and GBA carts, and the shape: original or Color
@@ -243,3 +243,8 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 | Stock menu appears instead of Slot    | Open **Apps → Check** and read `startup-report.txt` on the card     |
 | You want to skip Slot at startup      | Create an empty file `Slot/DISABLE_AUTOBOOT`; delete it to re-enable |
 | You need stock emulators or RetroArch | They aren't included; keep your original card backup                |
+
+---
+
+**Slot OS** cards also carry TrimUI's boot chain, kernel, drivers and firmware (their firmware
+1.1.1) and Debian 12 packages; what each is and its licence is in `slot-os/licenses`.

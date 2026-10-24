@@ -30,7 +30,9 @@ Release notes are not generated from commits or PR titles. They are `brick/CHANG
 Follow "Making a release" in `README.md`: bump the version in all five places it lists, move
 `## Unreleased` under `## vX.Y` (leave an empty `## Unreleased`), merge that as a `Release vX.Y`
 PR, then tag `vX.Y` on `main` and push the tag. `.github/workflows/release.yml` checks, tests,
-builds and publishes. Every merge to `main` also replaces the `dev` pre-release.
+builds and publishes. Every merge to `main` also replaces the `dev` pre-release. Both also build
+Slot OS (`brick/os/build.sh`) and publish its image, update zip and signed `update-os.txt`;
+a Slot OS build that fails fails the release.
 
 ## Checking a change
 

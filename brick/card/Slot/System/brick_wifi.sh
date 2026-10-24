@@ -37,8 +37,11 @@ radio() { # radio block|unblock
     fi
     # Set the kernel switch directly too: Brick firmware has neither tool.
     soft=1; [ "$1" = block ] || soft=0
+    # Only when it changes: on Slot OS, joins stalled after "associated" whenever this was
+    # written again with the value it already had (the menu opening runs `ensure`).
     for r in "$RFKILL"/rfkill*; do
         [ "$(cat "$r/type" 2>/dev/null)" = wlan ] || continue
+        [ "$(cat "$r/soft" 2>/dev/null)" = "$soft" ] && continue
         echo "$soft" > "$r/soft" 2>/dev/null
         echo "radio $1: $(basename "$r") soft=$(cat "$r/soft" 2>/dev/null) hard=$(cat "$r/hard" 2>/dev/null)"
     done
@@ -151,6 +154,28 @@ firmware() { # firmware <verb>
     return "$rc"
 }
 
+# For 40 s after a start, in the background: each change of the supplicant's state, with the
+# uptime, in this log; and on joining, the DHCP client asks at once (SIGUSR1) rather than at
+# its next retry.
+watch_join() {
+    dir=$(find_socket) && command -v wpa_cli >/dev/null 2>&1 || return 0
+    (
+        last= n=0
+        while [ "$n" -lt 80 ]; do
+            state=$(wpa_cli -p "$dir" -i "$IFACE" status 2>/dev/null | sed -n 's/^wpa_state=//p')
+            if [ "$state" != "$last" ]; then
+                echo "$(cut -d' ' -f1 /proc/uptime) wpa_state $state"
+                last=$state
+                if [ "$state" = COMPLETED ]; then
+                    [ ! -f "$RUN/udhcpc.pid" ] || kill -USR1 "$(cat "$RUN/udhcpc.pid")" 2>/dev/null
+                    break
+                fi
+            fi
+            sleep 0.5; n=$((n + 1))
+        done
+    ) &
+}
+
 case "${1:-}" in
 start)
     # Before the firmware helper too, whose own unblock needs the missing rfkill.elf.
@@ -181,6 +206,7 @@ start)
     fi
     echo "control socket: $(find_socket)"
     start_dhcp
+    watch_join
     exit 0
     ;;
 radio)

@@ -120,7 +120,50 @@ fn trigger_event(held: &mut [bool; 2], axis: u8, value: i16) -> Option<RawEvent>
 #[repr(C, align(8))]
 struct Event([u8; 56]);
 
-pub struct BrickInput {
+/// The Brick's buttons: through the firmware's SDL joystick on stock, where trimui_inputd
+/// runs; read from the GPIO pins on Slot OS, which has neither.
+pub enum BrickInput {
+    Sdl(SdlPad),
+    Gpio(super::brick_gpio::GpioInput),
+}
+
+impl BrickInput {
+    pub fn open(root: &Path) -> Result<Self, String> {
+        if !SdlPad::available() {
+            return super::brick_gpio::GpioInput::open(root).map(BrickInput::Gpio);
+        }
+        SdlPad::open(root).map(BrickInput::Sdl)
+    }
+    pub fn exit_requested(&self) -> bool {
+        match self {
+            BrickInput::Sdl(p) => p.exit_requested(),
+            BrickInput::Gpio(p) => p.exit_requested(),
+        }
+    }
+}
+
+impl InputSource for BrickInput {
+    fn poll(&mut self, now: Millis) -> Vec<RawEvent> {
+        match self {
+            BrickInput::Sdl(p) => p.poll(now),
+            BrickInput::Gpio(p) => p.poll(now),
+        }
+    }
+    fn stick(&self) -> Option<(i16, i16)> {
+        match self {
+            BrickInput::Sdl(p) => p.stick(),
+            BrickInput::Gpio(p) => p.stick(),
+        }
+    }
+    fn set_stick_to_game(&mut self, on: bool) {
+        match self {
+            BrickInput::Sdl(p) => p.set_stick_to_game(on),
+            BrickInput::Gpio(p) => p.set_stick_to_game(on),
+        }
+    }
+}
+
+pub struct SdlPad {
     poll: unsafe extern "C" fn(*mut Event) -> c_int,
     close: unsafe extern "C" fn(*mut c_void),
     quit: unsafe extern "C" fn(u32),
@@ -140,8 +183,13 @@ pub struct BrickInput {
     trace: bool,
 }
 
-impl BrickInput {
-    pub fn open(root: &Path) -> Result<Self, String> {
+impl SdlPad {
+    /// SDL is there to load: stock firmware.
+    fn available() -> bool {
+        unsafe { Library::new("libSDL2-2.0.so.0").or_else(|_| Library::new("libSDL2.so")).is_ok() }
+    }
+
+    fn open(root: &Path) -> Result<Self, String> {
         unsafe {
             let lib = Library::new("libSDL2-2.0.so.0")
                 .or_else(|_| Library::new("libSDL2.so"))
@@ -173,12 +221,26 @@ impl BrickInput {
             if init(JOYSTICK) != 0 {
                 return Err(CStr::from_ptr(error()).to_string_lossy().into_owned());
             }
-            // Cold boot can enumerate the virtual pad after SDL initialization.
-            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            // On a cold boot trimui_inputd is started just before Slot, and its virtual pad can
+            // appear after SDL has looked: launch.sh no longer waits for it. Pump events for
+            // hot-plug, and look again from scratch every second in case SDL doesn't see it.
+            let started = std::time::Instant::now();
+            let deadline = started + std::time::Duration::from_secs(8);
+            let mut rescan = started + std::time::Duration::from_secs(1);
             while count() < 1 && std::time::Instant::now() < deadline {
                 let mut event = std::mem::zeroed::<Event>();
                 while poll(&mut event) != 0 {}
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                if count() < 1 && std::time::Instant::now() >= rescan {
+                    quit(JOYSTICK);
+                    if init(JOYSTICK) != 0 {
+                        return Err(CStr::from_ptr(error()).to_string_lossy().into_owned());
+                    }
+                    rescan += std::time::Duration::from_secs(1);
+                }
+            }
+            if count() > 0 {
+                eprintln!("slot: Brick joystick found after {} ms", started.elapsed().as_millis());
             }
             if count() < 1 {
                 quit(JOYSTICK);
@@ -223,7 +285,7 @@ impl BrickInput {
     }
 }
 
-impl InputSource for BrickInput {
+impl InputSource for SdlPad {
     fn stick(&self) -> Option<(i16, i16)> {
         self.stick.map(|s| s.position())
     }
@@ -321,7 +383,7 @@ impl InputSource for BrickInput {
     }
 }
 
-impl Drop for BrickInput {
+impl Drop for SdlPad {
     fn drop(&mut self) {
         unsafe {
             (self.close)(self.joystick);

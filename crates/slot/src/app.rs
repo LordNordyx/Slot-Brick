@@ -308,6 +308,8 @@ pub struct App {
     shutdown_faces: Vec<(TexId, u32, u32)>,
     power_menu: Option<usize>,
     power_menu_faces: Vec<(TexId, u32, u32)>,
+    /// Slot OS: no stock OS to exit to, so holding Power shuts down without asking.
+    power_off_only: bool,
     core_picker: Option<CorePicker>,
     /// A PlayStation game of several discs, fanned out to pick the one to put in.
     disc_picker: Option<crate::disc_picker::DiscPicker>,
@@ -525,6 +527,7 @@ impl App {
             wifi_faces: None,
             power_menu: None,
             power_menu_faces: Vec::new(),
+            power_off_only: slot_power::slot_os(),
             core_picker: None,
             disc_picker: None,
             disc_faces: Vec::new(),
@@ -646,7 +649,11 @@ impl App {
     pub fn boot(root: &Path) -> Self {
         crate::root::ensure(root);
         slot_ui::set_theme(Theme::read(root));
-        let mut app = App::new(scan(root).unwrap_or_default());
+        crate::boot_times::mark("  folders and theme");
+        let carts = scan(root).unwrap_or_default();
+        crate::boot_times::mark(&format!("  games scanned ({})", carts.len()));
+        let mut app = App::new(carts);
+        crate::boot_times::mark("  carts set up");
         app.root = Some(root.to_path_buf());
         #[cfg(feature = "brick")]
         {
@@ -655,8 +662,10 @@ impl App {
             slot_ui::set_brick_pro(model == slot_power::Model::BrickPro);
             app.brick_leds = Some(crate::brick_led::BrickLeds::open(root));
         }
+        crate::boot_times::mark("  model and LEDs");
         app.state = read_slot_state(root);
         app.library = slot_store::Library::read(root);
+        crate::boot_times::mark("  state and library read");
         app.arrange();
         // At startup, each shelf starts at the top of its order.
         for (_, shelf) in &mut app.shelves {
@@ -668,6 +677,7 @@ impl App {
         } else {
             app.phase = clock_screen(system_secs(), 0, false);
         }
+        crate::boot_times::mark("  shelves arranged");
         app
     }
 
@@ -3861,7 +3871,15 @@ impl App {
             return self.refuse();
         }
         self.flush_resume();
+        if self.power_off_only {
+            return self.begin_power_off();
+        }
         self.power_menu = Some(0);
+    }
+
+    /// As on Slot OS: holding Power shuts down, with no menu.
+    pub fn set_power_off_only(&mut self, on: bool) {
+        self.power_off_only = on;
     }
 
     fn power_menu_input(&mut self, action: Action) {

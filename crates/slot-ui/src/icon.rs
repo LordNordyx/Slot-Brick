@@ -5,7 +5,9 @@ use fontdue::{Font, FontSettings};
 
 use crate::CartFace;
 
-const SYMBOLS_TTF: &[u8] = include_bytes!("../assets/SymbolsNerdFontMono-Regular.ttf");
+/// Only the symbols Slot draws, cut from SymbolsNerdFontMono-Regular.ttf by
+/// brick/subset-symbols.sh: the full font takes the font library about 0.6 s to read on a Brick.
+const SYMBOLS_TTF: &[u8] = include_bytes!("../assets/SymbolsNerdFontMono-Slot.ttf");
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Icon {
@@ -252,4 +254,30 @@ pub(crate) fn symbols_font() -> Option<&'static Font> {
     static FONT: OnceLock<Option<Font>> = OnceLock::new();
     FONT.get_or_init(|| Font::from_bytes(SYMBOLS_TTF, FontSettings::default()).ok())
         .as_ref()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A symbol missing from the cut-down font draws as nothing: rerun brick/subset-symbols.sh.
+    #[test]
+    fn every_symbol_slot_draws_is_in_the_font() {
+        let font = symbols_font().expect("the symbols font loads");
+        let src = concat!(
+            include_str!("icon.rs"),
+            include_str!("plate.rs"),
+            include_str!("quick_menu.rs")
+        );
+        let mut used: Vec<char> = Icon::ALL.iter().map(|i| i.glyph()).collect();
+        used.extend([Badge::Link.glyph(), Badge::LinkBroken.glyph()]);
+        used.extend(src.split("\\u{").skip(1).filter_map(|rest| {
+            let hex = rest.split('}').next()?;
+            char::from_u32(u32::from_str_radix(hex, 16).ok()?)
+                .filter(|c| matches!(*c as u32, 0xe000..=0xf8ff | 0xf0000..=0xfffff))
+        }));
+        for c in used {
+            assert_ne!(font.lookup_glyph_index(c), 0, "U+{:X} is not in the symbols font", c as u32);
+        }
+    }
 }

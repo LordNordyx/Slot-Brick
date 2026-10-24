@@ -19,6 +19,8 @@ OUT="${1:-./slot-diagnostics.txt}"
     done
     echo '--- audio devices'
     [ ! -r /proc/asound/cards ] || cat /proc/asound/cards
+    echo '--- mixer'
+    amixer contents 2>&1 | head -120
     echo '--- power supply'
     for d in /sys/class/power_supply/*; do
         [ -d "$d" ] || continue

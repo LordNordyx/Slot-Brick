@@ -112,6 +112,23 @@ jobs:
       - name: Build the card
         run: sh brick/docker-build.sh
 
+      # TrimUI's firmware (118 MB) and the boot chain Slot OS is built from, pinned by sha256.
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .docker-cache/os
+          key: slot-os-${{ hashFiles('brick/os/sources.txt') }}
+
+      # Slot OS: the same card's Slot, booting the Brick from the SD card. Should it fail, the
+      # whole release does: Slot OS cards would otherwise stay behind without a word.
+      - name: Build Slot OS
+        env:
+          SLOT_OS_VERSION: ${{ github.ref_name }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          sh brick/os/build.sh dist-brick
+          mv dist-os/slot-os.img.xz "slot-os-$TAG-sd-card.img.xz"
+          mv dist-os/slot-os-update.zip "slot-os-$TAG-update.zip"
+
       - name: Zip the card
         env:
           TAG: ${{ github.ref_name }}
@@ -122,7 +139,9 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: bash brick/update-manifest.sh release "$TAG" "slot-brick-$TAG-sd-card.zip" update
+        run: |
+          bash brick/update-manifest.sh release "$TAG" "slot-brick-$TAG-sd-card.zip" update
+          bash brick/update-manifest.sh release "$TAG" "slot-os-$TAG-update.zip" update update-os.txt
 
       - name: Publish the release
         env:
@@ -131,5 +150,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           bash brick/release-notes.sh "$TAG" > notes.md
+          bash brick/os/release-note.sh "$TAG" >> notes.md
           gh release create "$TAG" "slot-brick-$TAG-sd-card.zip" update/update.txt update/update.txt.sig \
+            "slot-os-$TAG-sd-card.img.xz" "slot-os-$TAG-update.zip" update/update-os.txt update/update-os.txt.sig \
             --title "$TAG" --notes-file notes.md --verify-tag

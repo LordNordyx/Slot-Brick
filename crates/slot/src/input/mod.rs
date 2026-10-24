@@ -1,5 +1,7 @@
 #[cfg(feature = "brick")]
 pub mod brick;
+#[cfg(feature = "brick")]
+mod brick_gpio;
 mod device;
 #[cfg(feature = "brick")]
 pub use brick::BrickInput;

@@ -9,6 +9,7 @@ use slot::input::SimInput as BrickInput;
 #[cfg(not(feature = "brick"))]
 use slot::input::DeviceInput;
 use slot_gfx::{Compositor, FbdevSurface, Surface};
+use slot::boot_times::mark as boot_time;
 use slot_power::trace_first_frame;
 #[cfg(feature = "brick")]
 use slot_power::BrickPlatform;
@@ -126,6 +127,7 @@ fn sim_sleep(input: &mut BrickInput, frontend: &Frontend, sim: &slot::sim::Share
 }
 
 pub fn run() {
+    boot_time("started");
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
@@ -142,6 +144,10 @@ pub fn run() {
         eprintln!("slot: sim: stand-in hardware: {e}");
         std::process::exit(1);
     }
+    // Knowing the model means reading all of the stock MainUI (several MB): on a
+    // thread of its own, while the screen and sound open. The first to ask waits for it.
+    #[cfg(feature = "brick")]
+    let _ = std::thread::Builder::new().name("slot-model".into()).spawn(slot_power::model);
     #[cfg(feature = "sim")]
     let sim = slot::sim::start();
     #[cfg(feature = "sim")]
@@ -159,9 +165,21 @@ pub fn run() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("slot: {e}");
+            // On Slot OS, what the GPU driver said about it, for the bug report.
+            if slot_power::slot_os() {
+                if let Ok(out) = std::process::Command::new("dmesg").output() {
+                    let log = String::from_utf8_lossy(&out.stdout);
+                    let tail: Vec<&str> = log.lines().rev().take(60).collect();
+                    eprintln!("slot: kernel log, last lines:");
+                    for line in tail.into_iter().rev() {
+                        eprintln!("  {line}");
+                    }
+                }
+            }
             std::process::exit(1);
         }
     };
+    boot_time("screen ready");
     #[cfg(not(feature = "brick"))]
     let platform = DevicePlatform::new(root.clone());
     #[cfg(not(feature = "brick"))]
@@ -174,8 +192,10 @@ pub fn run() {
     #[cfg(feature = "brick")]
     slot::brick_wifi::repair_at_boot();
     let mut frontend = Frontend::boot(Box::new(platform));
+    boot_time("games and settings read");
     frontend.upload_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());
+    boot_time("faces drawn");
     #[cfg(not(feature = "brick"))]
     let mut input = DeviceInput::open(&root);
     #[cfg(feature = "sim")]
@@ -188,6 +208,7 @@ pub fn run() {
             std::process::exit(1);
         }
     };
+    boot_time("joystick ready");
     #[cfg(not(feature = "brick"))]
     let card = root.clone();
     #[cfg(not(feature = "brick"))]
@@ -289,10 +310,16 @@ pub fn run() {
             std::thread::sleep(Duration::from_millis(25));
             continue;
         }
+        if !drawn {
+            boot_time("  first input and update");
+        }
         let frame_ready = frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         #[cfg(not(feature = "brick"))]
         let _ = frame_ready;
         frontend.render(&mut compositor, surface.window_size());
+        if !drawn {
+            boot_time("  first render");
+        }
         let swap = Instant::now();
         let work = swap - began;
         #[cfg(feature = "brick")]
@@ -324,6 +351,7 @@ pub fn run() {
         if !drawn {
             drawn = true;
             trace_first_frame();
+            boot_time("first frame");
             #[cfg(feature = "brick")]
             slot::update::settle(&slot::update::card_of(&root));
             #[cfg(feature = "brick")]

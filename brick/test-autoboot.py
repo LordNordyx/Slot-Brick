@@ -98,9 +98,9 @@ with tempfile.TemporaryDirectory() as td:
  assert run(card/'trimui/app/MainUI',env).returncode==0
  # An older hook already on the Brick is brought up to date on the next Slot start.
  hook=bin/'runtrimui.sh'
- hook.write_text(hook.read_text().replace('Startup hook v4','Startup hook v3 (old)'))
+ hook.write_text(hook.read_text().replace('Startup hook v5','Startup hook v4 (old)'))
  run(hook,env)
- assert 'Startup hook v4' in hook.read_text()
+ assert 'Startup hook v5' in hook.read_text()
  assert 'card mounted=yes, Slot folder before mount=yes, AUTOBOOT=yes DISABLE=no boot.sh=yes' in (card/'Slot/Logs/hook.log').read_text()
  assert 'slot autoboot v0.6' in (card/'Slot/Logs/boot.previous.log').read_text() or 'slot autoboot v0.6' in (card/'Slot/Logs/boot.log').read_text()
 print('PASS: hook self-update and hook log.')
