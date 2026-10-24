@@ -1,30 +1,63 @@
-"""Slot OS's boot logo, which u-boot shows until Slot's first frame: 1024x768, 32-bit BMP with
-a V5 header, rows bottom-up (the format TrimUI's u-boot shows).
-
-brick/os/bootlogo.png, if there is one, centred on black at its own size (made smaller only if it
-is bigger than the screen); else the
-"slot." wordmark in Slot's own font (Open Sans Bold), white on black.
-Usage: python3 bootlogo.py <out.bmp>"""
-import os, struct, sys
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+"""Slot OS's boot logo, which u-boot shows until Slot's first frame: "slot." in pixel letters
+drawn on a grid (so every edge is sharp), a banded sunset from top to bottom, extruded depth
+and scanlines, on black. 1024x768, 32-bit BMP with a V5 header, rows bottom-up (the format
+TrimUI's u-boot shows). Usage: python3 bootlogo.py <out.bmp>"""
+import struct, sys
+from PIL import Image, ImageDraw
 
 W, H = 1024, 768
-HERE = os.path.dirname(os.path.abspath(__file__))
-PICTURE = os.path.join(HERE, 'bootlogo.png')
-FONT = os.path.join(HERE, '../../crates/slot-ui/assets/label.ttf')
+CELL, GAP, DEPTH = 12, 4, 2  # pixels per grid cell; cells between letters; depth in cells
+# 14 rows: 0-3 ascenders, 4-13 x-height. Horizontal strokes 2 cells, vertical 3.
+X = [""] * 4
+GLYPHS = {
+    's': X + [" #########", "##########", "###", "###", "#########",
+              " #########", "       ###", "       ###", "##########", "#########"],
+    'l': ["###"] * 12 + ["####", " ###"],
+    'o': X + [" ########", "##########"] + ["###    ###"] * 6 + ["##########", " ########"],
+    't': [""] + [" ###"] * 3 + ["########"] * 2 + [" ###"] * 6 + [" #######", "  ######"],
+    '.': [""] * 11 + ["###"] * 3,
+}
+# One colour per grid row, yellow at the top to blue at the foot; the depth in two purples.
+BANDS = ["#fff7a1", "#ffe66d", "#ffcf4a", "#ffb43c", "#ff9636", "#ff7a3d", "#ff5e4f", "#ff4767",
+         "#f43b85", "#dc36a3", "#bd35bf", "#9638d6", "#6e3fe4", "#4c4cec"]
+DEPTHS = ["#3a1466", "#24104a"]
 
+
+def cells(text):
+    x0 = 0
+    for c in text:
+        glyph = GLYPHS[c]
+        width = max(map(len, glyph))
+        for y, row in enumerate(glyph):
+            for x, ch in enumerate(row):
+                if ch == '#':
+                    yield x0 + x, y
+        x0 += width + GAP
+
+
+on = set(cells("slot."))
+cols, rows = max(x for x, _ in on) + 1 + DEPTH, len(BANDS) + DEPTH
+left, top = (W - cols * CELL) // 2, (H - rows * CELL) // 2
 screen = Image.new('RGB', (W, H), (0, 0, 0))
-if os.path.exists(PICTURE):
-    pic = Image.open(PICTURE).convert('RGBA')
-    if pic.width > W or pic.height > H:
-        pic = ImageOps.contain(pic, (W, H), Image.LANCZOS)
-    screen.paste(pic, ((W - pic.width) // 2, (H - pic.height) // 2), pic)
-else:
-    font = ImageFont.truetype(FONT, 160)
-    draw = ImageDraw.Draw(screen)
-    left, top, right, bottom = draw.textbbox((0, 0), 'slot.', font=font)
-    draw.text(((W - (right - left)) // 2 - left, (H - (bottom - top)) // 2 - top), 'slot.',
-              font=font, fill=(0xf6, 0xf4, 0xef))
+draw = ImageDraw.Draw(screen)
+
+
+def square(x, y, colour, height=CELL, foot=0):
+    px, py = left + x * CELL, top + y * CELL + foot
+    draw.rectangle([px, py, px + CELL - 1, py + height - 1], fill=colour)
+
+
+# The depth, farthest first; then the letters, each cell in its row's band with a darker
+# line at its foot.
+for k in range(DEPTH, 0, -1):
+    for x, y in on:
+        square(x + k, y + k, DEPTHS[k - 1])
+line = max(1, CELL // 7)
+for x, y in on:
+    band = BANDS[y]
+    square(x, y, band)
+    r, g, b = (int(band[i:i + 2], 16) * 78 // 100 for i in (1, 3, 5))
+    square(x, y, (r, g, b), height=line, foot=CELL - line)
 
 pixels = b''.join(
     b''.join(bytes((b, g, r, 255)) for r, g, b in
