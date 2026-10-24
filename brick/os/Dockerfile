@@ -16,6 +16,6 @@ RUN dpkg --add-architecture arm64 \
       wpasupplicant:arm64 libdbus-1-3:arm64 libnl-3-200:arm64 libnl-genl-3-200:arm64 \
       libnl-route-3-200:arm64 libpcsclite1:arm64 libssl3:arm64 libsystemd0:arm64 libcap2:arm64 \
       libgcrypt20:arm64 libgpg-error0:arm64 liblz4-1:arm64 liblzma5:arm64 libzstd1:arm64 \
-      libreadline8:arm64 libtinfo6:arm64 \
+      libreadline8:arm64 libtinfo6:arm64 gcc-12-base:arm64 \
  && ls /opt/arm64-debs > /opt/arm64-debs/VERSIONS \
  && rm -rf /var/lib/apt/lists/*

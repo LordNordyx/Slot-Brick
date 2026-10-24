@@ -1,0 +1,44 @@
+Slot OS: what else is on this card, where it comes from, and under what licence
+==============================================================================
+
+Slot OS starts the TrimUI Brick from this card straight into Slot. Slot itself, and Slot
+OS's own scripts (init, mixer.sh, the image build), are GPL-3.0: see
+Slot/System/licenses/slot-GPL-3.0.txt. Everything else listed here is someone else's work,
+passed on unchanged.
+
+TrimUI's boot chain and kernel
+------------------------------
+boot0, the u-boot boot package (u-boot, the secure monitor, the SCP firmware, the device
+tree) and the Linux 4.9.191 kernel in the boot partition are TrimUI's own builds for the
+Brick, as Knulli ships them:
+  https://github.com/knulli-cfw/knulli-linux (board/allwinner/a133/trimui-brick,
+  commit 57afa662009641d181f57241bcc480119b131530)
+Linux and u-boot are GPL-2.0 (GPL-2.0.txt). TrimUI has not published their source; it is
+theirs to provide. The u-boot settings (env) are Knulli's, with the kernel's console
+messages turned down.
+
+Kernel modules and firmware
+---------------------------
+- pvrsrvkm.ko, dc_sunxi.ko: the PowerVR GE8300 GPU's kernel driver, by Imagination
+  Technologies, Dual MIT/GPL. Debug sections removed.
+- rgx.fw.22.102.54.38, rgx.sh.22.102.54.38: the GPU's firmware, Imagination Technologies.
+- xradio_mac.ko, xradio_core.ko, xradio_wlan.ko: the XR829 Wi-Fi chip's driver, by
+  XRadioTech, GPL. Debug sections removed.
+- boot_xr829.bin, fw_xr829.bin, sdd_xr829.bin, etf_xr829.bin: the XR829's firmware.
+All from Knulli, the commit above (board/allwinner/a133/fsoverlay).
+
+GPU libraries
+-------------
+libEGL, libGLESv2, libIMGegl, libglslcompiler, libpvrNULL_WSEGL, libsrv_um, libusc and
+pvrsrvctl: Imagination Technologies' PowerVR GE8300 driver (DDK 1.19), from
+  https://github.com/knulli-cfw/ge8300-drivers (fbdev/glibc,
+  commit 3213ecb88a9e9c6813a7a6aafe78da1f055aa050)
+
+Debian packages
+---------------
+glibc, libstdc++, ALSA, busybox, wpa_supplicant, the FAT and partition tools and the
+libraries they use are Debian 12 (bookworm) arm64 packages. Each package's copyright and
+licence file is in debian/, and debian/packages.txt lists the exact versions. Their
+source, at those versions: https://snapshot.debian.org and https://sources.debian.org.
+
+Thanks to the Knulli team, whose work on the Brick made Slot OS possible.

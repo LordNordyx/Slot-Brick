@@ -14,6 +14,17 @@ trap 'rm -rf "$WORK"' 0
 R=$WORK/root
 mkdir -p "$R"
 for deb in /opt/arm64-debs/*.deb; do dpkg-deb -x "$deb" "$R"; done
+# Each Debian package's copyright and licence file, for the card's slot-os/licenses (the
+# docs folders go below). libgcc-s1 and libstdc++6 point theirs to gcc-12-base's.
+LIC=$WORK/licenses
+mkdir -p "$LIC/debian"
+for deb in /opt/arm64-debs/*.deb; do
+    pkg=$(dpkg-deb -f "$deb" Package)
+    [ ! -e "$R/usr/share/doc/$pkg/copyright" ] || cp -L "$R/usr/share/doc/$pkg/copyright" "$LIC/debian/$pkg.txt"
+done
+ls /opt/arm64-debs/*.deb | xargs -n1 basename > "$LIC/debian/packages.txt"
+cp "$OS/NOTICE.txt" "$LIC/NOTICE.txt"
+cp licenses/fceumm-GPL-2.0.txt "$LIC/GPL-2.0.txt"
 rm -rf "$R/usr/share/doc" "$R/usr/share/lintian" "$R/usr/share/man" "$R/usr/share/locale" \
     "$R/usr/lib/aarch64-linux-gnu/gconv" "$R/usr/share/bug" "$R/etc/ld.so.conf.d" \
     "$R/lib/systemd" "$R/usr/lib/udev" "$R/usr/share/sounds" "$R/usr/share/alsa/speaker-test"
@@ -80,6 +91,7 @@ mkdir -p "$SYS"
     mv "$R/$f" "$SYS/$f"
     ln -s "/mnt/SDCARD/slot-os/$f" "$R/$f"
 done
+cp -r "$LIC" "$SYS/licenses"
 ( cd "$R" && find . | LC_ALL=C sort | cpio -o -H newc --quiet ) | gzip -9 -n > "$WORK/initramfs.gz"
 echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R" | cut -f1)); on the card: $(du -sh "$SYS" | cut -f1)"
 

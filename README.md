@@ -276,6 +276,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [Brandon T. Kowalski](https://github.com/BrandonKowalski/slot) | Original Slot. frontend and Cart Studio |
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
+| [Knulli](https://github.com/knulli-cfw/knulli-linux) | Slot OS (experimental) boots with the Brick's kernel, drivers and firmware as Knulli ships them; details in `slot-os/licenses` on a Slot OS card |
 
 ## AI Disclosure
 This port was developed with assistance from [Claude Opus](https://claude.ai/). 
