@@ -1,0 +1,84 @@
+#!/bin/sh
+# Slot OS: the first and only program the kernel starts (PID 1). It loads the GPU driver,
+# mounts the card and runs Slot, again and again, until Slot asks to power off or restart.
+# Everything here lives in RAM; Slot, its cores and the player's files are on the card.
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export LD_LIBRARY_PATH=/usr/lib:/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu
+CARD=/mnt/SDCARD
+ROOT=$CARD/Slot
+DEV=/dev/mmcblk0p4
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o mode=1777 tmpfs /tmp
+mount -t tmpfs -o mode=755 tmpfs /run
+exec < /dev/console > /dev/console 2>&1
+
+# Uptime at each step, kept in /run until the card is there to hold it.
+TIMES=/run/boot-times.log
+stamp() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$TIMES"; }
+stamp init started
+
+# The GPU driver (pvrsrvkm, dc_sunxi), meanwhile: pvrsrvctl loads both from here.
+( cd /lib/modules/4.9.191 && pvrsrvctl --start >/run/gpu.log 2>&1; stamp GPU driver loaded ) &
+GPU=$!
+
+# The card: its fourth partition, FAT, holds Slot and the player's files.
+n=0
+while [ ! -b "$DEV" ] && [ "$n" -lt 500 ]; do sleep 0.01; n=$((n + 1)); done
+mkdir -p "$CARD"
+if mount -t vfat -o rw,noatime,utf8,shortname=mixed,errors=remount-ro "$DEV" "$CARD" 2>/run/mount.log \
+    || mount -t exfat -o rw,noatime "$DEV" "$CARD" 2>>/run/mount.log; then
+    stamp card mounted
+else
+    stamp "card NOT mounted: $(cat /run/mount.log)"
+fi
+wait "$GPU"
+
+# A shell on the serial port (debug pads), for anyone with a UART adapter attached.
+[ -c /dev/ttyS0 ] && setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1' &
+
+mkdir -p "$ROOT/Logs" 2>/dev/null
+[ ! -f "$ROOT/Logs/boot-times.log" ] || mv -f "$ROOT/Logs/boot-times.log" "$ROOT/Logs/boot-times.previous.log"
+cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null && TIMES="$ROOT/Logs/boot-times.log"
+export SLOT_BOOT_TIMES="$TIMES"
+{
+    echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
+    echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log
+    echo '--- kernel log'; dmesg
+} > "$ROOT/Logs/os.log" 2>&1
+
+export SLOT_ROOT="$ROOT"
+export SLOT_OS=1
+cleanup() { sync; umount "$CARD" 2>/dev/null || mount -o remount,ro "$CARD"; }
+quick=0
+while :; do
+    if [ ! -x "$ROOT/System/slot" ]; then
+        echo "Slot OS: $ROOT/System/slot is missing" | tee -a "$ROOT/Logs/os.log"
+        sleep 30; cleanup; poweroff -f
+    fi
+    [ ! -f "$ROOT/Logs/slot.log" ] || mv -f "$ROOT/Logs/slot.log" "$ROOT/Logs/slot.previous.log"
+    stamp starting slot
+    started=$(cut -d. -f1 /proc/uptime)
+    ( cd "$ROOT" && exec ./System/slot ) > "$ROOT/Logs/slot.log" 2>&1
+    status=$?
+    echo "slot exit code: $status" >> "$ROOT/Logs/slot.log"
+    sync
+    case "$status" in
+        64) cleanup; poweroff -f ;;
+        65) cleanup; reboot -f ;;
+        66) quick=0; continue ;;
+    esac
+    # Anything else (a crash, or the exit chord, with no stock menu to go back to): start
+    # Slot again, keeping the crash log; three quick ends in a row and it powers off.
+    if [ "$status" -ge 128 ]; then
+        mkdir -p "$ROOT/Logs/crash" && cp "$ROOT/Logs/slot.log" "$ROOT/Logs/crash/slot-$(date '+%Y-%m-%d_%H-%M-%S').log"
+    fi
+    if [ $(( $(cut -d. -f1 /proc/uptime) - started )) -lt 10 ]; then quick=$((quick + 1)); else quick=0; fi
+    [ "$quick" -lt 3 ] || { echo 'Slot OS: Slot keeps ending; powering off' >> "$ROOT/Logs/os.log"; cleanup; poweroff -f; }
+    sleep 1
+done

@@ -1,0 +1,24 @@
+# What Slot OS takes from others, pinned. fetch.sh downloads each file once into
+# .docker-cache/os/ and refuses one whose sha256 differs.
+#
+# TrimUI's own boot chain (boot0, u-boot boot package, kernel), its GPU kernel modules and
+# firmware: TrimUI publishes no source for them; these are the binaries Knulli
+# (github.com/knulli-cfw/knulli-linux) ships for the Brick, at the commit below.
+# PowerVR GE8300 userspace (DDK 1.19, fbdev, glibc): github.com/knulli-cfw/ge8300-drivers.
+#
+# <sha256> <file under .docker-cache/os/> <url>
+fb821279f641d4fa19305bf297a4631f859089dcacddaedcb141d2a5b31a585f boot0.img https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/trimui-brick/partitions/boot0.img
+e5648b959b2f94996d38db4d24cce68c39b386e387945fb7dbf91f84e4a5bb23 boot_package.fex https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/trimui-brick/partitions/boot_package.fex
+e3b8c017211a362285bf565dfb69c0a7fc69b1b222cce577a53e079858c5ebc4 knulli-boot.img https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/trimui-brick/partitions/boot.img
+de74ee10a77f4fe2e66b15bcc113bef3a250d703296dcbed9a34319bcb73592e pvrsrvkm.ko https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/modules/4.9.191/pvrsrvkm.ko
+4bfb4d95bf03633aa9734d89799e2788ce95b017a1fbad63267591e66c3bb536 dc_sunxi.ko https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/modules/4.9.191/dc_sunxi.ko
+262026355671bc0f2005bd6cf7fa02d4bfa5fe0d3100f185357081cd07fab91c rgx.fw.22.102.54.38 https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/firmware/rgx.fw.22.102.54.38
+d1604a4a462ec21ac96cfc7849f98c211db7c95146fdf0cfc26579b519398680 rgx.sh.22.102.54.38 https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/firmware/rgx.sh.22.102.54.38
+cd2a2ce9b2593eb956b974ab90558d0c873de7cf1131f58f6cea7b4fda13b3a1 libEGL.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libEGL.so
+95dd6845c2884c74463a84d11aadcff5f390024807da774dc3de0d1deb35d889 libGLESv2.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libGLESv2.so
+fa299ae40cb8e9c52ada73330b1648de9a34c2d83fc38f43f5cf936af720d403 libIMGegl.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libIMGegl.so
+d11b684dd70d0839f78dae8afb3cadf57e86c54aea689eff320407990fe77acd libglslcompiler.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libglslcompiler.so
+6313de319dac321e7b7e272525e3cbbb0330ac2ebf1d59c467d5aa97b156c833 libpvrNULL_WSEGL.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libpvrNULL_WSEGL.so
+6d7991b79dd10fe3fcda561dd886ef66c698fe59ee62d6668191f1f020e7c621 libsrv_um.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libsrv_um.so
+524bfb2ef820f846872a0d0d907c2aaba48151f5f264c786a5c6f53879fb8d22 libusc.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libusc.so
+d624f59912b38042330d1a1c71db2088d230c0cf4506a3aaab5eca24bee3196a pvrsrvctl https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/bin/pvrsrvctl
