@@ -1,12 +1,25 @@
 # Every pull request and every change to main runs the Brick simulator: the real Brick build,
 # drawn offscreen in Docker, driven through brick/sim/scenarios and compared screen by screen
 # with brick/sim/golden. The screenshots, and what differs, are kept as the run's artifact.
+# Changes to the docs, the changelog and the licences alone change nothing it tests: skipped.
 name: Brick simulator
 
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'licenses/**'
+      - 'LICENSE'
+      - 'brick/os/NOTICE.txt'
+      - 'brick/os/release-note.sh'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'licenses/**'
+      - 'LICENSE'
+      - 'brick/os/NOTICE.txt'
+      - 'brick/os/release-note.sh'
   workflow_dispatch:
 
 permissions:
