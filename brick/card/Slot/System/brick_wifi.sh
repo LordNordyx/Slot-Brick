@@ -151,6 +151,28 @@ firmware() { # firmware <verb>
     return "$rc"
 }
 
+# For 40 s after a start, in the background: each change of the supplicant's state, with the
+# uptime, in this log; and on joining, the DHCP client asks at once (SIGUSR1) rather than at
+# its next retry.
+watch_join() {
+    dir=$(find_socket) && command -v wpa_cli >/dev/null 2>&1 || return 0
+    (
+        last= n=0
+        while [ "$n" -lt 80 ]; do
+            state=$(wpa_cli -p "$dir" -i "$IFACE" status 2>/dev/null | sed -n 's/^wpa_state=//p')
+            if [ "$state" != "$last" ]; then
+                echo "$(cut -d' ' -f1 /proc/uptime) wpa_state $state"
+                last=$state
+                if [ "$state" = COMPLETED ]; then
+                    [ ! -f "$RUN/udhcpc.pid" ] || kill -USR1 "$(cat "$RUN/udhcpc.pid")" 2>/dev/null
+                    break
+                fi
+            fi
+            sleep 0.5; n=$((n + 1))
+        done
+    ) &
+}
+
 case "${1:-}" in
 start)
     # Before the firmware helper too, whose own unblock needs the missing rfkill.elf.
@@ -180,8 +202,8 @@ start)
         wait_for 50 supplicant_ready || { echo 'wpa_supplicant did not answer on its control socket'; exit 1; }
     fi
     echo "control socket: $(find_socket)"
-    ! command -v wpa_cli >/dev/null 2>&1 || echo "state: $(wpa_cli -p "$(find_socket)" -i "$IFACE" status 2>&1 | grep -E '^(wpa_state|ssid)=' | tr '\n' ' ')"
     start_dhcp
+    watch_join
     exit 0
     ;;
 radio)

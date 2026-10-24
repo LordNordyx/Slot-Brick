@@ -40,7 +40,13 @@ fn scan_rows(scan:&str,saved:&str)->Vec<Network>{
     }out.sort_by(|a,b|b.signal.cmp(&a.signal).then(a.ssid.cmp(&b.ssid)));out
 }
 pub(crate) trait Supplicant {
-    fn command(&self,s:&str)->Result<String>;
+    /// The supplicant's answer as it is, FAIL... included.
+    fn raw(&self,s:&str)->Result<String>;
+    /// Its answer, with FAIL... and UNKNOWN... as errors.
+    fn command(&self,s:&str)->Result<String>{
+        let s=self.raw(s)?;
+        if s.starts_with("FAIL") || s.starts_with("UNKNOWN"){Err("Wi-Fi service rejected the request".into())}else{Ok(s)}
+    }
     fn ok(&self,s:&str)->Result<()>{if self.command(s)?=="OK"{Ok(())}else{Err("Wi-Fi service rejected the request".into())}}
 }
 pub(crate) struct Control{socket:UnixDatagram,local:PathBuf}
@@ -57,10 +63,9 @@ impl Control{
     fn open()->Result<Self>{SOCKETS.iter().find_map(|s|Self::at(&slot_power::hw(s)).ok()).ok_or("Wi-Fi service unavailable".into())}
 }
 impl Supplicant for Control{
-    fn command(&self,s:&str)->Result<String>{
+    fn raw(&self,s:&str)->Result<String>{
         self.socket.send(s.as_bytes()).map_err(|_|"Wi-Fi command failed")?;let mut b=[0;32768];let n=self.socket.recv(&mut b).map_err(|_|"Wi-Fi service did not respond")?;
-        let s=String::from_utf8_lossy(&b[..n]).trim_end_matches('\n').to_string();
-        if s.starts_with("FAIL") || s.starts_with("UNKNOWN"){Err("Wi-Fi service rejected the request".into())}else{Ok(s)}
+        Ok(String::from_utf8_lossy(&b[..n]).trim_end_matches('\n').to_string())
     }
 }
 /// Starts a scan. A supplicant just started is already scanning by itself (FAIL-BUSY), or
@@ -69,7 +74,7 @@ impl Supplicant for Control{
 /// caller restarts Wi-Fi, which would cut a join short.
 fn scan(c:&impl Supplicant,pause:impl Fn(u64)->Result<()>)->Result<()>{
     for _ in 0..SCAN_TRIES{
-        let reply=c.command("SCAN")?;
+        let reply=c.raw("SCAN")?;
         if matches!(reply.as_str(),"OK"|"FAIL-BUSY"){return Ok(())}
         let status=c.command("STATUS")?;let state=field(&status,"wpa_state").unwrap_or("?");
         eprintln!("wifi: SCAN answered {reply} (wpa_state {state})");
@@ -592,7 +597,7 @@ impl Painter{
     use super::*;use std::cell::{Cell,RefCell};
     struct Mock{steps:RefCell<std::collections::VecDeque<(String,Result<String>)>>}
     impl Mock{fn new(steps:Vec<(&str,Result<&str>)>)->Self{Self{steps:RefCell::new(steps.into_iter().map(|(a,b)|(a.into(),b.map(String::from))).collect())}}fn done(&self){assert!(self.steps.borrow().is_empty());}}
-    impl Supplicant for Mock{fn command(&self,s:&str)->Result<String>{let(a,b)=self.steps.borrow_mut().pop_front().expect("unexpected command");assert_eq!(a,s);b}}
+    impl Supplicant for Mock{fn raw(&self,s:&str)->Result<String>{let(a,b)=self.steps.borrow_mut().pop_front().expect("unexpected command");assert_eq!(a,s);b}}
     fn network()->Network{Network{ssid:b"Test".to_vec(),signal:-40,security:Security::Personal,saved:None}}
     #[test]fn boot_repair_repairs_a_late_firmware_supplicant(){
         let t=Cell::new(0u64);let runs=RefCell::new(Vec::new());
