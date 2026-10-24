@@ -39,6 +39,7 @@ install -m 755 "$OS/init" "$R/init"
 ln -sf /init "$R/rdinit"
 ln -sf /init "$R/sbin/init"
 cat "$OS/VERSION" > "$R/etc/slot-os-version"
+install -m 644 "$OS/asound.conf" "$R/etc/asound.conf"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:
 # EGL, GLES, ALSA) must be here, or the card boots to a black screen.
 missing=0
@@ -67,8 +68,8 @@ echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R"
 
 # --- boot.img: TrimUI's kernel (from Knulli's boot.img) with our initramfs -------------------
 python3 "$OS/bootimg.py" "$SRC/knulli-boot.img" "$WORK/initramfs.gz" "$WORK/boot.img"
-# Knulli's u-boot settings, unchanged for now (env.txt); env-fast.txt is the quieter set to
-# move to once the card boots.
+# Knulli's u-boot settings (env.txt), with the kernel's console messages turned down
+# (loglevel 1, was 8): at 115200 baud, printing them held up the boot.
 mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$OS/env.txt"
 
 # --- The FAT partition: Slot and the player's folders ----------------------------------------

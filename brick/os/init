@@ -91,11 +91,12 @@ mkdir -p "$ROOT/Logs" 2>/dev/null
 [ ! -f "$ROOT/Logs/boot-times.log" ] || mv -f "$ROOT/Logs/boot-times.log" "$ROOT/Logs/boot-times.previous.log"
 cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null && TIMES="$ROOT/Logs/boot-times.log"
 export SLOT_BOOT_TIMES="$TIMES"
+# Written meanwhile, not before Slot starts: the card is slow to write to.
 {
     echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
     echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log
     echo '--- kernel log'; dmesg
-} > "$ROOT/Logs/os.log" 2>&1
+} > "$ROOT/Logs/os.log" 2>&1 &
 
 export SLOT_ROOT="$ROOT"
 export SLOT_OS=1

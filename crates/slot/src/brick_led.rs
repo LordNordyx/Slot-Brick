@@ -13,12 +13,15 @@ impl Default for Settings {
 /// The Brick: top bar `m`, F1/F2 `f1` `f2`, the triggers `lr`. The Brick Pro: the same, but
 /// `lr` is its sticks' rings, and the triggers are `rear`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Layout { pro: bool }
+/// `single`: the older LED driver (the kernel Slot OS boots) has one brightness, max_scale,
+/// for every zone.
+struct Layout { pro: bool, single: bool }
 impl Layout {
     fn zones(self) -> &'static [&'static str] { if self.pro { &["m","f1","f2","lr","rear"] } else { &["m","f1","f2","lr"] } }
-    fn scales(self) -> &'static [&'static str] { if self.pro { &["max_scale","max_scale_f1f2","max_scale_lr","max_scale_rear"] } else { &["max_scale","max_scale_f1f2","max_scale_lr"] } }
+    fn scales(self) -> &'static [&'static str] { if self.single { &["max_scale"] } else if self.pro { &["max_scale","max_scale_f1f2","max_scale_lr","max_scale_rear"] } else { &["max_scale","max_scale_f1f2","max_scale_lr"] } }
     /// Each brightness file and the setting that sets it.
     fn levels(self, s: Settings) -> Vec<(&'static str, u8)> {
+        if self.single { return vec![("max_scale",s.top)] }
         let mut levels=vec![("max_scale",s.top),("max_scale_f1f2",s.buttons)];
         if self.pro { levels.extend([("max_scale_lr",s.sticks),("max_scale_rear",s.triggers)]) } else { levels.push(("max_scale_lr",s.triggers)) }
         levels
@@ -30,7 +33,7 @@ impl Layout {
         }
         names.push("effect_enable".into()); names
     }
-    fn of_this_brick() -> Self { Self { pro: slot_power::model()==slot_power::Model::BrickPro } }
+    fn of_this_brick() -> Self { Self { pro: slot_power::model()==slot_power::Model::BrickPro, single: false } }
 }
 impl Settings {
     fn read(text: &str) -> Self {
@@ -73,6 +76,7 @@ impl BrickLeds {
     pub fn open(root: &Path) -> Self { Self::open_in(root,&slot_power::hw("/sys/class/led_anim"),Layout::of_this_brick()) }
     fn names(&self) -> Vec<String> { self.layout.names() }
     fn open_in(root: &Path, sys: &Path, layout: Layout) -> Self {
+        let layout=Layout { single: sys.join("max_scale").exists() && !sys.join("max_scale_f1f2").exists(), ..layout };
         let original: Vec<_>=layout.names().into_iter().filter_map(|name| fs::read_to_string(sys.join(&name)).ok().map(|v|(name,v.trim().to_owned()))).collect();
         let available=original.len()==layout.names().len();
         let settings=Settings::read(&fs::read_to_string(root.join(FILE)).unwrap_or_default());
@@ -90,6 +94,7 @@ impl BrickLeds {
         // Model the driver latching brightness when an effect is triggered.
         #[cfg(test)]
         if let Some(scale)=match name { "effect_m"=>Some("max_scale"), "effect_f1"|"effect_f2"=>Some("max_scale_f1f2"), "effect_lr"=>Some("max_scale_lr"), "effect_rear"=>Some("max_scale_rear"), _=>None } {
+            let scale=if self.layout.single { "max_scale" } else { scale };
             self.applied_brightness.borrow_mut().push((name.into(),fs::read_to_string(self.sys.join(scale))?.trim().into()));
         }
         Ok(())
@@ -207,8 +212,8 @@ impl BrickLeds {
 }
 #[cfg(test)] mod tests {
     use super::*;
-    const BRICK: Layout = Layout { pro: false };
-    const PRO: Layout = Layout { pro: true };
+    const BRICK: Layout = Layout { pro: false, single: false };
+    const PRO: Layout = Layout { pro: true, single: false };
     #[test] fn on_the_brick_pro_triggers_go_to_the_rear_and_sticks_to_lr() {
         let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
         for name in PRO.names() {fs::write(sys.join(name),"7\n").unwrap();}
@@ -228,6 +233,17 @@ impl BrickLeds {
         let t2=tempfile::tempdir().unwrap();let sys2=t2.path().join("sys");fs::create_dir(&sys2).unwrap();
         for name in BRICK.names() {fs::write(sys2.join(name),"7\n").unwrap();}
         assert_eq!(BrickLeds::open_in(t2.path(),&sys2,PRO).value(Row::LedMode),Some(Value::Unavailable));
+    }
+    #[test] fn an_older_driver_with_one_brightness_still_has_leds() {
+        let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
+        let single=Layout { pro: false, single: true };
+        for name in single.names() {fs::write(sys.join(name),"7\n").unwrap();}
+        let mut leds=BrickLeds::open_in(t.path(),&sys,BRICK);
+        assert_ne!(leds.value(Row::LedMode),Some(Value::Unavailable));
+        leds.change(Row::LedColor,true).unwrap();
+        let read=|n:&str| fs::read_to_string(sys.join(n)).unwrap().trim().to_owned();
+        assert_eq!(read("effect_rgb_hex_lr"),"0000FF");
+        assert!(!sys.join("max_scale_f1f2").exists(), "a brightness file was made up");
     }
     fn battery_leds() -> (tempfile::TempDir, PathBuf, BrickLeds) {
         let t = tempfile::tempdir().unwrap();
