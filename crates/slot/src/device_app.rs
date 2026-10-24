@@ -165,6 +165,17 @@ pub fn run() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("slot: {e}");
+            // On Slot OS, what the GPU driver said about it, for the bug report.
+            if std::env::var_os("SLOT_OS").is_some() {
+                if let Ok(out) = std::process::Command::new("dmesg").output() {
+                    let log = String::from_utf8_lossy(&out.stdout);
+                    let tail: Vec<&str> = log.lines().rev().take(60).collect();
+                    eprintln!("slot: kernel log, last lines:");
+                    for line in tail.into_iter().rev() {
+                        eprintln!("  {line}");
+                    }
+                }
+            }
             std::process::exit(1);
         }
     };

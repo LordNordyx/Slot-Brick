@@ -50,14 +50,18 @@ for elf in "$R"/usr/lib/*.so "$R/usr/bin/pvrsrvctl" "$CARD_FILES"/Slot/System/sl
 done
 [ "$missing" = 0 ]
 # Only busybox and this init stay in RAM, to keep what u-boot loads and the kernel unpacks
-# small. The rest (glibc, ALSA, the GPU's libraries, modules and firmware) goes to the card's
-# slot-os folder, which /lib and /usr point into once init has mounted the card.
+# small. Every other file (glibc, ALSA, the GPU's libraries, modules and firmware) goes to
+# the card's slot-os folder, once; in RAM, /lib and /usr keep their folders and links, and
+# each file becomes a link to its copy on the card. FAT has no links, and a link copied as a
+# second file is a second library: libGLESv2.so.2 beside libGLESv2.so gave Slot a GL with
+# no context, as EGL had made it current in the other.
 SYS=$WORK/slot-os
 mkdir -p "$SYS"
-cp -rL "$R/lib" "$R/usr" "$SYS/"
-rm -rf "$R/lib" "$R/usr"
-ln -s /mnt/SDCARD/slot-os/lib "$R/lib"
-ln -s /mnt/SDCARD/slot-os/usr "$R/usr"
+( cd "$R" && find lib usr -type f ) | while read -r f; do
+    mkdir -p "$SYS/$(dirname "$f")"
+    mv "$R/$f" "$SYS/$f"
+    ln -s "/mnt/SDCARD/slot-os/$f" "$R/$f"
+done
 ( cd "$R" && find . | LC_ALL=C sort | cpio -o -H newc --quiet ) | gzip -9 -n > "$WORK/initramfs.gz"
 echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R" | cut -f1)); on the card: $(du -sh "$SYS" | cut -f1)"
 
