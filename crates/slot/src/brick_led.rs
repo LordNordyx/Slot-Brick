@@ -13,22 +13,15 @@ impl Default for Settings {
 /// The Brick: top bar `m`, F1/F2 `f1` `f2`, the triggers `lr`. The Brick Pro: the same, but
 /// `lr` is its sticks' rings, and the triggers are `rear`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-/// `single`: the older LED driver (the kernel Slot OS boots) has one brightness, max_scale,
-/// for every zone. It is then kept full, and each zone's level dims that zone's colour.
-struct Layout { pro: bool, single: bool }
+struct Layout { pro: bool }
 impl Layout {
     fn zones(self) -> &'static [&'static str] { if self.pro { &["m","f1","f2","lr","rear"] } else { &["m","f1","f2","lr"] } }
-    fn scales(self) -> &'static [&'static str] { if self.single { &["max_scale"] } else if self.pro { &["max_scale","max_scale_f1f2","max_scale_lr","max_scale_rear"] } else { &["max_scale","max_scale_f1f2","max_scale_lr"] } }
+    fn scales(self) -> &'static [&'static str] { if self.pro { &["max_scale","max_scale_f1f2","max_scale_lr","max_scale_rear"] } else { &["max_scale","max_scale_f1f2","max_scale_lr"] } }
     /// Each brightness file and the setting that sets it.
     fn levels(self, s: Settings) -> Vec<(&'static str, u8)> {
-        if self.single { return vec![("max_scale",5)] }
         let mut levels=vec![("max_scale",s.top),("max_scale_f1f2",s.buttons)];
         if self.pro { levels.extend([("max_scale_lr",s.sticks),("max_scale_rear",s.triggers)]) } else { levels.push(("max_scale_lr",s.triggers)) }
         levels
-    }
-    /// The setting a zone's level comes from.
-    fn level(self, zone: &str, s: Settings) -> u8 {
-        match zone { "m" => s.top, "f1" | "f2" => s.buttons, "lr" if self.pro => s.sticks, _ => s.triggers }
     }
     fn names(self) -> Vec<String> {
         let mut names: Vec<String>=self.scales().iter().map(|n|n.to_string()).collect();
@@ -37,7 +30,7 @@ impl Layout {
         }
         names.push("effect_enable".into()); names
     }
-    fn of_this_brick() -> Self { Self { pro: slot_power::model()==slot_power::Model::BrickPro, single: false } }
+    fn of_this_brick() -> Self { Self { pro: slot_power::model()==slot_power::Model::BrickPro } }
 }
 impl Settings {
     fn read(text: &str) -> Self {
@@ -75,17 +68,11 @@ fn write_command(out: &mut impl Write, name: &str, value: &str) -> io::Result<()
     }
     Ok(())
 }
-/// A colour at `level` fifths of its brightness, for the older driver's zones.
-fn dimmed(hex: &str, level: u8) -> String {
-    let channel=|i: usize| u32::from_str_radix(&hex[i..i+2],16).unwrap_or(0) * u32::from(level.min(5)) / 5;
-    format!("{:02X}{:02X}{:02X}",channel(0),channel(2),channel(4))
-}
 pub struct BrickLeds { root: PathBuf, sys: PathBuf, layout: Layout, settings: Settings, original: Vec<(String,String)>, sleeping: Option<Vec<(String,String)>>, previous_mode: Option<u8>, power_state: LedState, available: bool, #[cfg(test)] applied_brightness: std::cell::RefCell<Vec<(String,String)>> }
 impl BrickLeds {
     pub fn open(root: &Path) -> Self { Self::open_in(root,&slot_power::hw("/sys/class/led_anim"),Layout::of_this_brick()) }
     fn names(&self) -> Vec<String> { self.layout.names() }
     fn open_in(root: &Path, sys: &Path, layout: Layout) -> Self {
-        let layout=Layout { single: sys.join("max_scale").exists() && !sys.join("max_scale_f1f2").exists(), ..layout };
         let original: Vec<_>=layout.names().into_iter().filter_map(|name| fs::read_to_string(sys.join(&name)).ok().map(|v|(name,v.trim().to_owned()))).collect();
         let available=original.len()==layout.names().len();
         let settings=Settings::read(&fs::read_to_string(root.join(FILE)).unwrap_or_default());
@@ -103,7 +90,6 @@ impl BrickLeds {
         // Model the driver latching brightness when an effect is triggered.
         #[cfg(test)]
         if let Some(scale)=match name { "effect_m"=>Some("max_scale"), "effect_f1"|"effect_f2"=>Some("max_scale_f1f2"), "effect_lr"=>Some("max_scale_lr"), "effect_rear"=>Some("max_scale_rear"), _=>None } {
-            let scale=if self.layout.single { "max_scale" } else { scale };
             self.applied_brightness.borrow_mut().push((name.into(),fs::read_to_string(self.sys.join(scale))?.trim().into()));
         }
         Ok(())
@@ -156,20 +142,14 @@ impl BrickLeds {
         let off = s.mode == 1 || self.power_state == LedState::Off;
         self.write("effect_enable","1")?;
         for (name,level) in self.layout.levels(s) {
-            // The older driver's one brightness stays up for the low-battery alarm, which
-            // shows even with the LEDs turned off, as on the newer driver.
-            let brightness = if warning && self.layout.single { 100 }
-                else if warning && name == "max_scale_f1f2" { 20 }
+            let brightness = if warning && name == "max_scale_f1f2" { 20 }
                 else if off { 0 } else { u32::from(level) * 20 };
             self.write(name,&brightness.to_string())?;
         }
         for &zone in self.layout.zones() {
             let alarm = warning && matches!(zone, "f1" | "f2");
             let blink = alarm && self.power_state == LedState::VeryLow;
-            let colour=if alarm { "FF0000" } else { COLORS[s.color as usize] };
-            let colour=if !self.layout.single { colour.to_string() }
-                else { dimmed(colour, if alarm { 1 } else if off { 0 } else { self.layout.level(zone,s) }) };
-            self.write(&format!("effect_rgb_hex_{zone}"),&colour)?;
+            self.write(&format!("effect_rgb_hex_{zone}"),if alarm { "FF0000" } else { COLORS[s.color as usize] })?;
             self.write(&format!("effect_cycles_{zone}"),"-1")?;
             self.write(&format!("effect_duration_{zone}"),if blink { "500" } else { "2000" })?;
             // NextUI LEDS_updateLeds uses this order: the effect write applies
@@ -227,8 +207,8 @@ impl BrickLeds {
 }
 #[cfg(test)] mod tests {
     use super::*;
-    const BRICK: Layout = Layout { pro: false, single: false };
-    const PRO: Layout = Layout { pro: true, single: false };
+    const BRICK: Layout = Layout { pro: false };
+    const PRO: Layout = Layout { pro: true };
     #[test] fn on_the_brick_pro_triggers_go_to_the_rear_and_sticks_to_lr() {
         let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
         for name in PRO.names() {fs::write(sys.join(name),"7\n").unwrap();}
@@ -248,21 +228,6 @@ impl BrickLeds {
         let t2=tempfile::tempdir().unwrap();let sys2=t2.path().join("sys");fs::create_dir(&sys2).unwrap();
         for name in BRICK.names() {fs::write(sys2.join(name),"7\n").unwrap();}
         assert_eq!(BrickLeds::open_in(t2.path(),&sys2,PRO).value(Row::LedMode),Some(Value::Unavailable));
-    }
-    #[test] fn an_older_driver_with_one_brightness_still_has_leds() {
-        let t=tempfile::tempdir().unwrap();let sys=t.path().join("sys");fs::create_dir(&sys).unwrap();
-        let single=Layout { pro: false, single: true };
-        for name in single.names() {fs::write(sys.join(name),"7\n").unwrap();}
-        let mut leds=BrickLeds::open_in(t.path(),&sys,BRICK);
-        assert_ne!(leds.value(Row::LedMode),Some(Value::Unavailable));
-        leds.change(Row::LedColor,true).unwrap();
-        let read=|n:&str| fs::read_to_string(sys.join(n)).unwrap().trim().to_owned();
-        // The shared brightness stays full; each zone dims its own colour.
-        assert_eq!(read("max_scale"),"100");
-        assert_eq!(read("effect_rgb_hex_lr"),"000033");
-        leds.change(Row::LedTriggers,true).unwrap();
-        assert_eq!((read("effect_rgb_hex_lr"),read("effect_rgb_hex_m")),("000066".into(),"000033".into()));
-        assert!(!sys.join("max_scale_f1f2").exists(), "a brightness file was made up");
     }
     fn battery_leds() -> (tempfile::TempDir, PathBuf, BrickLeds) {
         let t = tempfile::tempdir().unwrap();
