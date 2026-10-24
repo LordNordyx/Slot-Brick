@@ -6,7 +6,7 @@
 set -eu
 cd "$(dirname "$0")/../.."
 CARD_FILES=${1:-dist-brick}
-FAT_MIB=${2:-1024}
+FAT_MIB=${2:-2560}
 IMAGE=slot-brick-os
 [ -x "$CARD_FILES/Slot/System/slot" ] || { echo "No card files in $CARD_FILES: run brick/docker-build.sh first." >&2; exit 1; }
 sh brick/os/fetch.sh

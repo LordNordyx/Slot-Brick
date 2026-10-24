@@ -4,7 +4,7 @@
 set -eu
 CARD_FILES=$1
 IMG=$2
-FAT_MIB=${3:-1024}
+FAT_MIB=${3:-2560}
 SRC=.docker-cache/os
 OS=brick/os
 WORK=$(mktemp -d)
@@ -20,7 +20,7 @@ rm -rf "$R/usr/share/doc" "$R/usr/share/lintian" "$R/usr/share/man" "$R/usr/shar
 # The card's tools stay in RAM, in /sbin: they run while the card is not mounted (their
 # libraries are copied to RAM first).
 mv "$R/usr/sbin/fsck.exfat" "$R/sbin/fsck.exfat"
-find "$R/sbin" ! -type d ! -name fsck.fat ! -name fsck.exfat ! -name mkfs.fat ! -name sgdisk -delete
+find "$R/sbin" ! -type d ! -name fsck.fat ! -name fsck.exfat ! -name sgdisk -delete
 # Of alsa-utils, only what sets up and tests the mixer.
 find "$R/usr/bin" "$R/usr/sbin" -type f ! -name amixer ! -name alsactl ! -name aplay ! -name speaker-test -delete
 mkdir -p "$R/etc" "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" "$R/proc" "$R/sys" "$R/dev" "$R/tmp" \
@@ -51,7 +51,7 @@ install -m 755 "$OS/mixer.sh" "$R/etc/mixer.sh"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:
 # EGL, GLES, ALSA) must be here, or the card boots to a black screen.
 missing=0
-for elf in "$R"/usr/lib/*.so "$R"/usr/bin/* "$R"/usr/sbin/* "$R"/sbin/fsck.* "$R"/sbin/mkfs.fat "$R"/sbin/sgdisk "$CARD_FILES"/Slot/System/slot "$CARD_FILES"/Slot/System/*.so; do
+for elf in "$R"/usr/lib/*.so "$R"/usr/bin/* "$R"/usr/sbin/* "$R"/sbin/fsck.* "$R"/sbin/sgdisk "$CARD_FILES"/Slot/System/slot "$CARD_FILES"/Slot/System/*.so; do
     for lib in $(aarch64-linux-gnu-readelf -d "$elf" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p') libEGL.so.1 libGLESv2.so.2 libasound.so.2; do
         [ -e "$R/usr/lib/$lib" ] || [ -e "$R/lib/aarch64-linux-gnu/$lib" ] || [ -e "$R/usr/lib/aarch64-linux-gnu/$lib" ] \
             || { echo "missing $lib (for $(basename "$elf"))"; missing=1; }
@@ -81,14 +81,21 @@ python3 "$OS/bootimg.py" "$SRC/knulli-boot.img" "$WORK/initramfs.gz" "$WORK/boot
 mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$OS/env.txt"
 
 # --- The FAT partition: Slot and the player's folders ----------------------------------------
-dd if=/dev/zero of="$WORK/fat.img" bs=1M count=0 seek="$FAT_MIB" 2>/dev/null
-mkfs.vfat -F 32 -n SLOT "$WORK/fat.img" >/dev/null
+# Made for a 1 TiB partition (32 KiB clusters, 256 MiB of FAT), then told it is $FAT_MIB MiB:
+# on first boot the Brick grows the partition to the card's end and only has to write the
+# new size into the boot sector (init's grow). $FAT_MIB must leave it at least 65525
+# clusters, or it would not count as FAT32.
+dd if=/dev/zero of="$WORK/fat.img" bs=1M count=0 seek=$((1024 * 1024)) 2>/dev/null
+mkfs.vfat -F 32 -s 64 -n SLOT "$WORK/fat.img" >/dev/null
+python3 "$OS/fatsize.py" "$WORK/fat.img" $((FAT_MIB * 2048))
+truncate -s "${FAT_MIB}M" "$WORK/fat.img"
 export MTOOLS_SKIP_CHECK=1
 mcopy -s -p -i "$WORK/fat.img" "$CARD_FILES/Slot" ::/
 mcopy -s -p -i "$WORK/fat.img" "$SYS" ::/
 # u-boot shows this from the boot-resource partition as soon as it starts.
 python3 "$OS/bootlogo.py" "$WORK/bootlogo.bmp"
 mcopy -i "$WORK/fat.img" "$WORK/bootlogo.bmp" ::/bootlogo.bmp
+fsck.fat -n "$WORK/fat.img" >/dev/null
 
 # --- The card -------------------------------------------------------------------------------
 # Knulli's layout for the Brick: boot0 at 128 KiB (the GPT's entries moved to 80 KiB out of
