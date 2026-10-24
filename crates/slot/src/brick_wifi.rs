@@ -63,9 +63,23 @@ impl Supplicant for Control{
         if s.starts_with("FAIL") || s.starts_with("UNKNOWN"){Err("Wi-Fi service rejected the request".into())}else{Ok(s)}
     }
 }
-/// Starts a scan. A supplicant just started is already scanning by itself and answers
-/// FAIL-BUSY: its results come all the same.
-fn scan(c:&impl Supplicant)->Result<()>{match c.command("SCAN")?.as_str(){"OK"|"FAIL-BUSY"=>Ok(()),_=>Err("Wi-Fi service rejected the request".into())}}
+/// Starts a scan. A supplicant just started is already scanning by itself (FAIL-BUSY), or
+/// joining a saved network, or not yet ready (FAIL): the first two leave results all the
+/// same, and the last is asked again for a few seconds. Only then is it a refusal, and the
+/// caller restarts Wi-Fi, which would cut a join short.
+fn scan(c:&impl Supplicant,pause:impl Fn(u64)->Result<()>)->Result<()>{
+    for _ in 0..SCAN_TRIES{
+        let reply=c.command("SCAN")?;
+        if matches!(reply.as_str(),"OK"|"FAIL-BUSY"){return Ok(())}
+        let status=c.command("STATUS")?;let state=field(&status,"wpa_state").unwrap_or("?");
+        eprintln!("wifi: SCAN answered {reply} (wpa_state {state})");
+        if matches!(state,"SCANNING"|"AUTHENTICATING"|"ASSOCIATING"|"ASSOCIATED"|"4WAY_HANDSHAKE"|"GROUP_HANDSHAKE"){return Ok(())}
+        pause(SCAN_RETRY_MS)?;
+    }
+    Err("Wi-Fi service rejected the request".into())
+}
+const SCAN_TRIES:u32=10;
+const SCAN_RETRY_MS:u64=500;
 fn field<'a>(s:&'a str,key:&str)->Option<&'a str>{s.lines().find_map(|s|s.strip_prefix(key).and_then(|s|s.strip_prefix('=')))}
 fn pause(cancel:&AtomicBool,ms:u64)->Result<()>{for _ in 0..(ms+99)/100{if cancel.load(Ordering::Relaxed){return Err("Cancelled".into())}thread::sleep(Duration::from_millis(100));}Ok(())}
 /// Slot's own System/brick_wifi.sh always wins: it writes Logs/wifi.log and tries the
@@ -222,7 +236,7 @@ fn run(job:Job,cancel:&AtomicBool)->Result<Reply>{
     match job{
         Job::Status=>{},Job::Open|Job::Power(_)=>unreachable!(),
         Job::Scan(retry)=>{
-            if let Err(e)=scan(&c){
+            if let Err(e)=scan(&c,|ms|pause(cancel,ms)){
                 if !retry{return Err(e)}
                 // One started under a blocked radio answers but refuses scans until restarted,
                 // which is what turning Wi-Fi off and on does.
@@ -599,8 +613,16 @@ impl Painter{
         assert_eq!(t.get(),0,"waited for a firmware supplicant there is none of");
     }
     #[test]fn a_scan_already_running_is_not_a_refusal(){
-        let m=Mock::new(vec![("SCAN",Ok("FAIL-BUSY")),("SCAN",Ok("OK")),("SCAN",Ok("FAIL"))]);
-        assert!(scan(&m).is_ok());assert!(scan(&m).is_ok());assert!(scan(&m).is_err());m.done();
+        let m=Mock::new(vec![("SCAN",Ok("FAIL-BUSY")),("SCAN",Ok("OK")),("SCAN",Ok("FAIL")),("STATUS",Ok("wpa_state=ASSOCIATING"))]);
+        for _ in 0..3{assert!(scan(&m,|_|Ok(())).is_ok());}m.done();
+    }
+    #[test]fn a_supplicant_not_ready_is_asked_again_before_it_counts_as_a_refusal(){
+        let mut steps=vec![("SCAN",Ok("FAIL")),("STATUS",Ok("wpa_state=INTERFACE_DISABLED")),("SCAN",Ok("OK"))];
+        let m=Mock::new(steps.clone());let waited=Cell::new(0);
+        assert!(scan(&m,|ms|{waited.set(waited.get()+ms);Ok(())}).is_ok());m.done();
+        assert_eq!(waited.get(),SCAN_RETRY_MS);
+        steps.clear();for _ in 0..SCAN_TRIES{steps.push(("SCAN",Ok("FAIL")));steps.push(("STATUS",Ok("wpa_state=DISCONNECTED")));}
+        let m=Mock::new(steps);assert!(scan(&m,|_|Ok(())).is_err());m.done();
     }
     #[test]fn boot_repair_gives_up_after_its_tries(){
         let t=Cell::new(0u64);let runs=Cell::new(0);

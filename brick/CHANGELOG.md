@@ -11,7 +11,7 @@
 - Sort the shelves with SELECT, or under HOME → Library → Sort By: A–Z, last played, or most played.
 - Brick Pro (experimental, not yet tested on one): Slot recognises it, its left stick works as the D-pad, and System → LEDs has a Sticks row for the lights around its sticks.
 - Rumble: games that rumble (and the Rumble setting) now drive the Brick's motor.
-- HOME → Wi-Fi: turning Wi-Fi on right after it started could say the request was rejected and stay off; it now waits for the scan already under way.
+- HOME → Wi-Fi: turning Wi-Fi on right after it started could say the request was rejected and stay off; it now waits for a scan or a join already under way instead of restarting Wi-Fi.
 
 ## v0.44
 **New since v0.43:**

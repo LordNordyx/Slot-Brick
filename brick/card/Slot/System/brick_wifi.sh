@@ -180,6 +180,7 @@ start)
         wait_for 50 supplicant_ready || { echo 'wpa_supplicant did not answer on its control socket'; exit 1; }
     fi
     echo "control socket: $(find_socket)"
+    ! command -v wpa_cli >/dev/null 2>&1 || echo "state: $(wpa_cli -p "$(find_socket)" -i "$IFACE" status 2>&1 | grep -E '^(wpa_state|ssid)=' | tr '\n' ' ')"
     start_dhcp
     exit 0
     ;;
