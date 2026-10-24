@@ -246,15 +246,18 @@ fn clock_screen(way: Way) -> (TempDir, App, Clock) {
     }
     let (mut a, clock) = app_booting_at(d.path(), AT);
     if let Way::QuickMenu = way {
+        // Down to Date & Time through each page on the way (System, and Clock on a Brick).
         a.apply(Action::QuickMenu);
-        for _ in 0..QuickRow::System.position() {
-            a.apply(Action::GbaDown(Btn::Down));
+        let mut path = vec![QuickRow::DateTime];
+        while let Some(up) = path.last().and_then(|r| r.parent()) {
+            path.push(up);
         }
-        a.apply(Action::GbaDown(Btn::A));
-        for _ in 0..QuickRow::DateTime.position() {
-            a.apply(Action::GbaDown(Btn::Down));
+        for row in path.into_iter().rev() {
+            for _ in 0..row.position() {
+                a.apply(Action::GbaDown(Btn::Down));
+            }
+            a.apply(Action::GbaDown(Btn::A));
         }
-        a.apply(Action::GbaDown(Btn::A));
     }
     assert!(
         matches!(a.phase(), Phase::SetClock { .. }),

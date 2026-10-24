@@ -7,7 +7,8 @@
 - Brick Pro (experimental): recognised, with its left stick as the D-pad and its own LED row.
 - Faster first screen, and Wi-Fi fixes.
 - Slot shows its shelf sooner; on Slot OS in under 3 seconds.
-- HOME → System → Font: pick the font all of Slot's text is drawn in. GohuFont comes with Slot, and any `.ttf` or `.otf` you put in `Slot/Fonts` shows up too.
+- HOME → System → Font: pick the font all of Slot's text is drawn in. GohuFont and Press Start 2P come with Slot, and any `.ttf` or `.otf` you put in `Slot/Fonts` shows up too.
+- A tidier HOME menu: Screen is now Emulation; Wi-Fi, Cart Art, RetroAchievements and Update are under Online; Auto Save and Auto Save on Eject under Library; Rumble and Low Battery Shutdown under System; Date & Time and Auto Clock under System → Clock.
 
 ## v0.44
 **New since v0.43:**

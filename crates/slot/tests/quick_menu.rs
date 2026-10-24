@@ -168,9 +168,7 @@ fn rumble_and_fast_forward_sound_flip_on_either_arrow_and_save() {
     );
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, true));
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
+    open_at(&mut a, QuickRow::Rumble);
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, false));
     assert!(!a.rumble_enabled());
@@ -210,7 +208,7 @@ fn colour_correction_flips_on_either_arrow_and_saves_for_its_own_system_only() {
 }
 
 #[test]
-fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
+fn rewind_and_turbo_on_the_game_page_and_eject_save_in_the_library_flip_and_save() {
     let (d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Rewind);
     let card = |d: &TempDir| {
@@ -225,16 +223,17 @@ fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
     press(&mut a, Btn::Left);
     assert_eq!(card(&d), (true, false, false));
     assert!(!a.turbo());
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
+    press(&mut a, Btn::B);
+    assert_eq!(a.quick_menu(), Some(QuickRow::Game));
+    open_at(&mut a, QuickRow::EjectSave);
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, false, false));
     press(&mut a, Btn::B);
-    assert_eq!(a.quick_menu(), Some(QuickRow::Game));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Library));
 }
 
 #[test]
-fn the_game_page_steps_the_autosave_and_the_low_battery_shutdown_and_saves_each() {
+fn autosave_in_the_library_and_low_battery_shutdown_in_system_step_and_save() {
     let (d, mut a, _) = on_carousel();
     let card = |d: &TempDir| {
         let s = read_slot_state(d.path());
@@ -249,7 +248,7 @@ fn the_game_page_steps_the_autosave_and_the_low_battery_shutdown_and_saves_each(
     press(&mut a, Btn::Left);
     assert_eq!(card(&d), (0, 5));
     assert_eq!(a.quick_value(QuickRow::AutoSave), Some(QuickValue::Off));
-    press(&mut a, Btn::Down);
+    open_at(&mut a, QuickRow::BatteryShutdown);
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (0, 10));
     press(&mut a, Btn::Right);
@@ -594,7 +593,8 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         drawn(&out, value(QuickValue::On, false)),
         "rumble's ON is not grey"
     );
-    open_at(&mut a, QuickRow::About);
+    // Beside Auto Clock (on a Brick, on the Clock page; else on System, with About).
+    open_at(&mut a, QuickRow::AutoClock.page().last().copied().unwrap_or(QuickRow::About));
     let out = frame(&a);
     assert!(drawn(&out, 500), "the date and time is not grey");
 

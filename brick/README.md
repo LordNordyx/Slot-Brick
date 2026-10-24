@@ -45,7 +45,7 @@ doesn't flash anything to the device.
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
 | `Y`              | Favorite: a star on the cart, or off again |
 | `SELECT`         | Sort: A–Z, last played, most played     |
-| `HOME`           | Menu (Screen, Gameplay, Library, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, Auto Clock, About) |
+| `HOME`           | Menu (Emulation, Gameplay, Library, Online: Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Clock, Font, Rumble, Low Battery Shutdown, About) |
 
 ### In game
 
@@ -121,13 +121,13 @@ disc in: the game carries on with it. They run on PCSX ReARMed, with your BIOS w
 fast-forward is `HOME + R2`, and there is no rewind: a PlayStation's state is too large to keep
 snapshots of on the Brick. Every game gets a DualShock; on a Brick Pro the left stick is its left
 stick in game. Games that need more buttons or sticks than the Brick has still start, and play as
-far as its buttons allow. Each game's memory card is kept in `Slot/Saves/PS1`. **HOME → Screen →
+far as its buttons allow. Each game's memory card is kept in `Slot/Saves/PS1`. **HOME → Emulation →
 PlayStation** has Shader, Dithering (on as the PlayStation drew, off for smoother colour) and
 Overlay. Cart Art fetches disc scans (below), or put your own round picture in `Slot/Labels/PS1`;
 a disc of a game of several can have its own, named after that disc's file. RetroAchievements
 work, `.chd` included. Not yet tested on a Brick: reports welcome ([#41](../../issues/41)).
 
-**Cart art:** connect to Wi-Fi, then open **HOME → Cart Art** (greyed out while Wi-Fi is off).
+**Cart art:** connect to Wi-Fi, then open **HOME → Online → Cart Art** (greyed out while Wi-Fi is off).
 **GET CART ART** gives every game with no label a scan of its real cartridge label; labels you
 already have are never replaced. The scans come from the slot art set behind
 [Cart Studio](https://studio.slot-cfw.fyi) (scans from ScreenScraper), downloaded over HTTPS.
@@ -151,7 +151,7 @@ scan of each, but which is which isn't recorded, so all its discs share one.
 `Slot/Logs/cart-art.txt` lists each game and what it got. Below GET CART ART, every game with a
 label is listed: press A twice on one to delete its label, then GET CART ART fetches a new one.
 
-**RetroAchievements:** **HOME → RetroAchievements** (greyed out while Wi-Fi is off) logs in to
+**RetroAchievements:** **HOME → Online → RetroAchievements** (greyed out while Wi-Fi is off) logs in to
 your [RetroAchievements](https://retroachievements.org) account and tests the connection.
 Your password is sent once, over HTTPS, and never stored: Slot keeps only the login token, in `Slot/Config/retroachievements.txt`; delete that file or choose **LOG OUT** to forget
 it. While logged in, games earn achievements in softcore mode (save states, rewind and
@@ -167,7 +167,7 @@ or by the most played, and names the order in the slot; **HOME → Library** has
 (**Sort By**) and **Show: Favorites**, which leaves only your favorites on the shelves (all games,
 while you have none). Play time, last played and favorites are kept in `Slot/Config/library.txt`.
 
-**Update:** **HOME → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
+**Update:** **HOME → Online → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
 and shows what is new in it. Choose INSTALL, then press A again: Slot downloads it, checks it,
 puts it in place and starts again. It needs 20% battery or a charger. Only Slot's own files
 are replaced (`Slot/System`, the `Apps` it came with, `.slot-boot`, the bundled overlays and
@@ -175,7 +175,7 @@ this README); your games, saves, states, labels, BIOS files, settings and wallpa
 as they are. Every update is signed, and one whose signature or checksum doesn't match is
 never installed. If the new version doesn't start, the previous one is put back.
 
-**Auto Clock:** **HOME → System → Auto Clock** (on to start with) sets the clock from an
+**Auto Clock:** **HOME → System → Clock → Auto Clock** (on to start with) sets the clock from an
 internet time server whenever Wi-Fi connects, and every six hours while it stays connected.
 The time zone is still yours to choose under **Date & Time**, and summer time is a change you
 make there. On the clock screen shown at first start, the date and time fill themselves in
@@ -189,7 +189,7 @@ stick, the stick clicks and the F1/F2 keys do nothing yet. Not yet tested on a r
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.
 
-**Overlays:** pick one under **HOME → Screen →** the system **→ Overlay**. Slot comes with
+**Overlays:** pick one under **HOME → Emulation →** the system **→ Overlay**. Slot comes with
 KrutzOtrem's overlays for the Brick (the *Vanilla* set for GB, GBC and GBA, the *CRT* set for NES
 and SNES; MIT, see `Slot/System/licenses`). Add your own 1024×768 PNGs to `Slot/Overlays/GB`,
 `GBC`, `GBA`, `NES` or `SNES`. The game is fitted into the part of the overlay that isn't fully
@@ -250,5 +250,6 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 1.1.1) and Debian 12 packages; what each is and its licence is in `slot-os/licenses`.
 
 **Fonts:** HOME → System → Font picks the font Slot draws its text in: Slot's own, GohuFont (by
-Hugo Chargois, WTFPL, see `Slot/System/licenses`), or any `.ttf` / `.otf` you put in `Slot/Fonts`.
+Hugo Chargois, WTFPL), Press Start 2P (by Cody Boisclair, OFL; both in `Slot/System/licenses`), or any
+`.ttf` / `.otf` you put in `Slot/Fonts`.
 Slot restarts to use it when you close the menu.
