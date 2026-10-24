@@ -389,7 +389,10 @@ impl Session {
     }
 
     fn held(&self) -> bool {
-        self.app.power_menu().is_some() || self.app.game_menu_open() || self.app.shutting_down()
+        self.app.power_menu().is_some()
+            || self.app.pause_menu().is_some()
+            || self.app.game_menu_open()
+            || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {

@@ -1,0 +1,32 @@
+# A tap of Home in a game pauses it under Resume, Save State, Load State, Reset Game and Quit Game.
+press a
+phase Shelf
+press r1     # GBA -> GB
+press a
+phase Playing 20000
+wait 1000
+press menu
+snap pause-menu
+press down
+press a      # Save State, and back to the game
+phase Playing
+wait 500
+press menu
+press down
+press down   # Load State
+snap pause-menu-load
+press a      # the save state switcher
+phase Polaroids
+press b
+phase Playing
+wait 500
+press menu
+press up
+press up     # Reset Game
+press a      # the game starts over
+phase Playing
+wait 500
+press menu
+press up     # Quit Game
+press a
+phase Shelf 20000

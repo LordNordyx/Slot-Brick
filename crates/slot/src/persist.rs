@@ -7,6 +7,7 @@ pub trait Snapshot {
     fn save_ram(&self) -> Option<Vec<u8>>;
     fn thumb(&self) -> Option<Vec<u8>>;
     fn load(&self, state: Vec<u8>);
+    fn reset(&self) {}
 
     fn resume_trusted(&self) -> bool {
         true
