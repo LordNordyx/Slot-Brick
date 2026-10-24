@@ -20,9 +20,14 @@ rm -rf "$R/usr/share/doc" "$R/usr/share/lintian" "$R/usr/share/man" "$R/usr/shar
 # The card's tools stay in RAM, in /sbin: they run while the card is not mounted (their
 # libraries are copied to RAM first).
 mv "$R/usr/sbin/fsck.exfat" "$R/sbin/fsck.exfat"
+# wpa_supplicant and wpa_cli to the card with the rest (only /lib and /usr go there).
+mv "$R/sbin/wpa_supplicant" "$R/sbin/wpa_cli" "$R/usr/sbin/"
 find "$R/sbin" ! -type d ! -name fsck.fat ! -name fsck.exfat ! -name sgdisk -delete
-# Of alsa-utils, only what sets up and tests the mixer.
-find "$R/usr/bin" "$R/usr/sbin" -type f ! -name amixer ! -name alsactl ! -name aplay ! -name speaker-test -delete
+# Of alsa-utils, only what sets up and tests the mixer; of wpasupplicant, the daemon and
+# wpa_cli, which Slot's Wi-Fi helper (brick_wifi.sh) asks whether it answers.
+find "$R/usr/bin" "$R/usr/sbin" -type f ! -name amixer ! -name alsactl ! -name aplay ! -name speaker-test \
+    ! -name wpa_supplicant ! -name wpa_cli -delete
+rm -rf "$R/var/run" && mkdir -p "$R/var" && ln -s /run "$R/var/run"
 mkdir -p "$R/etc" "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" "$R/proc" "$R/sys" "$R/dev" "$R/tmp" \
     "$R/run" "$R/root" "$R/mnt/SDCARD" "$R/lib/modules/4.9.191" "$R/lib/firmware" "$R/usr/lib"
 # busybox-static's applets, as links.
@@ -41,6 +46,10 @@ install -m 755 "$SRC/pvrsrvctl" "$R/usr/bin/pvrsrvctl"
 aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/pvrsrvkm.ko" "$SRC/pvrsrvkm.ko"
 aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/dc_sunxi.ko" "$SRC/dc_sunxi.ko"
 cp "$SRC"/rgx.fw.22.102.54.38 "$SRC"/rgx.sh.22.102.54.38 "$R/lib/firmware/"
+for m in xradio_mac xradio_core xradio_wlan; do
+    aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/$m.ko" "$SRC/$m.ko"
+done
+cp "$SRC"/boot_xr829.bin "$SRC"/fw_xr829.bin "$SRC"/sdd_xr829.bin "$SRC"/etf_xr829.bin "$R/lib/firmware/"
 install -m 755 "$OS/init" "$R/init"
 # u-boot's built-in settings, should it not read ours, start /rdinit or /sbin/init.
 ln -sf /init "$R/rdinit"
@@ -122,3 +131,7 @@ dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((36 + BOOT_MIB)) conv=notrunc 2>/
 dd if="$WORK/env.img" of="$IMG" bs=$MIB seek=$((37 + BOOT_MIB)) conv=notrunc 2>/dev/null
 dd if="$WORK/fat.img" of="$IMG" bs=$MIB seek=$((FAT_START / MIB)) conv=notrunc 2>/dev/null
 sgdisk -p "$IMG" | tail -6
+# For a card already running Slot OS: its system folder, and the boot image that init
+# writes to the boot partition when it finds it at slot-os/boot.img.
+OUT=$(dirname "$IMG")
+rm -rf "$OUT/slot-os" && cp -r "$SYS" "$OUT/slot-os" && cp "$WORK/boot.img" "$OUT/boot.img"

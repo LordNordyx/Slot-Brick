@@ -4,6 +4,7 @@
 # TrimUI's own boot chain (boot0, u-boot boot package, kernel), its GPU kernel modules and
 # firmware: TrimUI publishes no source for them; these are the binaries Knulli
 # (github.com/knulli-cfw/knulli-linux) ships for the Brick, at the commit below.
+# The XR829 Wi-Fi chip's driver (xradio, three modules) and firmware: Knulli's, same commit.
 # PowerVR GE8300 userspace (DDK 1.19, fbdev, glibc): github.com/knulli-cfw/ge8300-drivers.
 #
 # <sha256> <file under .docker-cache/os/> <url>
@@ -22,3 +23,10 @@ d11b684dd70d0839f78dae8afb3cadf57e86c54aea689eff320407990fe77acd libglslcompiler
 6d7991b79dd10fe3fcda561dd886ef66c698fe59ee62d6668191f1f020e7c621 libsrv_um.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libsrv_um.so
 524bfb2ef820f846872a0d0d907c2aaba48151f5f264c786a5c6f53879fb8d22 libusc.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libusc.so
 d624f59912b38042330d1a1c71db2088d230c0cf4506a3aaab5eca24bee3196a pvrsrvctl https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/bin/pvrsrvctl
+7986b02f1177d81565b5f8d3c787e2692fcf13b21e455b041f9df90bdd427dc5 xradio_mac.ko https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/modules/4.9.191/xradio_mac.ko
+e18ed99a4f01f3d74fea5e16004a025947f762cb90a699d6e54c1eaec8ade4e4 xradio_core.ko https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/modules/4.9.191/xradio_core.ko
+77ed7f68fec00707928337f36b246c825631b7962c55c8d3d5a1cb8913fb1d25 xradio_wlan.ko https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/modules/4.9.191/xradio_wlan.ko
+4912ad59f8fcdadba8c10f2ace82f5dce3a4ac37d5e03e5cb814656ce53efff5 boot_xr829.bin https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/firmware/boot_xr829.bin
+f702cd028538830b8c197c90efd76f6de278a04caec8d626d6625d32ab0669e4 fw_xr829.bin https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/firmware/fw_xr829.bin
+a504e3517d45b70404495c6a810fd04231a5d70143d9efac9ffd3de4caf14cdd sdd_xr829.bin https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/firmware/sdd_xr829.bin
+6dd2af4e57dd5471033b12e19a4c88aa0bb78e0933bf2e273b40505a581ec0e4 etf_xr829.bin https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/fsoverlay/lib/firmware/etf_xr829.bin

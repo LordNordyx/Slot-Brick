@@ -69,3 +69,11 @@ blkid
 watchdog
 blockdev
 du
+ifconfig
+route
+udhcpc
+rfkill
+ip
+ping
+nslookup
+md5sum

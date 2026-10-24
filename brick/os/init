@@ -28,7 +28,8 @@ stamp init started
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
 # How far startup got, for a Brick with no serial cable attached: a short buzz and blue
 # LEDs once this script runs, yellow while the card is checked after the Brick lost power,
-# purple while the card is grown to its full size on first boot,
+# purple while the card is grown to its full size on first boot, white while a new
+# boot.img is written,
 # green once the card is mounted; red and a long buzz when no
 # card could be mounted. (u-boot showed the card's bootlogo.bmp before, if it got that far.)
 LEDS=/sys/class/led_anim
@@ -193,9 +194,40 @@ else
     while :; do sleep 3600; done
 fi
 
+# A new kernel and RAM system: slot-os/boot.img on the card (an update, or a developer
+# copying one on) is written to the boot partition, checked, removed, and the Brick restarts
+# into it. A power cut while it is written leaves the Brick unable to start until the card
+# is flashed again: it takes about a second.
+NEW=$CARD/slot-os/boot.img
+if [ -f "$NEW" ]; then
+    BOOT=$(grep -l '^PARTNAME=boot$' /sys/class/block/mmcblk0p*/uevent 2>/dev/null | head -1)
+    BOOT=/dev/$(basename "$(dirname "$BOOT")")
+    room=$(( $(cat "/sys/class/block/$(basename "$BOOT")/size" 2>/dev/null || echo 0) * 512 ))
+    size=$(stat -c %s "$NEW")
+    if [ "$(head -c 8 "$NEW")" != 'ANDROID!' ] || [ "$size" -gt "$room" ] || [ ! -b "$BOOT" ]; then
+        stamp "slot-os/boot.img not used: not a boot image, or no room for it in $BOOT"
+        mv -f "$NEW" "$NEW.refused"
+    else
+        leds FFFFFF
+        stamp "writing slot-os/boot.img to $BOOT"
+        dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
+        if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$(md5sum < "$NEW" | cut -d' ' -f1)" ]; then
+            rm -f "$NEW"; sync
+            stamp "boot.img written; restarting"
+            cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null
+            umount "$CARD"; reboot -f
+        fi
+        stamp "boot.img did not read back the same; kept for the next start"
+    fi
+fi
+
 # The GPU driver (pvrsrvkm, dc_sunxi): pvrsrvctl loads both from here.
 ( cd /lib/modules/4.9.191 && pvrsrvctl --start ) > /run/gpu.log 2>&1
 stamp GPU driver loaded
+
+# The Wi-Fi chip's driver, in the background: it loads the chip's firmware, and Slot only
+# needs wlan0 once Wi-Fi is turned on (brick_wifi.sh waits for it).
+( cd /lib/modules/4.9.191 && insmod xradio_mac.ko && insmod xradio_core.ko && insmod xradio_wlan.ko ) > /run/wifi.log 2>&1 &
 
 # The mixer: the codec starts with its outputs switched off.
 sh /etc/mixer.sh > /run/alsa.log 2>&1
@@ -218,7 +250,7 @@ export SLOT_BOOT_TIMES="$TIMES"
 # Written meanwhile, not before Slot starts: the card is slow to write to.
 {
     echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
-    echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log; echo '--- mixer'; cat /run/alsa.log
+    echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log; echo '--- wifi driver'; cat /run/wifi.log; echo '--- mixer'; cat /run/alsa.log
     [ ! -f /run/fsck.log ] || { echo '--- card check'; cat /run/fsck.log; }
     [ ! -s /run/grow.log ] || { echo '--- card grown'; cat /run/grow.log; }
     echo '--- kernel log'; dmesg
