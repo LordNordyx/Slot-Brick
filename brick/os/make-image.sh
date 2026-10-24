@@ -82,7 +82,7 @@ install -m 755 "$OS/init" "$R/init"
 # u-boot's built-in settings, should it not read ours, start /rdinit or /sbin/init.
 ln -sf /init "$R/rdinit"
 ln -sf /init "$R/sbin/init"
-cat "$OS/VERSION" > "$R/etc/slot-os-version"
+echo "${SLOT_OS_VERSION:-dev}" > "$R/etc/slot-os-version"
 install -m 644 "$OS/asound.conf" "$R/etc/asound.conf"
 install -m 755 "$OS/mixer.sh" "$R/etc/mixer.sh"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:

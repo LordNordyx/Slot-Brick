@@ -351,6 +351,10 @@ Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release
 `update.txt` is signed with the release key, kept in the `UPDATE_SIGNING_KEY` repository
 secret (an Ed25519 private key, PEM); its public half is in `crates/slot/src/update.rs`, and
 Slot installs nothing it doesn't verify. Without the secret, a release refuses to build.
+The same release carries Slot OS, built from the same card (`brick/os/build.sh`, see
+[`brick/os/README.md`](brick/os/README.md)): `slot-os-vX.Y-sd-card.img.xz` to flash, and
+`slot-os-vX.Y-update.zip` with its own signed `update-os.txt`, which Slot OS's Update reads.
+Every merge to `main` does the same for the Dev build.
 Pushing a tag needs write access, so only maintainers can start one. Before tagging:
 
 1. Put the version at the top of [`brick/README.md`](brick/README.md) — it is what the card
