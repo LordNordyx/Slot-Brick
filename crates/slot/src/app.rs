@@ -3935,6 +3935,12 @@ impl App {
                     self.save_state();
                 }
                 PauseChoice::LoadState => self.leave_paused(Self::open_polaroids),
+                PauseChoice::Reset => {
+                    self.pause_menu = None;
+                    if let Some(snapshot) = &self.snapshot {
+                        snapshot.reset();
+                    }
+                }
                 PauseChoice::Quit => self.leave_paused(Self::eject),
             },
             _ => {}

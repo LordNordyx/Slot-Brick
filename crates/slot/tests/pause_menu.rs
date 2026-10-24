@@ -2,7 +2,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use common::{app_playing_in, app_playing_with, tmp_root_with_carts, StubSnapshot};
+use common::{app_playing_in, app_playing_with, tmp_root_with_carts, CoreSnapshot, StubSnapshot};
 use slot::app::{App, Phase};
 use slot::emu::Speed;
 use slot::session::Session;
@@ -126,6 +126,21 @@ fn load_state_with_nothing_saved_is_refused_and_the_menu_stays() {
     choose(&mut a, PauseChoice::LoadState);
     assert!(a.refusal_active(a.now()));
     assert_eq!(a.pause_menu(), Some(row(PauseChoice::LoadState)));
+}
+
+#[test]
+fn reset_game_starts_the_game_over_and_goes_back_to_it() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let core = CoreSnapshot::new();
+    for _ in 0..30 {
+        core.run_frame();
+    }
+    let mut a = app_playing_with(d.path(), "Emerald", core.boxed());
+    choose(&mut a, PauseChoice::Reset);
+    assert_eq!(core.bytes(), [0; 8], "the game did not start over");
+    assert_eq!(a.pause_menu(), None);
+    assert!(matches!(a.phase(), Phase::Playing { .. }));
+    assert_eq!(states(d.path()), 0, "reset saved a state");
 }
 
 #[test]

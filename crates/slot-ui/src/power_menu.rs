@@ -29,14 +29,16 @@ pub enum PauseChoice {
     Resume,
     SaveState,
     LoadState,
+    Reset,
     Quit,
 }
 
 impl PauseChoice {
-    pub const ALL: [PauseChoice; 4] = [
+    pub const ALL: [PauseChoice; 5] = [
         PauseChoice::Resume,
         PauseChoice::SaveState,
         PauseChoice::LoadState,
+        PauseChoice::Reset,
         PauseChoice::Quit,
     ];
 
@@ -45,6 +47,7 @@ impl PauseChoice {
             PauseChoice::Resume => "RESUME",
             PauseChoice::SaveState => "SAVE STATE",
             PauseChoice::LoadState => "LOAD STATE",
+            PauseChoice::Reset => "RESET GAME",
             PauseChoice::Quit => "QUIT GAME",
         }
     }
