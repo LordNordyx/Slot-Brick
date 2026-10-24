@@ -142,6 +142,10 @@ pub fn run() {
         eprintln!("slot: sim: stand-in hardware: {e}");
         std::process::exit(1);
     }
+    // Knowing the model means reading all of the stock MainUI (several MB): on a
+    // thread of its own, while the screen and sound open. The first to ask waits for it.
+    #[cfg(feature = "brick")]
+    let _ = std::thread::Builder::new().name("slot-model".into()).spawn(slot_power::model);
     #[cfg(feature = "sim")]
     let sim = slot::sim::start();
     #[cfg(feature = "sim")]
