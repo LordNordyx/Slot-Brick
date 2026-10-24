@@ -72,7 +72,6 @@ du
 ifconfig
 route
 udhcpc
-rfkill
 ip
 ping
 nslookup

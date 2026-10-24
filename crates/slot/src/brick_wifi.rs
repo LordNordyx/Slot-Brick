@@ -63,6 +63,9 @@ impl Supplicant for Control{
         if s.starts_with("FAIL") || s.starts_with("UNKNOWN"){Err("Wi-Fi service rejected the request".into())}else{Ok(s)}
     }
 }
+/// Starts a scan. A supplicant just started is already scanning by itself and answers
+/// FAIL-BUSY: its results come all the same.
+fn scan(c:&impl Supplicant)->Result<()>{match c.command("SCAN")?.as_str(){"OK"|"FAIL-BUSY"=>Ok(()),_=>Err("Wi-Fi service rejected the request".into())}}
 fn field<'a>(s:&'a str,key:&str)->Option<&'a str>{s.lines().find_map(|s|s.strip_prefix(key).and_then(|s|s.strip_prefix('=')))}
 fn pause(cancel:&AtomicBool,ms:u64)->Result<()>{for _ in 0..(ms+99)/100{if cancel.load(Ordering::Relaxed){return Err("Cancelled".into())}thread::sleep(Duration::from_millis(100));}Ok(())}
 /// Slot's own System/brick_wifi.sh always wins: it writes Logs/wifi.log and tries the
@@ -96,10 +99,16 @@ pub fn repair_at_boot(){
     let spawned=thread::Builder::new().name("slot-wifi-boot".into()).spawn(||{
         if !wanted(&card_root()){eprintln!("wifi: boot: Wi-Fi was turned off; leaving it off");return}
         let quiet=AtomicBool::new(false);
-        boot_repair(supplicant_answers,online,|up|helper_run(if up{"ensure"}else{"start"},&quiet),|ms|thread::sleep(Duration::from_millis(ms)));
+        // Slot OS starts no supplicant of its own: nothing to wait for.
+        let wait=if std::env::var_os("SLOT_OS").is_some(){0}else{FIRMWARE_WAIT_MS};
+        STARTING.store(true,Ordering::Relaxed);
+        boot_repair(wait,supplicant_answers,online,|up|{let r=helper_run(if up{"ensure"}else{"start"},&quiet);STARTING.store(false,Ordering::Relaxed);r},|ms|thread::sleep(Duration::from_millis(ms)));
+        STARTING.store(false,Ordering::Relaxed);
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
 }
+/// Startup is bringing Wi-Fi back on: until it has, the menu says so rather than "off".
+static STARTING:AtomicBool=AtomicBool::new(false);
 /// Where the Wi-Fi menu's on/off is kept, so startup brings Wi-Fi back as it was.
 const CHOICE_FILE:&str="Config/wifi.txt";
 /// Wi-Fi was left on: as last turned on or off in the menu, else whenever a network is saved.
@@ -122,9 +131,9 @@ const BOOT_POLL_MS:u64=1_000;
 /// Give the firmware a moment to start its supplicant; then repair it, or start one
 /// (`bring_up(up)`). A repair that fails (the supplicant not ready after all) is tried again
 /// shortly; one that works but leaves Wi-Fi offline once more after a while.
-fn boot_repair(up:impl Fn()->bool,online:impl Fn()->bool,mut bring_up:impl FnMut(bool)->Result<()>,sleep:impl Fn(u64)){
+fn boot_repair(firmware_wait:u64,up:impl Fn()->bool,online:impl Fn()->bool,mut bring_up:impl FnMut(bool)->Result<()>,sleep:impl Fn(u64)){
     let mut waited=0;
-    while !up() && waited<FIRMWARE_WAIT_MS{sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;}
+    while !up() && waited<firmware_wait{sleep(BOOT_POLL_MS);waited+=BOOT_POLL_MS;}
     for attempt in 1..=BOOT_TRIES{
         let was_up=up();
         if !was_up{eprintln!("wifi: boot: no supplicant answering; starting Wi-Fi");}
@@ -204,13 +213,16 @@ fn run(job:Job,cancel:&AtomicBool)->Result<Reply>{
         for _ in 0..20{if Control::open().is_ok(){break}pause(cancel,250)?;}
         return run(Job::Scan(false),cancel)
     }
-    let c=match Control::open(){Ok(c)=>c,Err(e)=>return if matches!(job,Job::Status){Ok(Reply{on:false,status:"Wi-Fi off / service unavailable".into(),networks:None})}else{Err(e)}};
+    let c=match Control::open(){Ok(c)=>c,Err(e)=>return match job{
+        Job::Status if STARTING.load(Ordering::Relaxed)=>Ok(Reply{on:true,status:"Turning Wi-Fi on...".into(),networks:None}),
+        Job::Status=>Ok(Reply{on:false,status:"Wi-Fi off / service unavailable".into(),networks:None}),
+        _=>Err(e)}};
     let s=c.command("STATUS")?;let connected=field(&s,"wpa_state")==Some("COMPLETED");
     let mut r=Reply{on:true,status:if connected{format!("{}  {}",name(&decode(field(&s,"ssid").unwrap_or("Connected"))),field(&s,"ip_address").unwrap_or("Waiting for IP"))}else{"Not connected".into()},networks:None};
     match job{
         Job::Status=>{},Job::Open|Job::Power(_)=>unreachable!(),
         Job::Scan(retry)=>{
-            if let Err(e)=c.ok("SCAN"){
+            if let Err(e)=scan(&c){
                 if !retry{return Err(e)}
                 // One started under a blocked radio answers but refuses scans until restarted,
                 // which is what turning Wi-Fi off and on does.
@@ -367,7 +379,7 @@ impl WifiMenu{
         if let Some(k)=&mut self.keyboard{if k.typed.is_some_and(|t|t.elapsed()>=SHOW_TYPED){k.typed=None;self.dirty=true;}}
         // Poll only while this menu is open; scanning is always explicit. An address still on
         // its way is checked on every couple of seconds, so it shows as soon as it comes.
-        let every=if self.status.contains("for IP"){Duration::from_secs(2)}else{Duration::from_secs(15)};
+        let every=if self.status.contains("for IP"){Duration::from_secs(2)}else if self.status.starts_with("Turning Wi-Fi on"){Duration::from_secs(1)}else{Duration::from_secs(15)};
         if self.list.is_none() && self.ra.is_none() && !self.busy() && self.keyboard.is_none() && self.refreshed.elapsed()>every{self.start(Job::Status);}
     }
     pub fn input(&mut self,a:Action)->bool{
@@ -571,24 +583,34 @@ impl Painter{
     #[test]fn boot_repair_repairs_a_late_firmware_supplicant(){
         let t=Cell::new(0u64);let runs=RefCell::new(Vec::new());
         // The firmware's supplicant appears 5 s in; a network joins 3 s after the repair.
-        boot_repair(||t.get()>=5_000,||!runs.borrow().is_empty()&&t.get()>=8_000,|up|{runs.borrow_mut().push(up);Ok(())},|ms|t.set(t.get()+ms));
+        boot_repair(FIRMWARE_WAIT_MS,||t.get()>=5_000,||!runs.borrow().is_empty()&&t.get()>=8_000,|up|{runs.borrow_mut().push(up);Ok(())},|ms|t.set(t.get()+ms));
         assert_eq!(*runs.borrow(),vec![true],"repaired the firmware's supplicant once");
     }
     #[test]fn boot_repair_starts_wifi_itself_when_the_firmware_never_does(){
         let t=Cell::new(0u64);let started=Cell::new(false);
-        boot_repair(||started.get(),||started.get()&&t.get()>=FIRMWARE_WAIT_MS+2_000,|up|{assert!(!up);started.set(true);Ok(())},|ms|t.set(t.get()+ms));
+        boot_repair(FIRMWARE_WAIT_MS,||started.get(),||started.get()&&t.get()>=FIRMWARE_WAIT_MS+2_000,|up|{assert!(!up);started.set(true);Ok(())},|ms|t.set(t.get()+ms));
         assert!(started.get(),"Wi-Fi was never started");
         assert!(t.get()<=FIRMWARE_WAIT_MS+JOIN_WAIT_MS,"waited past joining");
     }
+    #[test]fn on_slot_os_boot_repair_starts_wifi_at_once(){
+        let t=Cell::new(0u64);let started=Cell::new(false);
+        boot_repair(0,||started.get(),||started.get(),|up|{assert!(!up);started.set(true);Ok(())},|ms|t.set(t.get()+ms));
+        assert!(started.get());
+        assert_eq!(t.get(),0,"waited for a firmware supplicant there is none of");
+    }
+    #[test]fn a_scan_already_running_is_not_a_refusal(){
+        let m=Mock::new(vec![("SCAN",Ok("FAIL-BUSY")),("SCAN",Ok("OK")),("SCAN",Ok("FAIL"))]);
+        assert!(scan(&m).is_ok());assert!(scan(&m).is_ok());assert!(scan(&m).is_err());m.done();
+    }
     #[test]fn boot_repair_gives_up_after_its_tries(){
         let t=Cell::new(0u64);let runs=Cell::new(0);
-        boot_repair(||true,||false,|_|{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
+        boot_repair(FIRMWARE_WAIT_MS,||true,||false,|_|{runs.set(runs.get()+1);Ok(())},|ms|t.set(t.get()+ms));
         assert_eq!(runs.get(),BOOT_TRIES);
     }
     #[test]fn a_failed_repair_is_tried_again_soon(){
         // As on the Brick: the first repair finds the supplicant not answering yet.
         let t=Cell::new(0u64);let runs=RefCell::new(Vec::new());let fixed=Cell::new(false);
-        boot_repair(||true,||fixed.get(),|_|{runs.borrow_mut().push(t.get());if runs.borrow().len()==1{Err("no supplicant answering".into())}else{fixed.set(true);Ok(())}},|ms|t.set(t.get()+ms));
+        boot_repair(FIRMWARE_WAIT_MS,||true,||fixed.get(),|_|{runs.borrow_mut().push(t.get());if runs.borrow().len()==1{Err("no supplicant answering".into())}else{fixed.set(true);Ok(())}},|ms|t.set(t.get()+ms));
         let runs=runs.borrow();
         assert_eq!(runs.len(),2);
         assert!(runs[1]-runs[0]<=RETRY_MS,"waited {} ms to try again",runs[1]-runs[0]);
