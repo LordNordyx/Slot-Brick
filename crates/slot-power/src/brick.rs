@@ -59,14 +59,17 @@ impl Platform for BrickPlatform {
             let _ = fs::write(crate::hw("/sim/backlight"), format!("{level}\n"));
             return;
         }
-        if let Ok(dev) = OpenOptions::new().read(true).write(true).open("/dev/disp") {
-            let args = [0u64, level, 0, 0];
-            if unsafe { ioctl(dev.as_raw_fd(), 0x102, args.as_ptr()) } < 0 {
-                eprintln!(
-                    "slot: Brick brightness: {}",
-                    std::io::Error::last_os_error()
-                );
+        match OpenOptions::new().read(true).write(true).open("/dev/disp") {
+            Ok(dev) => {
+                let args = [0u64, level, 0, 0];
+                if unsafe { ioctl(dev.as_raw_fd(), 0x102, args.as_ptr()) } < 0 {
+                    eprintln!(
+                        "slot: Brick brightness: {}",
+                        std::io::Error::last_os_error()
+                    );
+                }
             }
+            Err(e) => eprintln!("slot: Brick brightness: /dev/disp: {e}"),
         }
     }
     fn battery(&self) -> Option<Battery> {

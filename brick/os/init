@@ -84,6 +84,18 @@ fi
 ( cd /lib/modules/4.9.191 && pvrsrvctl --start ) > /run/gpu.log 2>&1
 stamp GPU driver loaded
 
+# The mixer as the Brick needs it (speaker and headphone switches on, volumes), from Knulli:
+# the codec starts muted.
+alsactl -f /etc/asound.state restore > /run/alsa.log 2>&1
+stamp mixer set
+
+# For working on Slot OS: a script on the card, run before Slot, its output in Logs/debug.log.
+if [ -f "$CARD/slot-os/debug.sh" ]; then
+    mkdir -p "$ROOT/Logs"
+    sh "$CARD/slot-os/debug.sh" > "$ROOT/Logs/debug.log" 2>&1
+    stamp debug.sh done
+fi
+
 # A shell on the serial port (debug pads), for anyone with a UART adapter attached.
 [ -c /dev/ttyS0 ] && setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1' &
 
@@ -94,7 +106,7 @@ export SLOT_BOOT_TIMES="$TIMES"
 # Written meanwhile, not before Slot starts: the card is slow to write to.
 {
     echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
-    echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log
+    echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log; echo '--- mixer'; cat /run/alsa.log
     echo '--- kernel log'; dmesg
 } > "$ROOT/Logs/os.log" 2>&1 &
 

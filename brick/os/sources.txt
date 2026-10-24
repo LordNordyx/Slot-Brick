@@ -22,3 +22,5 @@ d11b684dd70d0839f78dae8afb3cadf57e86c54aea689eff320407990fe77acd libglslcompiler
 6d7991b79dd10fe3fcda561dd886ef66c698fe59ee62d6668191f1f020e7c621 libsrv_um.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libsrv_um.so
 524bfb2ef820f846872a0d0d907c2aaba48151f5f264c786a5c6f53879fb8d22 libusc.so https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/lib64/libusc.so
 d624f59912b38042330d1a1c71db2088d230c0cf4506a3aaab5eca24bee3196a pvrsrvctl https://raw.githubusercontent.com/knulli-cfw/ge8300-drivers/3213ecb88a9e9c6813a7a6aafe78da1f055aa050/fbdev/glibc/bin/pvrsrvctl
+# The Brick's mixer settings (speaker, headphone and line-out switches, volumes), as Knulli restores them.
+64c8be123f30e44aa5e47a21e62976e27ae5b72cb9309214ab45723576ee03ff asound.state https://raw.githubusercontent.com/knulli-cfw/knulli-linux/57afa662009641d181f57241bcc480119b131530/board/allwinner/a133/trimui-brick/boot/asound.state

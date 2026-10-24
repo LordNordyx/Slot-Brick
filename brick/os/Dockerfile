@@ -9,6 +9,6 @@ RUN dpkg --add-architecture arm64 \
       binutils-aarch64-linux-gnu \
  && mkdir -p /opt/arm64-debs && cd /opt/arm64-debs \
  && apt-get download libc6:arm64 libgcc-s1:arm64 libstdc++6:arm64 libasound2:arm64 \
-      libasound2-data busybox-static:arm64 \
+      libasound2-data alsa-utils:arm64 busybox-static:arm64 \
  && ls /opt/arm64-debs > /opt/arm64-debs/VERSIONS \
  && rm -rf /var/lib/apt/lists/*

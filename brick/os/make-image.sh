@@ -15,7 +15,10 @@ R=$WORK/root
 mkdir -p "$R"
 for deb in /opt/arm64-debs/*.deb; do dpkg-deb -x "$deb" "$R"; done
 rm -rf "$R/usr/share/doc" "$R/usr/share/lintian" "$R/usr/share/man" "$R/usr/share/locale" \
-    "$R/usr/lib/aarch64-linux-gnu/gconv" "$R/usr/share/bug" "$R/etc/ld.so.conf.d"
+    "$R/usr/lib/aarch64-linux-gnu/gconv" "$R/usr/share/bug" "$R/etc/ld.so.conf.d" \
+    "$R/lib/systemd" "$R/usr/lib/udev" "$R/usr/share/sounds" "$R/usr/share/alsa/speaker-test"
+# Of alsa-utils, only what sets up and tests the mixer.
+find "$R/usr/bin" "$R/usr/sbin" -type f ! -name amixer ! -name alsactl ! -name aplay ! -name speaker-test -delete
 mkdir -p "$R/etc" "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" "$R/proc" "$R/sys" "$R/dev" "$R/tmp" \
     "$R/run" "$R/root" "$R/mnt/SDCARD" "$R/lib/modules/4.9.191" "$R/lib/firmware" "$R/usr/lib"
 # busybox-static's applets, as links.
@@ -40,10 +43,11 @@ ln -sf /init "$R/rdinit"
 ln -sf /init "$R/sbin/init"
 cat "$OS/VERSION" > "$R/etc/slot-os-version"
 install -m 644 "$OS/asound.conf" "$R/etc/asound.conf"
+install -m 644 "$SRC/asound.state" "$R/etc/asound.state"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:
 # EGL, GLES, ALSA) must be here, or the card boots to a black screen.
 missing=0
-for elf in "$R"/usr/lib/*.so "$R/usr/bin/pvrsrvctl" "$CARD_FILES"/Slot/System/slot "$CARD_FILES"/Slot/System/*.so; do
+for elf in "$R"/usr/lib/*.so "$R"/usr/bin/* "$R"/usr/sbin/* "$CARD_FILES"/Slot/System/slot "$CARD_FILES"/Slot/System/*.so; do
     for lib in $(aarch64-linux-gnu-readelf -d "$elf" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p') libEGL.so.1 libGLESv2.so.2 libasound.so.2; do
         [ -e "$R/usr/lib/$lib" ] || [ -e "$R/lib/aarch64-linux-gnu/$lib" ] || [ -e "$R/usr/lib/aarch64-linux-gnu/$lib" ] \
             || { echo "missing $lib (for $(basename "$elf"))"; missing=1; }
