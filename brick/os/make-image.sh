@@ -114,9 +114,16 @@ echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R"
 
 # --- boot.img: TrimUI's kernel (their firmware's boot.fex) with our initramfs ---------------
 python3 "$OS/bootimg.py" "$TRIMUI/boot.fex" "$WORK/initramfs.gz" "$WORK/boot.img"
-# Knulli's u-boot settings (env.txt), with the kernel's console messages turned down
+# TrimUI's u-boot settings (their firmware's env.fex: a CRC, a flag byte, then name=value
+# strings), with the kernel's console messages turned down
 # (loglevel 1, was 8): at 115200 baud, printing them held up the boot.
-mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$OS/env.txt"
+python3 -c '
+import sys
+data = open(sys.argv[1], "rb").read()[5:]
+for line in filter(None, data.split(b"\0")):
+    print(("loglevel=1" if line.startswith(b"loglevel=") else line.decode()))
+' "$TRIMUI/env.fex" > "$WORK/env.txt"
+mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$WORK/env.txt"
 
 # --- The FAT partition: Slot and the player's folders ----------------------------------------
 # Made for a 1 TiB partition (32 KiB clusters, 256 MiB of FAT), then told it is $FAT_MIB MiB:

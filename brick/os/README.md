@@ -21,7 +21,7 @@ Out in `dist-os/`:
 ## How it fits together
 
 - **The card:** TrimUI's boot0 and u-boot, the boot partition (TrimUI's 4.9 kernel with our
-  initramfs, `bootimg.py`), u-boot's settings (`env.txt`) and one FAT32 partition holding
+  initramfs, `bootimg.py`), u-boot's settings (TrimUI's) and one FAT32 partition holding
   `Slot/`, `slot-os/` (glibc, ALSA, wpa_supplicant, the GPU and Wi-Fi drivers) and the boot
   logo (`bootlogo.py`). What comes from where is pinned in `sources.txt` and `Dockerfile`, and
   listed for players in `NOTICE.txt` (on the card as `slot-os/licenses`).

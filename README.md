@@ -387,7 +387,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [Brandon T. Kowalski](https://github.com/BrandonKowalski/slot) | Original Slot. frontend and Cart Studio |
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
-| [Knulli](https://github.com/knulli-cfw/knulli-linux) | Slot OS (experimental) starts from the SD card with Knulli's card layout and u-boot settings (TrimUI's own boot chain, kernel and drivers come from their firmware); details in `slot-os/licenses` on a Slot OS card |
+| [Knulli](https://github.com/knulli-cfw/knulli-linux) | Showed how to start the Brick from an SD card; Slot OS's card layout follows theirs (its boot chain, kernel and drivers are TrimUI's own, from their firmware; details in `slot-os/licenses` on a Slot OS card) |
 
 
 </details>
