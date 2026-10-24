@@ -17,6 +17,9 @@ for deb in /opt/arm64-debs/*.deb; do dpkg-deb -x "$deb" "$R"; done
 rm -rf "$R/usr/share/doc" "$R/usr/share/lintian" "$R/usr/share/man" "$R/usr/share/locale" \
     "$R/usr/lib/aarch64-linux-gnu/gconv" "$R/usr/share/bug" "$R/etc/ld.so.conf.d" \
     "$R/lib/systemd" "$R/usr/lib/udev" "$R/usr/share/sounds" "$R/usr/share/alsa/speaker-test"
+# The file system checkers stay in RAM, in /sbin: they run while the card is not mounted.
+mv "$R/usr/sbin/fsck.exfat" "$R/sbin/fsck.exfat"
+find "$R/sbin" ! -type d ! -name fsck.fat ! -name fsck.exfat -delete
 # Of alsa-utils, only what sets up and tests the mixer.
 find "$R/usr/bin" "$R/usr/sbin" -type f ! -name amixer ! -name alsactl ! -name aplay ! -name speaker-test -delete
 mkdir -p "$R/etc" "$R/bin" "$R/sbin" "$R/usr/bin" "$R/usr/sbin" "$R/proc" "$R/sys" "$R/dev" "$R/tmp" \
@@ -47,7 +50,7 @@ install -m 755 "$OS/mixer.sh" "$R/etc/mixer.sh"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:
 # EGL, GLES, ALSA) must be here, or the card boots to a black screen.
 missing=0
-for elf in "$R"/usr/lib/*.so "$R"/usr/bin/* "$R"/usr/sbin/* "$CARD_FILES"/Slot/System/slot "$CARD_FILES"/Slot/System/*.so; do
+for elf in "$R"/usr/lib/*.so "$R"/usr/bin/* "$R"/usr/sbin/* "$R"/sbin/fsck.* "$CARD_FILES"/Slot/System/slot "$CARD_FILES"/Slot/System/*.so; do
     for lib in $(aarch64-linux-gnu-readelf -d "$elf" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p') libEGL.so.1 libGLESv2.so.2 libasound.so.2; do
         [ -e "$R/usr/lib/$lib" ] || [ -e "$R/lib/aarch64-linux-gnu/$lib" ] || [ -e "$R/usr/lib/aarch64-linux-gnu/$lib" ] \
             || { echo "missing $lib (for $(basename "$elf"))"; missing=1; }

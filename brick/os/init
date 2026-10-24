@@ -27,7 +27,8 @@ stamp init started
 # whatever it is writing to the card at the time. Fed every 5 s from here on, as Knulli does.
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
 # How far startup got, for a Brick with no serial cable attached: a short buzz and blue
-# LEDs once this script runs, green once the card is mounted; red and a long buzz when no
+# LEDs once this script runs, yellow while the card is checked after the Brick lost power,
+# green once the card is mounted; red and a long buzz when no
 # card could be mounted. (u-boot showed the card's bootlogo.bmp before, if it got that far.)
 LEDS=/sys/class/led_anim
 leds() {
@@ -56,6 +57,31 @@ mount_card() {
     mount -t vfat -o ro,noatime,utf8,shortname=mixed,errors=remount-ro "$1" "$CARD" 2>>/run/mount.log \
         || mount -t exfat -o ro,noatime "$1" "$CARD" 2>>/run/mount.log
 }
+# Whether the file system was left in use (the Brick switched off or reset while it was
+# mounted): the flag the kernel sets on mounting and clears on unmounting, in the boot sector.
+# $1 the partition, $2 its file system (as mounted).
+dirty() {
+    case "$2" in
+        exfat) [ $(( $(dd if="$1" bs=1 skip=106 count=1 2>/dev/null | od -An -tu1) & 2 )) -ne 0 ] ;;
+        *) [ $(( $(dd if="$1" bs=1 skip=65 count=1 2>/dev/null | od -An -tu1) & 1 )) -ne 0 ] ;;
+    esac
+}
+# Repairs it. The checkers are in RAM, but glibc is on the card: it is copied to RAM first,
+# as the card cannot be mounted while it is checked.
+repair() {
+    mkdir -p /run/fsck
+    cp "$CARD/slot-os/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" "$CARD/slot-os/lib/aarch64-linux-gnu/libc.so.6" /run/fsck/ || return 1
+    umount "$CARD" || return 1
+    case "$2" in
+        exfat) check=/sbin/fsck.exfat; opts=-y ;;
+        *) check=/sbin/fsck.fat; opts='-a -w' ;;
+    esac
+    # shellcheck disable=SC2086
+    /run/fsck/ld-linux-aarch64.so.1 --library-path /run/fsck "$check" $opts "$1" > /run/fsck.log 2>&1
+    echo "exit $?" >> /run/fsck.log
+    rm -rf /run/fsck
+    mount_card "$1"
+}
 n=0
 while [ ! -b "$DEV" ] && [ "$n" -lt 500 ]; do sleep 0.01; n=$((n + 1)); done
 mkdir -p "$CARD"
@@ -63,7 +89,16 @@ mounted=
 for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
     [ -b "$dev" ] || continue
     if mount_card "$dev"; then
-        if [ -d "$CARD/Slot" ] && [ -d "$CARD/slot-os" ] && mount -o remount,rw "$CARD"; then mounted=$dev; break; fi
+        if [ -d "$CARD/Slot" ] && [ -d "$CARD/slot-os" ]; then
+            fs=$(awk -v d="$dev" '$1 == d { print $3 }' /proc/mounts)
+            if dirty "$dev" "$fs"; then
+                leds FFFF00
+                stamp "card left in use: checking it"
+                repair "$dev" "$fs" || mount_card "$dev"
+                stamp "card checked"
+            fi
+            if mount -o remount,rw "$CARD"; then mounted=$dev; break; fi
+        fi
         umount "$CARD"
     fi
 done
@@ -106,6 +141,7 @@ export SLOT_BOOT_TIMES="$TIMES"
 {
     echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
     echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log; echo '--- mixer'; cat /run/alsa.log
+    [ ! -f /run/fsck.log ] || { echo '--- card check'; cat /run/fsck.log; }
     echo '--- kernel log'; dmesg
 } > "$ROOT/Logs/os.log" 2>&1 &
 
