@@ -24,7 +24,7 @@ TIMES=/run/boot-times.log
 stamp() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$TIMES"; }
 stamp init started
 # The kernel arms the hardware watchdog at boot (16 s): unless it is fed, the Brick resets,
-# whatever it is writing to the card at the time. Fed every 5 s from here on, as Knulli does.
+# whatever it is writing to the card at the time. Fed every 5 s from here on.
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
 # The LEDs speak only when something out of the ordinary happens before Slot starts: white
 # while a system update (boot.img) is written; red and a long buzz when no card with Slot on
@@ -47,7 +47,7 @@ buzz() {
 } 2>/dev/null
 
 # The card: its fourth partition, FAT, holds Slot, the system's libraries (slot-os) and the
-# player's files. It should be mmcblk0p4 (as for Knulli); failing that, the partition that
+# player's files. It should be mmcblk0p4; failing that, the partition that
 # holds slot-os. Each is looked at read-only first: the Brick's internal storage must never
 # be written to.
 mount_card() {

@@ -14,9 +14,7 @@ own, from their firmware 1.1.1 (26 November 2025), what the Brick's stock system
   https://github.com/trimui/firmware_brick/releases/tag/v1.1.1-20251126
 Linux and u-boot are GPL-2.0 (GPL-2.0.txt). TrimUI has not published their source; it is
 theirs to provide.
-In u-boot's settings only the kernel's console messages are turned down. The card's layout
-follows Knulli's (https://github.com/knulli-cfw/knulli-linux), which showed how to start the
-Brick from an SD card.
+In u-boot's settings only the kernel's console messages are turned down.
 
 Kernel modules, firmware and GPU libraries
 ------------------------------------------
@@ -36,5 +34,3 @@ glibc, libstdc++, ALSA, busybox, wpa_supplicant, the FAT and partition tools and
 libraries they use are Debian 12 (bookworm) arm64 packages. Each package's copyright and
 licence file is in debian/, and debian/packages.txt lists the exact versions. Their
 source, at those versions: https://snapshot.debian.org and https://sources.debian.org.
-
-Thanks to the Knulli team, whose work on the Brick made Slot OS possible.

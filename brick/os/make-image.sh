@@ -143,10 +143,10 @@ mcopy -i "$WORK/fat.img" "$WORK/bootlogo.bmp" ::/bootlogo.bmp
 fsck.fat -n "$WORK/fat.img" >/dev/null
 
 # --- The card -------------------------------------------------------------------------------
-# Knulli's layout for the Brick: boot0 at 128 KiB (the GPT's entries moved to 80 KiB out of
+# The layout: boot0 at 128 KiB (the GPT's entries moved to 80 KiB out of
 # its way), u-boot's package at 16 400 KiB, then the partitions u-boot reads by name.
 MIB=1048576
-# The boot partition is 15 MiB, as Knulli's: u-boot reads all of it into memory at
+# The boot partition is 15 MiB: u-boot reads all of it into memory at
 # 0x45000000, and a bigger one may overwrite what u-boot still needs above it.
 BOOT_MIB=15
 [ "$(stat -c %s "$WORK/boot.img")" -le $((BOOT_MIB * MIB)) ] || { echo "boot.img is over $BOOT_MIB MiB" >&2; exit 1; }

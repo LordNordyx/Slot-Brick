@@ -1,15 +1,13 @@
 #!/bin/sh
-# The Brick's mixer at startup: the codec comes up with its outputs switched off. Slot sets
-# the volume itself, in software, so these stay fixed.
-# The levels are, for now, those Knulli uses for the Brick; to be checked against stock's own
-# (Slot's diagnose.sh on stock records them, see "mixer" in diagnostics.txt).
-set_control() { amixer -q cset name="$1" "$2" || echo "mixer: $1 = $2 failed"; }
-set_control 'LINEOUT Switch' on          # the speaker
-set_control 'HpSpeaker Switch' on        # the speaker amplifier
-set_control 'Headphone Switch' on
-set_control 'LINEOUT Output Select' 0    # DAC_SINGLE
-set_control 'LINEOUT volume' 26          # of 31
-set_control 'Headphone Volume' 2         # of 7
-set_control 'DAC volume' 0,0
-set_control 'digital volume' 0
-set_control 'DAC Swap' 1
+# The Brick's mixer at startup, as TrimUI's stock system sets it (/etc/rc.local and
+# runtrimui.sh in their firmware 1.1.1): the codec comes up with its outputs switched off.
+# The speaker is fed from the headphone output, through its amplifier; the line out is unused.
+# Slot sets the volume itself, in software, so these stay fixed.
+set_control() { amixer -q cset "$1" "$2" || echo "mixer: $1 = $2 failed"; }
+set_control name='Headphone Switch' 1
+set_control name='Headphone Volume' 3     # of 7
+set_control name='HpSpeaker Switch' 1     # the speaker amplifier
+# runtrimui.sh's `tinymix set 9 1` and `tinymix set 1 0`: tinymix counts controls from 0,
+# ALSA's numid from 1.
+set_control numid=10 1
+set_control numid=2 0
