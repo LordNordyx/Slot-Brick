@@ -8,31 +8,29 @@ passed on unchanged.
 
 TrimUI's boot chain and kernel
 ------------------------------
-boot0, the u-boot boot package (u-boot, the secure monitor, the SCP firmware, the device
-tree) and the Linux 4.9.191 kernel in the boot partition are TrimUI's own builds for the
-Brick, as Knulli ships them:
+boot0 and the u-boot boot package (u-boot, the secure monitor, the SCP firmware, the device
+tree) are TrimUI's builds for the Brick, as Knulli ships them to boot from an SD card:
   https://github.com/knulli-cfw/knulli-linux (board/allwinner/a133/trimui-brick,
   commit 57afa662009641d181f57241bcc480119b131530)
-Linux and u-boot are GPL-2.0 (GPL-2.0.txt). TrimUI has not published their source; it is
-theirs to provide. The u-boot settings (env) are Knulli's, with the kernel's console
-messages turned down.
+The u-boot settings (env) are Knulli's too, with the kernel's console messages turned down.
 
-Kernel modules and firmware
----------------------------
+The Linux 4.9.191 kernel in the boot partition is TrimUI's own, from their firmware 1.1.1
+(26 November 2025), the kernel the Brick's stock system runs:
+  https://github.com/trimui/firmware_brick/releases/tag/v1.1.1-20251126
+Linux and u-boot are GPL-2.0 (GPL-2.0.txt). TrimUI has not published their source; it is
+theirs to provide.
+
+Kernel modules, firmware and GPU libraries
+------------------------------------------
+From the same TrimUI firmware, as their system has them:
 - pvrsrvkm.ko, dc_sunxi.ko: the PowerVR GE8300 GPU's kernel driver, by Imagination
   Technologies, Dual MIT/GPL. Debug sections removed.
 - rgx.fw.22.102.54.38, rgx.sh.22.102.54.38: the GPU's firmware, Imagination Technologies.
+- libEGL, libGLESv2, libIMGegl, libglslcompiler, libpvrNULL_WSEGL, libsrv_um, libusc and
+  pvrsrvctl: Imagination Technologies' PowerVR GE8300 driver (DDK 1.19).
 - xradio_mac.ko, xradio_core.ko, xradio_wlan.ko: the XR829 Wi-Fi chip's driver, by
   XRadioTech, GPL. Debug sections removed.
 - boot_xr829.bin, fw_xr829.bin, sdd_xr829.bin, etf_xr829.bin: the XR829's firmware.
-All from Knulli, the commit above (board/allwinner/a133/fsoverlay).
-
-GPU libraries
--------------
-libEGL, libGLESv2, libIMGegl, libglslcompiler, libpvrNULL_WSEGL, libsrv_um, libusc and
-pvrsrvctl: Imagination Technologies' PowerVR GE8300 driver (DDK 1.19), from
-  https://github.com/knulli-cfw/ge8300-drivers (fbdev/glibc,
-  commit 3213ecb88a9e9c6813a7a6aafe78da1f055aa050)
 
 Debian packages
 ---------------

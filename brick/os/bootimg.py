@@ -1,6 +1,6 @@
 """Make Slot OS's boot.img (Android boot image, version 0, as TrimUI's u-boot reads it): the
-kernel and load addresses of a boot.img we are given (Knulli's, which carries TrimUI's stock
-kernel), with our initramfs in place of its own.
+kernel and load addresses of a boot.img we are given (boot.fex from TrimUI's firmware), with
+our initramfs in place of its own.
 
 Usage: python3 bootimg.py <their boot.img> <initramfs.gz> <out boot.img>
 """

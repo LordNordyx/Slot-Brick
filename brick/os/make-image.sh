@@ -10,6 +10,22 @@ OS=brick/os
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' 0
 
+# --- TrimUI's own files: their kernel, its drivers, the GPU libraries and firmware ----------
+# From TrimUI's firmware release (sources.txt): the boot image as it is, and from their
+# system, each file below.
+TRIMUI=$WORK/trimui
+python3 "$OS/trimui-firmware.py" "$SRC/TG3040_Brick_firmware_v1.1.1.zip" "$TRIMUI"
+for f in lib/modules/4.9.191/pvrsrvkm.ko lib/modules/4.9.191/dc_sunxi.ko \
+         lib/modules/4.9.191/xradio_mac.ko lib/modules/4.9.191/xradio_core.ko lib/modules/4.9.191/xradio_wlan.ko \
+         lib/firmware/rgx.fw.22.102.54.38 lib/firmware/rgx.sh.22.102.54.38 \
+         lib/firmware/boot_xr829.bin lib/firmware/fw_xr829.bin lib/firmware/sdd_xr829.bin lib/firmware/etf_xr829.bin \
+         usr/lib/libEGL.so usr/lib/libGLESv2.so usr/lib/libIMGegl.so usr/lib/libglslcompiler.so \
+         usr/lib/libpvrNULL_WSEGL.so usr/lib/libsrv_um.so usr/lib/libusc.so usr/bin/pvrsrvctl; do
+    debugfs -R "dump /$f $TRIMUI/$(basename "$f")" "$TRIMUI/rootfs.fex" 2>/dev/null
+    [ -s "$TRIMUI/$(basename "$f")" ] || { echo "not in TrimUI's system: /$f" >&2; exit 1; }
+done
+rm -f "$TRIMUI/rootfs.fex"
+
 # --- The RAM system (initramfs) -------------------------------------------------------------
 R=$WORK/root
 mkdir -p "$R"
@@ -49,19 +65,19 @@ done
 # glibc's loader where every aarch64 binary looks for it.
 ln -sf aarch64-linux-gnu/ld-linux-aarch64.so.1 "$R/lib/ld-linux-aarch64.so.1"
 for f in libEGL.so libGLESv2.so libIMGegl.so libglslcompiler.so libpvrNULL_WSEGL.so libsrv_um.so libusc.so; do
-    install -m 755 "$SRC/$f" "$R/usr/lib/$f"
+    install -m 755 "$TRIMUI/$f" "$R/usr/lib/$f"
 done
 ln -sf libEGL.so "$R/usr/lib/libEGL.so.1"
 ln -sf libGLESv2.so "$R/usr/lib/libGLESv2.so.2"
-install -m 755 "$SRC/pvrsrvctl" "$R/usr/bin/pvrsrvctl"
+install -m 755 "$TRIMUI/pvrsrvctl" "$R/usr/bin/pvrsrvctl"
 # The GPU module as shipped carries 20 MB of debug sections the kernel never reads.
-aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/pvrsrvkm.ko" "$SRC/pvrsrvkm.ko"
-aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/dc_sunxi.ko" "$SRC/dc_sunxi.ko"
-cp "$SRC"/rgx.fw.22.102.54.38 "$SRC"/rgx.sh.22.102.54.38 "$R/lib/firmware/"
+aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/pvrsrvkm.ko" "$TRIMUI/pvrsrvkm.ko"
+aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/dc_sunxi.ko" "$TRIMUI/dc_sunxi.ko"
+cp "$TRIMUI"/rgx.fw.22.102.54.38 "$TRIMUI"/rgx.sh.22.102.54.38 "$R/lib/firmware/"
 for m in xradio_mac xradio_core xradio_wlan; do
-    aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/$m.ko" "$SRC/$m.ko"
+    aarch64-linux-gnu-strip --strip-debug -o "$R/lib/modules/4.9.191/$m.ko" "$TRIMUI/$m.ko"
 done
-cp "$SRC"/boot_xr829.bin "$SRC"/fw_xr829.bin "$SRC"/sdd_xr829.bin "$SRC"/etf_xr829.bin "$R/lib/firmware/"
+cp "$TRIMUI"/boot_xr829.bin "$TRIMUI"/fw_xr829.bin "$TRIMUI"/sdd_xr829.bin "$TRIMUI"/etf_xr829.bin "$R/lib/firmware/"
 install -m 755 "$OS/init" "$R/init"
 # u-boot's built-in settings, should it not read ours, start /rdinit or /sbin/init.
 ln -sf /init "$R/rdinit"
@@ -96,8 +112,8 @@ cp -r "$LIC" "$SYS/licenses"
 ( cd "$R" && find . | LC_ALL=C sort | cpio -o -H newc --quiet ) | gzip -9 -n > "$WORK/initramfs.gz"
 echo "initramfs: $(du -h "$WORK/initramfs.gz" | cut -f1) (unpacked $(du -sh "$R" | cut -f1)); on the card: $(du -sh "$SYS" | cut -f1)"
 
-# --- boot.img: TrimUI's kernel (from Knulli's boot.img) with our initramfs -------------------
-python3 "$OS/bootimg.py" "$SRC/knulli-boot.img" "$WORK/initramfs.gz" "$WORK/boot.img"
+# --- boot.img: TrimUI's kernel (their firmware's boot.fex) with our initramfs ---------------
+python3 "$OS/bootimg.py" "$TRIMUI/boot.fex" "$WORK/initramfs.gz" "$WORK/boot.img"
 # Knulli's u-boot settings (env.txt), with the kernel's console messages turned down
 # (loglevel 1, was 8): at 115200 baud, printing them held up the boot.
 mkenvimage -r -p 0 -s 0x20000 -o "$WORK/env.img" "$OS/env.txt"

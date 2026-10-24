@@ -7,7 +7,7 @@ FROM debian:bookworm-slim
 RUN dpkg --add-architecture arm64 \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates cpio dosfstools gdisk mtools python3 python3-pil u-boot-tools xz-utils \
+      ca-certificates cpio dosfstools e2fsprogs gdisk mtools python3 python3-pil u-boot-tools xz-utils \
       binutils-aarch64-linux-gnu \
  && mkdir -p /opt/arm64-debs && cd /opt/arm64-debs \
  && apt-get download libc6:arm64 libgcc-s1:arm64 libstdc++6:arm64 libasound2:arm64 \
