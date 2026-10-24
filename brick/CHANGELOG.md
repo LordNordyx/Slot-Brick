@@ -7,6 +7,7 @@
 - Brick Pro (experimental): recognised, with its left stick as the D-pad and its own LED row.
 - Faster first screen, and Wi-Fi fixes.
 - Slot shows its shelf sooner; on Slot OS in under 3 seconds.
+- HOME → System → Font: pick the font all of Slot's text is drawn in. GohuFont comes with Slot, and any `.ttf` or `.otf` you put in `Slot/Fonts` shows up too.
 
 ## v0.44
 **New since v0.43:**

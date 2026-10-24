@@ -10,10 +10,34 @@ pub struct Layout {
     pub tracking: f32,
 }
 
-pub fn label_font() -> Option<&'static Font> {
+/// The font picked under HOME → System → Font, set once at startup before anything is drawn.
+static CHOSEN: OnceLock<Font> = OnceLock::new();
+
+/// Slot's own font (Open Sans Bold): the default, and where a chosen font lacks a character.
+fn built_in() -> Option<&'static Font> {
     static FONT: OnceLock<Option<Font>> = OnceLock::new();
     FONT.get_or_init(|| Font::from_bytes(LABEL_TTF, FontSettings::default()).ok())
         .as_ref()
+}
+
+/// Uses `bytes` (a TTF or OTF) for all text from now on. False when they are not a font, or
+/// one was set already.
+pub fn set_label_font(bytes: &[u8]) -> bool {
+    Font::from_bytes(bytes, FontSettings::default())
+        .is_ok_and(|font| CHOSEN.set(font).is_ok())
+}
+
+pub fn label_font() -> Option<&'static Font> {
+    CHOSEN.get().or_else(built_in)
+}
+
+/// The font `ch` is drawn in: `font`, or the built-in one where `font` has no such character,
+/// so a name never shows an empty box.
+pub fn font_for(font: &Font, ch: char) -> &Font {
+    match font.lookup_glyph_index(ch) {
+        0 if !ch.is_whitespace() => built_in().unwrap_or(font),
+        _ => font,
+    }
 }
 
 pub fn fit(
@@ -88,7 +112,7 @@ pub fn coverage(dst_w: u32, dst_h: u32, layout: &Layout) -> Vec<u8> {
     for line in &layout.lines {
         let mut pen = (dst_w as f32 - line_width(font, line, layout.px, layout.tracking)) / 2.0;
         for ch in line.chars() {
-            let (m, cov) = font.rasterize(ch, layout.px);
+            let (m, cov) = font_for(font, ch).rasterize(ch, layout.px);
             stamp(
                 &mut out,
                 dst_w,
@@ -117,7 +141,7 @@ pub fn line_width(font: &Font, line: &str, px: f32, tracking: f32) -> f32 {
     let mut w = 0.0;
     let mut n = 0;
     for ch in line.chars() {
-        w += font.metrics(ch, px).advance_width;
+        w += font_for(font, ch).metrics(ch, px).advance_width;
         n += 1;
     }
     w + tracking * (n as f32 - 1.0).max(0.0)

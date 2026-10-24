@@ -64,10 +64,11 @@ pub enum QuickRow {
     Ps1Shader,
     Ps1Dithering,
     Ps1Overlay,
+    Font,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 51] = [
+    pub const ALL: [QuickRow; 52] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -119,18 +120,19 @@ impl QuickRow {
         QuickRow::Ps1Shader,
         QuickRow::Ps1Dithering,
         QuickRow::Ps1Overlay,
+        QuickRow::Font,
     ];
 
     #[cfg(not(feature = "brick"))]
     pub const MAIN: [QuickRow; 4] = [QuickRow::Screen, QuickRow::Game, QuickRow::Library, QuickRow::System];
     #[cfg(not(feature = "brick"))]
-    pub const SYSTEM: [QuickRow; 2] = [QuickRow::DateTime, QuickRow::About];
+    pub const SYSTEM: [QuickRow; 3] = [QuickRow::DateTime, QuickRow::Font, QuickRow::About];
 
     #[cfg(feature = "brick")]
     pub const MAIN: [QuickRow; 8] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::System];
-    /// System: the Brick's lights, its clock, and what Slot is.
+    /// System: the Brick's lights, its clock, the font, and what Slot is.
     #[cfg(feature = "brick")]
-    pub const SYSTEM: [QuickRow; 4] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::AutoClock,QuickRow::About];
+    pub const SYSTEM: [QuickRow; 5] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::AutoClock,QuickRow::Font,QuickRow::About];
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
     /// The Brick Pro's: its sticks have lights of their own.
     pub const LIGHTS_PRO: [QuickRow; 7] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedSticks,QuickRow::LedColor,QuickRow::LedEffect];
@@ -158,6 +160,16 @@ impl QuickRow {
     pub const SCREEN_PS1: [QuickRow; 3] = [QuickRow::Ps1Shader, QuickRow::Ps1Dithering, QuickRow::Ps1Overlay];
 
     /// The system an Overlay row picks the overlay for.
+    /// Rows that read a name rather than a fixed value (an overlay's, the font's), numbered:
+    /// the overlay rows by their platform, then Font.
+    pub const NAMED: usize = slot_store::Platform::ALL.len() + 1;
+    pub fn named(self) -> Option<usize> {
+        match self {
+            QuickRow::Font => Some(slot_store::Platform::ALL.len()),
+            _ => self.overlay_of().map(|p| p.index()),
+        }
+    }
+
     pub fn overlay_of(self) -> Option<slot_store::Platform> {
         use slot_store::Platform;
         Some(match self {
@@ -207,7 +219,7 @@ impl QuickRow {
             | QuickRow::EjectSave
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown => &QuickRow::GAME,
-            QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::About => &QuickRow::SYSTEM,
+            QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::Font | QuickRow::About => &QuickRow::SYSTEM,
             QuickRow::LibrarySort | QuickRow::LibraryShow | QuickRow::LibraryPlayTime | QuickRow::LibraryTitleCard => &QuickRow::LIBRARY,
             _ => &QuickRow::MAIN,
         }
@@ -257,6 +269,7 @@ impl QuickRow {
             QuickRow::Update => "Update",
             QuickRow::System => "System",
             QuickRow::AutoClock => "Auto Clock",
+            QuickRow::Font => "Font",
             QuickRow::Lights => "LEDs",
             QuickRow::LedMode => "Lights",
             QuickRow::LedTop => "Top Bar",
