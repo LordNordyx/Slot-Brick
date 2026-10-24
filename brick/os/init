@@ -28,6 +28,7 @@ stamp init started
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
 # How far startup got, for a Brick with no serial cable attached: a short buzz and blue
 # LEDs once this script runs, yellow while the card is checked after the Brick lost power,
+# purple while the card is grown to its full size on first boot,
 # green once the card is mounted; red and a long buzz when no
 # card could be mounted. (u-boot showed the card's bootlogo.bmp before, if it got that far.)
 LEDS=/sys/class/led_anim
@@ -82,6 +83,54 @@ repair() {
     rm -rf /run/fsck
     mount_card "$1"
 }
+# First boot: the image's card partition is 1 GiB, whatever the card's size. Grown to the
+# card's end, in two steps that each look at the card, not at a note, so a power cut or a
+# second start picks up where it stopped:
+# 1. the partition, when the card has more than 64 MiB free after it. The kernel learns of
+#    the new size by rereading the table, or else at a restart.
+# 2. the file system, when it is smaller than its partition: what is on it (Slot and
+#    slot-os, some 30 MB on a freshly flashed card) is copied to RAM, the partition is
+#    formatted at its full size and the copy put back. A card already holding more than
+#    300 MB (games copied on before the first start) is left at its size.
+# $1 the partition, mounted read-only on $CARD.
+DISK=/dev/mmcblk0
+grow() {
+    part=$(basename "$1")
+    start=$(cat "/sys/class/block/$part/start") size=$(cat "/sys/class/block/$part/size")
+    total=$(cat "/sys/class/block/$(basename "$DISK")/size")
+    fat=$(dd if="$1" bs=1 skip=32 count=4 2>/dev/null | od -An -tu4 | tr -d ' ')
+    room=$((total - start - size)) short=$((size - fat))
+    [ "$room" -gt 131072 ] || [ "$short" -gt 131072 ] || return 0
+    used=$(du -sm "$CARD" | cut -f1)
+    if [ "$used" -gt 300 ]; then echo "card not grown: $used MB on it already"; return 0; fi
+    leds FF00FF
+    stamp "growing the card (${used} MB on it, $((room / 2048)) MiB free after it)"
+    T=/run/grow
+    mkdir -p "$T" && cp -a "$CARD/." "$T/" || { rm -rf "$T"; return 1; }
+    L=$T/slot-os/lib/aarch64-linux-gnu:$T/slot-os/usr/lib/aarch64-linux-gnu
+    run() { "$T/slot-os/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" --library-path "$L" "$@"; }
+    umount "$CARD" || return 1
+    n=${part##*p}
+    if [ "$room" -gt 131072 ]; then
+        # Its name, type and flags as the image made them: u-boot finds it by name.
+        run /sbin/sgdisk -e -d "$n" -n "$n:$start:0" -c "$n:boot-resource" -t "$n:0700" -A "$n:set:2" "$DISK" || return 1
+        sync
+        if ! blockdev --rereadpt "$DISK"; then
+            echo 'card partition grown; restarting to use it'; reboot -f
+        fi
+        w=0
+        while [ ! -b "$1" ]; do
+            sleep 0.1; w=$((w + 1))
+            [ "$w" -lt 50 ] || { echo "$1 gone after rereading; restarting"; reboot -f; }
+        done
+    fi
+    run /sbin/mkfs.fat -F 32 -n SLOT "$1" || return 1
+    mount -t vfat -o rw,noatime,utf8,shortname=mixed "$1" "$CARD" || return 1
+    cp -r "$T/." "$CARD/" && sync || return 1
+    rm -rf "$T"
+    mount -o remount,ro "$CARD"
+    stamp "card grown to $(( $(cat "/sys/class/block/$part/size") / 2048 )) MiB"
+}
 n=0
 while [ ! -b "$DEV" ] && [ "$n" -lt 500 ]; do sleep 0.01; n=$((n + 1)); done
 mkdir -p "$CARD"
@@ -97,6 +146,7 @@ for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
                 repair "$dev" "$fs" || mount_card "$dev"
                 stamp "card checked"
             fi
+            [ "$dev" != "$DEV" ] || [ "$fs" != vfat ] || grow "$dev" >> /run/grow.log 2>&1 || mount_card "$dev"
             if mount -o remount,rw "$CARD"; then mounted=$dev; break; fi
         fi
         umount "$CARD"
@@ -142,6 +192,7 @@ export SLOT_BOOT_TIMES="$TIMES"
     echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
     echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log; echo '--- mixer'; cat /run/alsa.log
     [ ! -f /run/fsck.log ] || { echo '--- card check'; cat /run/fsck.log; }
+    [ ! -s /run/grow.log ] || { echo '--- card grown'; cat /run/grow.log; }
     echo '--- kernel log'; dmesg
 } > "$ROOT/Logs/os.log" 2>&1 &
 

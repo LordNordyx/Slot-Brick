@@ -67,3 +67,5 @@ od
 hexdump
 blkid
 watchdog
+blockdev
+du
