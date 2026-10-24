@@ -50,7 +50,10 @@ impl GpioInput {
         let regs = unsafe {
             let fd = libc::open(c"/dev/mem".as_ptr(), libc::O_RDWR | libc::O_SYNC);
             if fd < 0 {
-                return Err(format!("Brick GPIO: /dev/mem: {}", std::io::Error::last_os_error()));
+                return Err(format!(
+                    "Brick GPIO: /dev/mem: {}",
+                    std::io::Error::last_os_error()
+                ));
             }
             let map = libc::mmap(
                 std::ptr::null_mut(),
@@ -62,7 +65,10 @@ impl GpioInput {
             );
             libc::close(fd);
             if map == libc::MAP_FAILED {
-                return Err(format!("Brick GPIO: mmap: {}", std::io::Error::last_os_error()));
+                return Err(format!(
+                    "Brick GPIO: mmap: {}",
+                    std::io::Error::last_os_error()
+                ));
             }
             map as *mut u8
         };
@@ -107,12 +113,18 @@ impl GpioInput {
 fn changes(old: u32, new: u32) -> impl Iterator<Item = RawEvent> {
     PINS.iter().enumerate().filter_map(move |(i, &(_, btn))| {
         let bit = 1 << i;
-        (old & bit != new & bit).then_some(if new & bit != 0 { RawEvent::Down(btn) } else { RawEvent::Up(btn) })
+        (old & bit != new & bit).then_some(if new & bit != 0 {
+            RawEvent::Down(btn)
+        } else {
+            RawEvent::Up(btn)
+        })
     })
 }
 
 fn bit_of(btn: Btn) -> u32 {
-    PINS.iter().position(|&(_, b)| b == btn).map_or(0, |i| 1 << i)
+    PINS.iter()
+        .position(|&(_, b)| b == btn)
+        .map_or(0, |i| 1 << i)
 }
 
 impl InputSource for GpioInput {
@@ -153,15 +165,24 @@ mod tests {
     #[test]
     fn each_button_has_a_pin_of_its_own() {
         for (i, (pin, btn)) in PINS.iter().enumerate() {
-            assert!(PINS[i + 1..].iter().all(|(p, b)| p != pin && b != btn), "{pin} {btn:?} twice");
+            assert!(
+                PINS[i + 1..].iter().all(|(p, b)| p != pin && b != btn),
+                "{pin} {btn:?} twice"
+            );
         }
     }
 
     #[test]
     fn a_change_of_pins_is_presses_and_releases() {
         let (a, b) = (bit_of(Btn::A), bit_of(Btn::B));
-        assert_eq!(changes(0, a).collect::<Vec<_>>(), vec![RawEvent::Down(Btn::A)]);
-        assert_eq!(changes(a, b).collect::<Vec<_>>(), vec![RawEvent::Up(Btn::A), RawEvent::Down(Btn::B)]);
+        assert_eq!(
+            changes(0, a).collect::<Vec<_>>(),
+            vec![RawEvent::Down(Btn::A)]
+        );
+        assert_eq!(
+            changes(a, b).collect::<Vec<_>>(),
+            vec![RawEvent::Up(Btn::A), RawEvent::Down(Btn::B)]
+        );
         assert_eq!(changes(b, b).count(), 0);
     }
 }

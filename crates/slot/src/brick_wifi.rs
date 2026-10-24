@@ -121,7 +121,10 @@ pub fn repair_at_boot(){
         // Slot OS starts no supplicant of its own: nothing to wait for.
         let wait=if std::env::var_os("SLOT_OS").is_some(){0}else{FIRMWARE_WAIT_MS};
         STARTING.store(true,Ordering::Relaxed);
-        boot_repair(wait,supplicant_answers,online,|up|{let r=helper_run(if up{"ensure"}else{"start"},&quiet);STARTING.store(false,Ordering::Relaxed);r},|ms|thread::sleep(Duration::from_millis(ms)));
+        boot_repair(wait,supplicant_answers,online,|up|{
+            // Turned off in the menu meanwhile: the player's choice stands.
+            if !wanted(&card_root()){STARTING.store(false,Ordering::Relaxed);return Ok(())}
+            let r=helper_run(if up{"ensure"}else{"start"},&quiet);STARTING.store(false,Ordering::Relaxed);r},|ms|thread::sleep(Duration::from_millis(ms)));
         STARTING.store(false,Ordering::Relaxed);
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
@@ -226,6 +229,8 @@ fn run(job:Job,cancel:&AtomicBool)->Result<Reply>{
         return run(Job::Status,cancel)
     }
     if let Job::Power(on)=job{
+        // The player's own choice: no longer "Turning Wi-Fi on..." while startup waits.
+        STARTING.store(false,Ordering::Relaxed);
         service(on,cancel)?;
         remember(on);
         if !on{return Ok(Reply{on:false,status:"Wi-Fi off".into(),networks:Some(Vec::new())})}

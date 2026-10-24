@@ -156,7 +156,10 @@ impl BrickLeds {
         let off = s.mode == 1 || self.power_state == LedState::Off;
         self.write("effect_enable","1")?;
         for (name,level) in self.layout.levels(s) {
-            let brightness = if warning && name == "max_scale_f1f2" { 20 }
+            // The older driver's one brightness stays up for the low-battery alarm, which
+            // shows even with the LEDs turned off, as on the newer driver.
+            let brightness = if warning && self.layout.single { 100 }
+                else if warning && name == "max_scale_f1f2" { 20 }
                 else if off { 0 } else { u32::from(level) * 20 };
             self.write(name,&brightness.to_string())?;
         }
@@ -165,7 +168,7 @@ impl BrickLeds {
             let blink = alarm && self.power_state == LedState::VeryLow;
             let colour=if alarm { "FF0000" } else { COLORS[s.color as usize] };
             let colour=if !self.layout.single { colour.to_string() }
-                else { dimmed(colour, if off { 0 } else if alarm { 1 } else { self.layout.level(zone,s) }) };
+                else { dimmed(colour, if alarm { 1 } else if off { 0 } else { self.layout.level(zone,s) }) };
             self.write(&format!("effect_rgb_hex_{zone}"),&colour)?;
             self.write(&format!("effect_cycles_{zone}"),"-1")?;
             self.write(&format!("effect_duration_{zone}"),if blink { "500" } else { "2000" })?;

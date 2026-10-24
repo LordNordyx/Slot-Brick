@@ -1,7 +1,8 @@
 #!/bin/sh
 # Build the Slot OS SD card image: TrimUI's boot chain and kernel, a small system in RAM that
 # starts Slot directly, and a FAT partition with Slot's card files. Needs Docker.
-# Usage: brick/os/build.sh [card files, default dist-brick] [FAT size in MiB, default 1024]
+# Usage: brick/os/build.sh [card files, default dist-brick] [FAT size in MiB, default 2560; at least
+# about 2304, or the FAT32 has too few clusters]
 # Output: dist-os/slot-os.img.xz, for Raspberry Pi Imager, balenaEtcher or dd.
 set -eu
 cd "$(dirname "$0")/../.."

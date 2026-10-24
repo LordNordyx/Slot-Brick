@@ -282,6 +282,8 @@ while :; do
     # Slot again, keeping the crash log; three quick ends in a row and it powers off.
     if [ "$status" -ge 128 ]; then
         mkdir -p "$ROOT/Logs/crash" && cp "$ROOT/Logs/slot.log" "$ROOT/Logs/crash/slot-$(date '+%Y-%m-%d_%H-%M-%S').log"
+        # The last five, as launch.sh keeps on stock.
+        ls -1t "$ROOT"/Logs/crash/slot-*.log 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
     fi
     if [ $(( $(cut -d. -f1 /proc/uptime) - started )) -lt 10 ]; then quick=$((quick + 1)); else quick=0; fi
     [ "$quick" -lt 3 ] || { echo 'Slot OS: Slot keeps ending; powering off' >> "$ROOT/Logs/os.log"; cleanup; poweroff -f; }

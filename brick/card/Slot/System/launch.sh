@@ -87,7 +87,7 @@ if [ "$status" -ge 128 ]; then
     mkdir -p "$CRASH" && cp "$SLOT_ROOT/Logs/slot.log" "$CRASH/slot-$(date '+%Y-%m-%d_%H-%M-%S').log" \
         && echo "Crash log kept in Logs/crash"
     # Redo the hardware report on the next start, for the bug report.
-    rm -f "$SLOT_ROOT/Logs/diagnostics.txt"
+    rm -f "$DIAG"
     ls -1t "$CRASH"/slot-*.log 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
 fi
 sync
