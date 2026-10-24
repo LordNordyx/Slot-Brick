@@ -209,11 +209,22 @@ pub fn offer(installed: &Installed, m: &Manifest) -> Offer {
     }
 }
 
-/// Where update.txt and the zip are, for each channel.
+/// The manifest this Slot reads: Slot OS cards hold other files than stock cards (slot-os/,
+/// the boot image, no stock hooks), so each has its own zip and its own update-os.txt.
+fn manifest_name(slot_os: bool) -> &'static str {
+    if slot_os {
+        "update-os.txt"
+    } else {
+        "update.txt"
+    }
+}
+
+/// Where the manifest and the zip are, for each channel.
 fn manifest_url(base: &str, channel: Channel) -> String {
+    let name = manifest_name(std::env::var_os("SLOT_OS").is_some());
     match channel {
-        Channel::Release => format!("{base}/latest/download/update.txt"),
-        Channel::Dev => format!("{base}/download/dev/update.txt"),
+        Channel::Release => format!("{base}/latest/download/{name}"),
+        Channel::Dev => format!("{base}/download/dev/{name}"),
     }
 }
 
@@ -361,9 +372,10 @@ fn free_space(path: &Path) -> Option<u64> {
 /// Slot's own files on the card, which an update replaces. Everything else is the player's:
 /// games, saves, states, labels, BIOS, settings, wallpapers, and the boot picture they chose.
 /// Slot/AUTOBOOT says whether Slot starts by itself, so it is left as it is; trimui/ is only
-/// for installing from a computer.
+/// for installing from a computer. On a Slot OS card, slot-os/ (its libraries, drivers and a
+/// new boot.img, which init installs) and the boot logo are Slot's too; stock zips have none.
 pub fn ours(rel: &str) -> bool {
-    const OURS: [&str; 7] = [
+    const OURS: [&str; 8] = [
         ".slot-boot/",
         "Apps/Slot/",
         "Apps/SlotBootRestore/",
@@ -371,11 +383,12 @@ pub fn ours(rel: &str) -> bool {
         "Apps/BootLogo/",
         "Slot/System/",
         "Slot/Overlays/",
+        "slot-os/",
     ];
     if rel.starts_with("Apps/BootLogo/Image/") {
         return rel == "Apps/BootLogo/Image/README.txt";
     }
-    rel == "Slot/README.md" || OURS.iter().any(|p| rel.starts_with(p))
+    rel == "Slot/README.md" || rel == "bootlogo.bmp" || OURS.iter().any(|p| rel.starts_with(p))
 }
 
 /// A path inside the zip's SD-CARD/ that stays inside it.
@@ -662,9 +675,16 @@ mod tests {
     }
 
     #[test]
+    fn slot_os_reads_its_own_manifest() {
+        assert_eq!(manifest_name(false), "update.txt");
+        assert_eq!(manifest_name(true), "update-os.txt");
+    }
+
+    #[test]
     fn only_slots_own_files_are_replaced() {
         for rel in ["Slot/System/slot", "Slot/System/licenses/a.txt", ".slot-boot/boot.sh", "Apps/Slot/launch.sh",
-                    "Apps/BootLogo/Image/README.txt", "Slot/Overlays/GB/A.png", "Slot/README.md"] {
+                    "Apps/BootLogo/Image/README.txt", "Slot/Overlays/GB/A.png", "Slot/README.md",
+                    "slot-os/boot.img", "slot-os/lib/aarch64-linux-gnu/libc.so.6", "bootlogo.bmp"] {
             assert!(ours(rel), "{rel}");
         }
         for rel in ["Slot/Games/GB/a.gb", "Slot/Saves/GB/a.sav", "Slot/Config/wifi.txt", "Slot/BIOS/gba_bios.bin",

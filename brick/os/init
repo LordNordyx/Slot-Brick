@@ -190,6 +190,10 @@ fi
 # copying one on) is written to the boot partition, checked, removed, and the Brick restarts
 # into it. A power cut while it is written leaves the Brick unable to start until the card
 # is flashed again: it takes about a second.
+# Part of an update from HOME → Update (.slot-update/pending, see crates/slot/src/update.rs),
+# the boot partition as it was is kept with the other files the update replaced: should the
+# new Slot not start, putting those back puts it back too.
+UPDATE=$CARD/.slot-update
 NEW=$CARD/slot-os/boot.img
 if [ -f "$NEW" ]; then
     BOOT=$(grep -l '^PARTNAME=boot$' /sys/class/block/mmcblk0p*/uevent 2>/dev/null | head -1)
@@ -201,6 +205,9 @@ if [ -f "$NEW" ]; then
         mv -f "$NEW" "$NEW.refused"
     else
         leds FFFFFF
+        if [ -f "$UPDATE/pending" ] && [ ! -f "$UPDATE/old/slot-os/boot.img" ]; then
+            mkdir -p "$UPDATE/old/slot-os" && dd if="$BOOT" of="$UPDATE/old/slot-os/boot.img" bs=1M 2>/dev/null && sync
+        fi
         stamp "writing slot-os/boot.img to $BOOT"
         dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
         if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$(md5sum < "$NEW" | cut -d' ' -f1)" ]; then
@@ -265,10 +272,24 @@ while :; do
     echo "slot exit code: $status" >> "$ROOT/Logs/slot.log"
     { echo "--- kernel log after slot ended ($status)"; dmesg | tail -40; } >> "$ROOT/Logs/os.log"
     sync
+    # An update swapped in: Slot removes .slot-update/pending once the new one has shown a
+    # frame. Still there when it ends, the new one never started, so the files it replaced
+    # go back (the boot image too, if it brought one), as launch.sh does on stock.
+    if [ "$status" != 66 ] && [ -f "$UPDATE/pending" ] && [ -d "$UPDATE/old" ]; then
+        echo 'Slot OS: the update did not start; putting the previous version back' >> "$ROOT/Logs/os.log"
+        ( cd "$UPDATE/old" && find . -type f ) | while IFS= read -r f; do
+            mkdir -p "$(dirname "$CARD/$f")"
+            mv -f "$UPDATE/old/$f" "$CARD/$f"
+        done
+        rm -rf "$UPDATE"
+        sync
+        status=66
+    fi
     case "$status" in
         64) cleanup; poweroff -f ;;
         65) cleanup; reboot -f ;;
-        66) quick=0; continue ;;
+        # Updated: Slot starts again on the new files; a new boot image needs a restart.
+        66) quick=0; [ ! -f "$NEW" ] || { cleanup; reboot -f; }; continue ;;
     esac
     # Anything else (a crash, or the exit chord, with no stock menu to go back to): start
     # Slot again, keeping the crash log; three quick ends in a row and it powers off.
