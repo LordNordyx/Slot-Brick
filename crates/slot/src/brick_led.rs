@@ -14,17 +14,21 @@ impl Default for Settings {
 /// `lr` is its sticks' rings, and the triggers are `rear`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// `single`: the older LED driver (the kernel Slot OS boots) has one brightness, max_scale,
-/// for every zone.
+/// for every zone. It is then kept full, and each zone's level dims that zone's colour.
 struct Layout { pro: bool, single: bool }
 impl Layout {
     fn zones(self) -> &'static [&'static str] { if self.pro { &["m","f1","f2","lr","rear"] } else { &["m","f1","f2","lr"] } }
     fn scales(self) -> &'static [&'static str] { if self.single { &["max_scale"] } else if self.pro { &["max_scale","max_scale_f1f2","max_scale_lr","max_scale_rear"] } else { &["max_scale","max_scale_f1f2","max_scale_lr"] } }
     /// Each brightness file and the setting that sets it.
     fn levels(self, s: Settings) -> Vec<(&'static str, u8)> {
-        if self.single { return vec![("max_scale",s.top)] }
+        if self.single { return vec![("max_scale",5)] }
         let mut levels=vec![("max_scale",s.top),("max_scale_f1f2",s.buttons)];
         if self.pro { levels.extend([("max_scale_lr",s.sticks),("max_scale_rear",s.triggers)]) } else { levels.push(("max_scale_lr",s.triggers)) }
         levels
+    }
+    /// The setting a zone's level comes from.
+    fn level(self, zone: &str, s: Settings) -> u8 {
+        match zone { "m" => s.top, "f1" | "f2" => s.buttons, "lr" if self.pro => s.sticks, _ => s.triggers }
     }
     fn names(self) -> Vec<String> {
         let mut names: Vec<String>=self.scales().iter().map(|n|n.to_string()).collect();
@@ -70,6 +74,11 @@ fn write_command(out: &mut impl Write, name: &str, value: &str) -> io::Result<()
         return Err(io::Error::new(io::ErrorKind::WriteZero,"short LED sysfs command"));
     }
     Ok(())
+}
+/// A colour at `level` fifths of its brightness, for the older driver's zones.
+fn dimmed(hex: &str, level: u8) -> String {
+    let channel=|i: usize| u32::from_str_radix(&hex[i..i+2],16).unwrap_or(0) * u32::from(level.min(5)) / 5;
+    format!("{:02X}{:02X}{:02X}",channel(0),channel(2),channel(4))
 }
 pub struct BrickLeds { root: PathBuf, sys: PathBuf, layout: Layout, settings: Settings, original: Vec<(String,String)>, sleeping: Option<Vec<(String,String)>>, previous_mode: Option<u8>, power_state: LedState, available: bool, #[cfg(test)] applied_brightness: std::cell::RefCell<Vec<(String,String)>> }
 impl BrickLeds {
@@ -154,7 +163,10 @@ impl BrickLeds {
         for &zone in self.layout.zones() {
             let alarm = warning && matches!(zone, "f1" | "f2");
             let blink = alarm && self.power_state == LedState::VeryLow;
-            self.write(&format!("effect_rgb_hex_{zone}"),if alarm { "FF0000" } else { COLORS[s.color as usize] })?;
+            let colour=if alarm { "FF0000" } else { COLORS[s.color as usize] };
+            let colour=if !self.layout.single { colour.to_string() }
+                else { dimmed(colour, if off { 0 } else if alarm { 1 } else { self.layout.level(zone,s) }) };
+            self.write(&format!("effect_rgb_hex_{zone}"),&colour)?;
             self.write(&format!("effect_cycles_{zone}"),"-1")?;
             self.write(&format!("effect_duration_{zone}"),if blink { "500" } else { "2000" })?;
             // NextUI LEDS_updateLeds uses this order: the effect write applies
@@ -242,7 +254,11 @@ impl BrickLeds {
         assert_ne!(leds.value(Row::LedMode),Some(Value::Unavailable));
         leds.change(Row::LedColor,true).unwrap();
         let read=|n:&str| fs::read_to_string(sys.join(n)).unwrap().trim().to_owned();
-        assert_eq!(read("effect_rgb_hex_lr"),"0000FF");
+        // The shared brightness stays full; each zone dims its own colour.
+        assert_eq!(read("max_scale"),"100");
+        assert_eq!(read("effect_rgb_hex_lr"),"000033");
+        leds.change(Row::LedTriggers,true).unwrap();
+        assert_eq!((read("effect_rgb_hex_lr"),read("effect_rgb_hex_m")),("000066".into(),"000033".into()));
         assert!(!sys.join("max_scale_f1f2").exists(), "a brightness file was made up");
     }
     fn battery_leds() -> (tempfile::TempDir, PathBuf, BrickLeds) {
