@@ -250,6 +250,5 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 1.1.1) and Debian 12 packages; what each is and its licence is in `slot-os/licenses`.
 
 **Fonts:** HOME → System → Font picks the font Slot draws its text in: Slot's own, GohuFont (by
-Hugo Chargois, WTFPL), Press Start 2P (by Cody Boisclair, OFL; both in `Slot/System/licenses`), or any
-`.ttf` / `.otf` you put in `Slot/Fonts`.
+Hugo Chargois, WTFPL, see `Slot/System/licenses`), or any `.ttf` / `.otf` you put in `Slot/Fonts`.
 Slot restarts to use it when you close the menu.

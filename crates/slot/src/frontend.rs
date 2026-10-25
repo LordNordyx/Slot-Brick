@@ -196,11 +196,20 @@ fn sync_named_texts(app: &mut App, compositor: &mut Compositor, tex: &mut Overla
         };
         if app.named_text_shown(i) != Some(app.named_text(i)) {
             // The name changed: made again, cut short to fit when not lit and scrolled when lit.
+            // The Font row names each font in that font.
             let text = app.named_text(i).to_string();
+            let own = match (row, app.root()) {
+                (QuickRow::Font, Some(root)) => crate::fonts::preview(root, &text),
+                _ => None,
+            };
+            let in_own = |draw: &mut dyn FnMut() -> slot_ui::UndoFace| match own {
+                Some(font) => slot_ui::text::in_font(font, draw),
+                None => draw(),
+            };
             let label_w = quick_label_face(row).w;
-            let dim = shortened_value_face(&text, false, slot_ui::quick_value_room(label_w, None));
+            let dim = in_own(&mut || shortened_value_face(&text, false, slot_ui::quick_value_room(label_w, None)));
             let room = slot_ui::quick_value_room(label_w, Some(carets));
-            let whole = quick_value_face(&text, true);
+            let whole = in_own(&mut || quick_value_face(&text, true));
             let (lit, scroll) = match whole.w > room {
                 true => {
                     let scroll = Scroll { whole, room, since: std::time::Instant::now(), at: Some(0) };

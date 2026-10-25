@@ -65,6 +65,23 @@ pub fn step(root: &Path, current: &str, right: bool) -> String {
     names.swap_remove(to)
 }
 
+/// The font `name` is, to show its name in itself: read once and kept. None for the built-in
+/// one, and for a font gone missing or one that is not a font.
+pub fn preview(root: &Path, name: &str) -> Option<&'static slot_ui::text::Font> {
+    static SEEN: std::sync::Mutex<Vec<(String, Option<&'static slot_ui::text::Font>)>> = std::sync::Mutex::new(Vec::new());
+    let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, font)) = seen.iter().find(|(n, _)| n == name) {
+        return *font;
+    }
+    let font = available(root)
+        .into_iter()
+        .find(|(n, _)| n == name)
+        .and_then(|(_, path)| fs::read(path).ok())
+        .and_then(|bytes| slot_ui::text::leak_font(&bytes));
+    seen.push((name.to_string(), font));
+    font
+}
+
 /// The font this Slot draws in, as load_chosen found it (the built-in one before that).
 pub fn running() -> String {
     RUNNING

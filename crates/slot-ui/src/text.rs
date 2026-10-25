@@ -1,6 +1,7 @@
 use std::sync::OnceLock;
 
-use fontdue::{Font, FontSettings};
+pub use fontdue::Font;
+use fontdue::FontSettings;
 
 const LABEL_TTF: &[u8] = include_bytes!("../assets/label.ttf");
 
@@ -27,8 +28,26 @@ pub fn set_label_font(bytes: &[u8]) -> bool {
         .is_ok_and(|font| CHOSEN.set(font).is_ok())
 }
 
+thread_local! {
+    /// A font in place of the label font while one face is drawn (in_font).
+    static FOR_NOW: std::cell::Cell<Option<&'static Font>> = const { std::cell::Cell::new(None) };
+}
+
 pub fn label_font() -> Option<&'static Font> {
-    CHOSEN.get().or_else(built_in)
+    FOR_NOW.with(|f| f.get()).or_else(|| CHOSEN.get()).or_else(built_in)
+}
+
+/// `draw`, with its text in `font` (the Font row names each font in itself).
+pub fn in_font<T>(font: &'static Font, draw: impl FnOnce() -> T) -> T {
+    let before = FOR_NOW.with(|f| f.replace(Some(font)));
+    let out = draw();
+    FOR_NOW.with(|f| f.set(before));
+    out
+}
+
+/// A font to draw in for as long as Slot runs, or None if `bytes` are not one.
+pub fn leak_font(bytes: &[u8]) -> Option<&'static Font> {
+    Font::from_bytes(bytes, FontSettings::default()).ok().map(|f| &*Box::leak(Box::new(f)))
 }
 
 /// The font `ch` is drawn in: `font`, or the built-in one where `font` has no such character,

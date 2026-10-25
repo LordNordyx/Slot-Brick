@@ -43,6 +43,7 @@ fresh() {
     mkdir -p "$1/hw"
     docker_run "$IMAGE" "$BIN" --init-root "$1/card/Slot" > /dev/null
     cp brick/card/Slot/System/*.txt "$SIM"/cores/*_libretro.so "$1/card/Slot/System/"
+    cp -r brick/card/Slot/System/Fonts "$1/card/Slot/System/"
     for cart in "GBA/Sim Quest.gba" "GBA/Pixel Racer.gba" "GB/Pocket Test.gb" \
                 "GBC/Colour Check.gbc" "NES/Famicom Probe.nes" "SNES/Super Sample.sfc"; do
         printf 'slot simulator stand-in cartridge\n' > "$1/card/Slot/Games/$cart"
