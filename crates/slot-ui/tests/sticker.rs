@@ -3,7 +3,6 @@ use slot_ui::{sticker_lines, StickerFields};
 fn fields() -> StickerFields<'static> {
     StickerFields {
         battery: Some(87),
-        card: Some((12_300_000_000, 63_900_000_000)),
         serial: "0473885",
         dirty_digit: '0',
     }
@@ -76,36 +75,9 @@ fn every_credit_line_fits_its_column() {
     let left_column = 660.0 * 62.133 / 205.762 - 2.0 * 11.0;
     let font = slot_ui::text::label_font().expect("label font");
     for line in slot_ui::CREDITS.iter().chain(slot_ui::head_rows(&fields()).iter().map(|s| s.as_str()).collect::<Vec<_>>().iter()) {
-        let px = if slot_ui::CREDITS.contains(line) { 8.5 } else { slot_ui::head_row_px(line) };
+        let px = if slot_ui::CREDITS.contains(line) { 8.5 } else { 11.0 };
         let layout = slot_ui::text::fit(font, line, f32::MAX, 1, px, px);
         let w = slot_ui::text::line_width(font, &layout.lines[0], px, layout.tracking);
         assert!(w <= left_column, "{line:?} is {w}px wide, column is {left_column}px");
     }
-}
-
-#[test]
-fn the_sd_card_row_says_what_is_used_and_free() {
-    let all = sticker_lines(&fields()).join("\n");
-    assert!(all.contains("SD : 51.6GB USED, 12.3GB FREE"), "{all}");
-    let mut f = fields();
-    f.card = Some((300_000_000_000, 1_000_000_000_000));
-    assert!(sticker_lines(&f).join("\n").contains("SD : 700GB USED, 300GB FREE"));
-    f.card = None;
-    assert!(sticker_lines(&f).join("\n").contains("SD : UNKNOWN"));
-}
-
-#[test]
-fn the_sd_card_row_fits_its_column_on_the_largest_card() {
-    let left_column = 660.0 * 62.133 / 205.762 - 2.0 * 11.0;
-    let font = slot_ui::text::label_font().expect("label font");
-    let mut f = fields();
-    f.card = Some((999_000_000_000, 1_998_000_000_000));
-    let line = &slot_ui::head_rows(&f)[3];
-    let px = slot_ui::head_row_px(line);
-    assert!(px > slot_ui::HEAD_MIN_PX, "{line:?} only fits at the smallest size");
-    let layout = slot_ui::text::fit(font, line, f32::MAX, 1, px, px);
-    let w = slot_ui::text::line_width(font, &layout.lines[0], px, layout.tracking);
-    assert!(w <= left_column, "{line:?} is {w}px wide at {px}px, column is {left_column}px");
-    // The other head rows keep their size.
-    assert_eq!(slot_ui::head_row_px(&slot_ui::head_rows(&f)[0]), 11.0);
 }

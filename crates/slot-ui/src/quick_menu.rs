@@ -76,10 +76,16 @@ pub enum QuickRow {
     ShowSnes,
     ShowPs1,
     ResetSettings,
+    AboutVersion,
+    AboutBuild,
+    AboutDevice,
+    AboutFirmware,
+    AboutCard,
+    AboutLabel,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 63] = [
+    pub const ALL: [QuickRow; 69] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -143,6 +149,12 @@ impl QuickRow {
         QuickRow::ShowSnes,
         QuickRow::ShowPs1,
         QuickRow::ResetSettings,
+        QuickRow::AboutVersion,
+        QuickRow::AboutBuild,
+        QuickRow::AboutDevice,
+        QuickRow::AboutFirmware,
+        QuickRow::AboutCard,
+        QuickRow::AboutLabel,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -191,13 +203,31 @@ impl QuickRow {
     pub const SCREEN_SNES: [QuickRow; 2] = [QuickRow::SnesShader, QuickRow::SnesOverlay];
     pub const SCREEN_PS1: [QuickRow; 3] = [QuickRow::Ps1Shader, QuickRow::Ps1Dithering, QuickRow::Ps1Overlay];
 
+    /// System → About: what this Slot is and what it runs on, then its label.
+    pub const ABOUT: [QuickRow; 6] = [
+        QuickRow::AboutVersion,
+        QuickRow::AboutBuild,
+        QuickRow::AboutDevice,
+        QuickRow::AboutFirmware,
+        QuickRow::AboutCard,
+        QuickRow::AboutLabel,
+    ];
+    /// The About rows that only say something: nothing to change or open.
+    pub const ABOUT_INFO: [QuickRow; 5] =
+        [QuickRow::AboutVersion, QuickRow::AboutBuild, QuickRow::AboutDevice, QuickRow::AboutFirmware, QuickRow::AboutCard];
+    pub fn info(self) -> bool {
+        Self::ABOUT_INFO.contains(&self)
+    }
+
     /// The system an Overlay row picks the overlay for.
-    /// Rows that read a name rather than a fixed value (an overlay's, the font's), numbered:
-    /// the overlay rows by their platform, then Font.
-    pub const NAMED: usize = slot_store::Platform::ALL.len() + 1;
+    /// Rows that read a name rather than a fixed value (an overlay's, the font's, About's),
+    /// numbered: the overlay rows by their platform, then Font, then About's.
+    pub const NAMED: usize = slot_store::Platform::ALL.len() + 1 + Self::ABOUT_INFO.len();
     pub fn named(self) -> Option<usize> {
+        let about = slot_store::Platform::ALL.len() + 1;
         match self {
             QuickRow::Font => Some(slot_store::Platform::ALL.len()),
+            row if row.info() => Self::ABOUT_INFO.iter().position(|r| *r == row).map(|at| about + at),
             _ => self.overlay_of().map(|p| p.index()),
         }
     }
@@ -273,6 +303,12 @@ impl QuickRow {
             | QuickRow::ShowNes
             | QuickRow::ShowSnes
             | QuickRow::ShowPs1 => &QuickRow::SYSTEMS,
+            QuickRow::AboutVersion
+            | QuickRow::AboutBuild
+            | QuickRow::AboutDevice
+            | QuickRow::AboutFirmware
+            | QuickRow::AboutCard
+            | QuickRow::AboutLabel => &QuickRow::ABOUT,
             QuickRow::LibrarySort
             | QuickRow::LibraryShow
             | QuickRow::LibrarySystems
@@ -295,6 +331,7 @@ impl QuickRow {
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::LibrarySort => Some(QuickRow::Library),
             QuickRow::ShowGba => Some(QuickRow::LibrarySystems),
+            QuickRow::AboutVersion => Some(QuickRow::About),
             QuickRow::Wifi => Some(QuickRow::Online),
             QuickRow::AutoSave => Some(QuickRow::Saving),
             #[cfg(feature = "brick")]
@@ -317,6 +354,7 @@ impl QuickRow {
             QuickRow::System => Some(QuickRow::SYSTEM[0]),
             QuickRow::Library => Some(QuickRow::LIBRARY[0]),
             QuickRow::LibrarySystems => Some(QuickRow::SYSTEMS[0]),
+            QuickRow::About => Some(QuickRow::ABOUT[0]),
             QuickRow::Online => Some(QuickRow::ONLINE[0]),
             QuickRow::Clock => Some(QuickRow::CLOCK[0]),
             QuickRow::Saving => Some(QuickRow::SAVING[0]),
@@ -361,6 +399,12 @@ impl QuickRow {
             QuickRow::ShowSnes => "SNES",
             QuickRow::ShowPs1 => "PlayStation",
             QuickRow::ResetSettings => "Reset Settings",
+            QuickRow::AboutVersion => "Version",
+            QuickRow::AboutBuild => "Build",
+            QuickRow::AboutDevice => "Device",
+            QuickRow::AboutFirmware => "Firmware",
+            QuickRow::AboutCard => "SD Card",
+            QuickRow::AboutLabel => "Label",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Emulation",
@@ -392,7 +436,7 @@ impl QuickRow {
         matches!(
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
-                | QuickRow::LibrarySystems | QuickRow::ResetSettings
+                | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutLabel
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1
         )
     }
@@ -746,7 +790,7 @@ impl QuickMenu<'_> {
             let Some((tex, w, h)) = value else {
                 continue;
             };
-            if !lit || row.opens() {
+            if !lit || row.opens() || row.info() {
                 push(out, tex, right + pad - w as f32, y, w, h);
                 continue;
             }
@@ -764,7 +808,8 @@ impl QuickMenu<'_> {
             _ => change,
         };
         let done = self.values[self.row.index()] == Some(QuickValue::ResetDone);
-        let hints: &[(TexId, u32)] = if self.disabled[self.row.index()] || done { &[back] } else { &[back, other] };
+        let only_back = self.disabled[self.row.index()] || done || self.row.info();
+        let hints: &[(TexId, u32)] = if only_back { &[back] } else { &[back, other] };
         for (tex, w, x) in centred_hints(hints, LEGEND_GAP) {
             push(out, tex, x, LEGEND_Y, w, HINT_H);
         }

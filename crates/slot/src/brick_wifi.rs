@@ -129,6 +129,39 @@ pub fn repair_at_boot(){
     });
     if let Err(e)=spawned{eprintln!("wifi: boot repair: {e}");}
 }
+/// Joined a network with no route out of it: after waking from sleep the DHCP client can be
+/// left without an address, and Wi-Fi then says connected while nothing online works. Asked
+/// every few seconds while Wi-Fi is on but offline; on its own thread, as the supplicant is.
+pub fn keep_lease(){
+    if STARTING.load(Ordering::Relaxed) || LEASE_CHECKING.swap(true,Ordering::AcqRel){return}
+    let spawned=thread::Builder::new().name("slot-wifi-lease".into()).spawn(||{
+        let joined=Control::open().and_then(|c|c.command("STATUS")).is_ok_and(|s|field(&s,"wpa_state")==Some("COMPLETED"));
+        let stuck=LEASE.lock().unwrap_or_else(|e|e.into_inner()).stuck(joined,online(),Instant::now());
+        if stuck{
+            eprintln!("wifi: joined but offline for {} s; asking for an address again",LEASE_STUCK.as_secs());
+            if let Err(e)=helper_run("renew",&AtomicBool::new(false)){eprintln!("wifi: renew: {e}");}
+        }
+        LEASE_CHECKING.store(false,Ordering::Release);
+    });
+    if let Err(e)=spawned{eprintln!("wifi: lease check: {e}");LEASE_CHECKING.store(false,Ordering::Release);}
+}
+static LEASE_CHECKING:AtomicBool=AtomicBool::new(false);
+static LEASE:std::sync::Mutex<LeaseWatch>=std::sync::Mutex::new(LeaseWatch{since:None,renewed:None});
+/// How long joined-but-offline lasts before the address is asked for again (a DHCP client that
+/// works answers within a few seconds of joining), and the least time between two asks.
+const LEASE_STUCK:Duration=Duration::from_secs(15);
+const LEASE_RENEW_GAP:Duration=Duration::from_secs(60);
+struct LeaseWatch{since:Option<Instant>,renewed:Option<Instant>}
+impl LeaseWatch{
+    /// Whether to ask for an address again: joined, with no route, for LEASE_STUCK, and not
+    /// asked within LEASE_RENEW_GAP.
+    fn stuck(&mut self,joined:bool,routed:bool,now:Instant)->bool{
+        if !joined || routed {self.since=None;return false}
+        let since=*self.since.get_or_insert(now);
+        if now.duration_since(since)<LEASE_STUCK || self.renewed.is_some_and(|r|now.duration_since(r)<LEASE_RENEW_GAP){return false}
+        self.renewed=Some(now);true
+    }
+}
 /// Startup is bringing Wi-Fi back on: until it has, the menu says so rather than "off".
 static STARTING:AtomicBool=AtomicBool::new(false);
 /// Where the Wi-Fi menu's on/off is kept, so startup brings Wi-Fi back as it was.
@@ -177,8 +210,8 @@ fn helper_run_if(verb:&str,cancel:&AtomicBool,still:impl Fn()->bool)->Result<()>
     if !still(){return Ok(())}
     let root=card_root();
     let Some(script)=helper(&slot_power::hw("/etc/wifi/wifi_init.sh"),&root) else {return Err("Wi-Fi helper missing: System/brick_wifi.sh".into())};
-    // Only slot's own helper knows "ensure" and "dhcp"; a firmware one would just print its usage.
-    if matches!(verb,"ensure"|"dhcp") && !script.ends_with("System/brick_wifi.sh"){return Ok(())}
+    // Only slot's own helper knows "ensure", "dhcp" and "renew"; a firmware one would just print its usage.
+    if matches!(verb,"ensure"|"dhcp"|"renew") && !script.ends_with("System/brick_wifi.sh"){return Ok(())}
     // Inherit slot's stdout/stderr (Logs/slot.log): brick_wifi.sh moves itself to Logs/wifi.log,
     // and anything else, such as a firmware helper run directly, still leaves a trace.
     eprintln!("wifi: {} {verb}",script.display());
@@ -636,6 +669,21 @@ impl Painter{
         assert_eq!(waited.get(),SCAN_RETRY_MS);
         steps.clear();for _ in 0..SCAN_TRIES{steps.push(("SCAN",Ok("FAIL")));steps.push(("STATUS",Ok("wpa_state=DISCONNECTED")));}
         let m=Mock::new(steps);assert!(scan(&m,|_|Ok(())).is_err());m.done();
+    }
+    #[test]fn joined_but_offline_asks_for_an_address_after_a_while_and_not_too_often(){
+        let t=Instant::now();let at=|s:u64|t+Duration::from_secs(s);
+        let mut w=LeaseWatch{since:None,renewed:None};
+        assert!(!w.stuck(true,false,at(0)),"just joined: DHCP gets its moment");
+        assert!(!w.stuck(true,false,at(14)));
+        assert!(w.stuck(true,false,at(15)),"stuck: ask again");
+        assert!(!w.stuck(true,false,at(30)),"asked a moment ago");
+        assert!(w.stuck(true,false,at(75)),"still stuck a minute later: ask again");
+        // Online, or not joined at all: nothing to fix, and the wait starts over.
+        assert!(!w.stuck(true,true,at(200)));
+        assert!(!w.stuck(true,false,at(201)));
+        assert!(!w.stuck(false,false,at(300)));
+        assert!(!w.stuck(true,false,at(301)));
+        assert!(w.stuck(true,false,at(316)));
     }
     #[test]fn boot_repair_gives_up_after_its_tries(){
         let t=Cell::new(0u64);let runs=Cell::new(0);

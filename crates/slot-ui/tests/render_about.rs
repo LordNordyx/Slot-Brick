@@ -11,7 +11,6 @@ fn render_about() {
         .and_then(|p| wallpaper_face(std::path::Path::new(&p)));
     let label = sticker_face(&StickerFields {
         battery: Some(87),
-        card: Some((12_300_000_000, 63_900_000_000)),
         serial: "0473885",
         dirty_digit: '0',
     });

@@ -3,12 +3,13 @@
 # slot (brick_wifi.rs) always runs this file. Brick firmware may ship its own
 # /etc/wifi/wifi_init.sh, but it calls an rfkill.elf that firmware lacks, so the
 # radio stays blocked; this helper unblocks it through sysfs and checks the result.
-# Usage: brick_wifi.sh start|stop|radio|ensure|dhcp
+# Usage: brick_wifi.sh start|stop|radio|ensure|dhcp|renew
 # start:  radio on, wpa_supplicant control socket up, DHCP client waiting.
 # stop:   DHCP + supplicant stopped, radio off.
 # ensure: for a supplicant someone else started (the firmware does at boot, with
 #         the radio still blocked): radio on, wlan0 up, DHCP client waiting.
 # dhcp:   a DHCP client for wlan0 if none is running (after joining a network).
+# renew:  joined, but no address or route: a fresh DHCP client (slot asks after a while).
 # Never blocks for long and never leaves daemons attached to our stdout,
 # because slot waits for this script to exit. Everything is logged to
 # Slot/Logs/wifi.log (or /tmp/slot/wifi.log when the card is read-only).
@@ -183,6 +184,7 @@ start)
     if firmware start && wait_for 50 iface_up && wait_for 30 supplicant_ready; then
         echo "control socket: $(find_socket)"
         start_dhcp
+        watch_join
         exit 0
     fi
     [ ! -f "$ETC/wifi/wifi_init.sh" ] || echo 'firmware helper did not bring Wi-Fi up; using slot helper'
@@ -239,6 +241,16 @@ dhcp)
     start_dhcp
     exit 0
     ;;
+renew)
+    # Joined, yet no address or route out (seen after waking from sleep): whatever DHCP client
+    # there is has given up or lost track, so start a fresh one, as turning Wi-Fi off and on would.
+    echo 'joined but offline; restarting the DHCP client'
+    stop_dhcp
+    iface_up || { ifconfig "$IFACE" up && wait_for 20 iface_up; } || { echo "cannot bring $IFACE up"; exit 1; }
+    start_dhcp
+    watch_join
+    exit 0
+    ;;
 stop)
     firmware stop || :
     stop_dhcp
@@ -253,6 +265,6 @@ stop)
     exit 0
     ;;
 *)
-    echo "usage: $0 start|stop|radio|ensure|dhcp"; exit 2
+    echo "usage: $0 start|stop|radio|ensure|dhcp|renew"; exit 2
     ;;
 esac

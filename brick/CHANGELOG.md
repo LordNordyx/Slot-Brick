@@ -3,7 +3,8 @@
 ## Unreleased
 - Library → Systems: hide the shelves of systems you don't play. The last system with games can't be hidden.
 - System → Reset Settings: puts every setting back to how it came (LEDs and font included). Press A, then A again when it asks "Sure?". Games, saves, states, play time, favorites, the clock, brightness and volume stay.
-- System → About: shows how much of the SD card is used and how much is free.
+- System → About is now a page: the version, whether it is a Dev build or a release, the device, the firmware (stock or Slot OS), and how much of the SD card is free. The label is still there, under About → Label.
+- Fixed: after waking from sleep, Wi-Fi could say it was connected while Cart Art, RetroAchievements and Update stayed greyed out until Wi-Fi was turned off and on. Slot now notices and gets an address again by itself.
 
 ## v0.50
 **New since v0.44:**

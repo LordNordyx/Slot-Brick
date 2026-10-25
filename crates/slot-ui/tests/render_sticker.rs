@@ -15,7 +15,6 @@ fn render_sticker() {
     };
     let face = sticker_face(&StickerFields {
         battery: Some(87),
-        card: Some((12_300_000_000, 63_900_000_000)),
         serial: "0473885",
         dirty_digit: '0',
     });

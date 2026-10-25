@@ -102,7 +102,7 @@ pub use slot_chrome::{
     ALERT_PX, LIP_H, MOUTH_H, MOUTH_W,
 };
 pub use sticker::{
-    draw_sticker, head_row_px, head_rows, HEAD_MIN_PX, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,
+    draw_sticker, head_rows, sticker_face, sticker_lines, StickerFields, COPYRIGHT, CREDITS, DC,
     HOME, ORIGIN, PORT_VERSION, STICKER_H, STICKER_W, TITLE,
 };
 pub use title_card::{draw_title_card, title_card_face};

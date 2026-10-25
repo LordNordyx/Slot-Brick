@@ -432,11 +432,16 @@ pub struct App {
     brick_mute: Option<bool>,
     #[cfg(feature = "brick")]
     brick_switch_at: Millis,
+    /// When to next ask whether Wi-Fi is joined but offline (brick_wifi::keep_lease).
+    #[cfg(feature = "brick")]
+    lease_check_at: Millis,
     powering_off: bool,
     /// An update was swapped in: Slot ends, for launch.sh to start the new one.
     updating: bool,
     /// HOME → System → Reset Settings: asked (A again resets) or done, until the menu moves on.
     reset_asked: Option<QuickValue>,
+    /// HOME → System → About: what each of its rows says (QuickRow::ABOUT_INFO), read as it opens.
+    about: [String; QuickRow::ABOUT_INFO.len()],
     /// HOME → Library: every game, A–Z, whatever the shelves show; and play time, last played
     /// and favorites for each (Config/library.txt).
     all_carts: Vec<Cart>,
@@ -491,6 +496,43 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Platform, Shelf)> {
     rows.into_iter()
         .map(|(platform, carts)| (platform, Shelf::new(carts)))
         .collect()
+}
+
+/// What System → About's rows say, in QuickRow::ABOUT_INFO's order: the version, whether it is
+/// a Dev build (and its commit) or a release, the device, the firmware, and the SD card's space.
+fn about_texts(root: Option<&Path>) -> [String; QuickRow::ABOUT_INFO.len()] {
+    let installed = crate::update::Installed::current();
+    let build = match installed.channel {
+        crate::update::Channel::Dev => format!("Dev ({})", installed.commit),
+        crate::update::Channel::Release => "Release".to_string(),
+    };
+    #[cfg(feature = "brick")]
+    let device = format!("TrimUI {}", slot_power::model().name());
+    #[cfg(not(feature = "brick"))]
+    let device = "PC".to_string();
+    let firmware = match slot_power::slot_os() {
+        true => "Slot OS",
+        false => "Stock",
+    };
+    let card = match root.and_then(crate::root::card_space) {
+        // Free out of the whole card: "12.3/63.9 GB free", short enough for its row.
+        Some((free, size)) => format!("{}/{} GB free", gigabytes(free), gigabytes(size)),
+        None => "Unknown".to_string(),
+    };
+    // The simulator's scenarios name a card of their own, so their screenshots don't change
+    // with the machine they run on.
+    #[cfg(feature = "sim")]
+    let card = std::env::var("SLOT_SIM_CARD").unwrap_or(card);
+    [installed.version, build, device, firmware.to_string(), card]
+}
+
+/// Bytes in GB as the card's own label counts them (10^9 bytes): one decimal below 100.
+fn gigabytes(bytes: u64) -> String {
+    let gb = bytes as f64 / 1e9;
+    match gb < 99.95 {
+        true => format!("{gb:.1}"),
+        false => format!("{gb:.0}"),
+    }
 }
 
 /// See App::boot_early. (An App is moved between threads only there, so it must be Send.)
@@ -577,6 +619,7 @@ impl App {
             restarting: false,
             updating: false,
             reset_asked: None,
+            about: Default::default(),
             all_carts,
             library: slot_store::Library::default(),
             library_dirty: false,
@@ -653,6 +696,8 @@ impl App {
             brick_mute: None,
             #[cfg(feature = "brick")]
             brick_switch_at: 0,
+            #[cfg(feature = "brick")]
+            lease_check_at: 0,
             powering_off: false,
         }
     }
@@ -1206,7 +1251,7 @@ impl App {
                 row.shelf_of().map(|p| QuickValue::flag(self.state.shows(p)))
             }
             QuickRow::ResetSettings => self.reset_asked,
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel => None,
         }
     }
 
@@ -1525,11 +1570,13 @@ impl App {
         }
     }
 
-    /// How a row that reads a name (QuickRow::named) reads: an overlay's, or the font's.
+    /// How a row that reads a name (QuickRow::named) reads: an overlay's, the font's, or
+    /// what an About row says.
     pub fn named_text(&self, at: usize) -> &str {
         match Platform::ALL.get(at) {
             Some(platform) => self.overlay_text(*platform),
-            None => &self.font,
+            None if at == Platform::ALL.len() => &self.font,
+            None => self.about.get(at - Platform::ALL.len() - 1).map_or("", String::as_str),
         }
     }
 
@@ -1984,11 +2031,6 @@ impl App {
             .map(|c| c.stem.as_str())
     }
 
-    /// The SD card's space, for About: (free, size) in bytes.
-    pub fn card_space(&self) -> Option<(u64, u64)> {
-        crate::root::card_space(self.root.as_deref()?)
-    }
-
     pub fn battery(&self) -> Option<Battery> {
         self.battery
     }
@@ -2143,7 +2185,7 @@ impl App {
             },
             Phase::About if action == Action::GbaDown(Btn::B) || action == Action::QuickMenu => {
                 self.phase = Phase::QuickMenu {
-                    row: QuickRow::About,
+                    row: QuickRow::AboutLabel,
                 }
             }
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
@@ -2208,7 +2250,12 @@ impl App {
             QuickRow::DateTime => {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
-            QuickRow::About => self.phase = Phase::About,
+            QuickRow::About => {
+                self.about = about_texts(self.root.as_deref());
+                self.phase = Phase::QuickMenu { row: QuickRow::ABOUT[0] };
+            }
+            QuickRow::AboutLabel => self.phase = Phase::About,
+            QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard => {}
             QuickRow::ResetSettings => match self.reset_asked {
                 None => self.reset_asked = Some(QuickValue::ResetAsk),
                 Some(QuickValue::ResetAsk) => {
@@ -2385,7 +2432,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::ResetSettings => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel => return,
         }
         self.persist();
     }
@@ -2834,6 +2881,12 @@ impl App {
                 self.clock_sync_at = 0;
             }
             self.net_on = self.net_up || crate::brick_wifi::radio_on();
+            // On but offline: joined with no address, as waking from sleep can leave it, is
+            // put right without turning Wi-Fi off and on. Not while the Wi-Fi screen is busy.
+            if self.net_on && !self.net_up && self.wifi.is_none() && self.now() >= self.lease_check_at {
+                self.lease_check_at = self.now() + 5_000;
+                crate::brick_wifi::keep_lease();
+            }
             if let Ok(value) = std::fs::read_to_string(slot_power::hw("/sys/class/gpio/gpio243/value")) {
                 match value.trim() {
                     "0" => self.set_brick_mute(false),

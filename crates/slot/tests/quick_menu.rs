@@ -382,13 +382,47 @@ fn the_arrows_change_nothing_on_a_row_that_opens() {
 }
 
 #[test]
-fn a_on_about_opens_the_label_and_b_comes_back_to_the_menu() {
+fn about_opens_a_page_and_its_label_row_opens_the_label() {
     let (_d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::About);
     press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), Some(QuickRow::AboutVersion));
+    open_at(&mut a, QuickRow::AboutLabel);
+    press(&mut a, Btn::A);
     assert!(matches!(a.phase(), Phase::About), "{:?}", a.phase());
     press(&mut a, Btn::B);
-    assert_eq!(a.quick_menu(), Some(QuickRow::About));
+    assert_eq!(a.quick_menu(), Some(QuickRow::AboutLabel));
+    press(&mut a, Btn::B);
+    assert_eq!(a.quick_menu(), Some(QuickRow::About), "B from the page goes back to System");
+}
+
+/// What an About row says, as the menu prints it.
+fn about_text(a: &App, row: QuickRow) -> String {
+    a.named_text(row.named().expect("an About row reads a text")).to_string()
+}
+
+#[test]
+fn about_says_the_version_the_build_the_firmware_and_the_cards_space() {
+    let (d, mut a, _) = on_carousel();
+    let before = std::fs::read(d.path().join("Config/slot.state")).unwrap();
+    open_at(&mut a, QuickRow::About);
+    press(&mut a, Btn::A);
+    assert_eq!(about_text(&a, QuickRow::AboutVersion), slot_ui::PORT_VERSION.to_lowercase());
+    // Built without SLOT_CHANNEL (as releases are): a release.
+    assert_eq!(about_text(&a, QuickRow::AboutBuild), "Release");
+    assert!(about_text(&a, QuickRow::AboutDevice).starts_with("TrimUI Brick") || about_text(&a, QuickRow::AboutDevice) == "PC");
+    assert_eq!(about_text(&a, QuickRow::AboutFirmware), "Stock");
+    let card = about_text(&a, QuickRow::AboutCard);
+    assert!(card.contains('/') && card.ends_with(" GB free"), "{card}");
+    // The rows only say something: the arrows and A change nothing.
+    for row in QuickRow::ABOUT_INFO {
+        open_at(&mut a, row);
+        for btn in [Btn::Left, Btn::Right, Btn::A] {
+            press(&mut a, btn);
+            assert_eq!(a.quick_menu(), Some(row), "{btn:?} on {row:?}");
+        }
+    }
+    assert_eq!(std::fs::read(d.path().join("Config/slot.state")).unwrap(), before);
 }
 
 #[test]
