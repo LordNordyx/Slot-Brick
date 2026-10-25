@@ -88,30 +88,52 @@ scenarios() {
     fi
 }
 
+# One scenario, on a card of its own: PASS or FAIL (with the last lines of what it said) in
+# $SIM/out/NAME.result, its log beside it.
+run_one() {
+    update="$1" script="$2"
+    name=$(basename "$script" .sim)
+    run="$SIM/run/$name"
+    fresh "$run"
+    model=; case "$name" in pro-*) model=pro ;; esac
+    if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" -e SLOT_SIM_MODEL="$model" \
+        -e SLOT_SIM_TIME="$SIM_TIME" -e SLOT_SIM_SCRIPT="/src/$script" \
+        -e SLOT_UPDATE_URL="file:///src/$run/releases" -e SLOT_NTP_SERVER= -e SLOT_SIM_VERSION=v0.1 \
+        -e SLOT_SIM_OUT="/src/$SIM/out" -e SLOT_SIM_GOLDEN=/src/brick/sim/golden \
+        -e SLOT_SIM_UPDATE="$update" "$IMAGE" timeout 300 "$BIN" > "$SIM/out/$name.log" 2>&1
+    then
+        echo "PASS $name" > "$SIM/out/$name.result"
+    else
+        {
+            echo "FAIL $name (log: $SIM/out/$name.log)"
+            grep "^sim: " "$SIM/out/$name.log" | tail -3 | sed "s|/src/||g; s/^/    /"
+        } > "$SIM/out/$name.result"
+    fi
+}
+
+# The scenarios, JOBS at a time (as many as there are cores, unless set): each has its own
+# card, log and screenshots, so they do not get in each other's way.
 run_scenarios() {
     update="$1"; shift
     build
     rm -rf "$SIM/out"
     mkdir -p "$SIM/out"
-    failed=""
-    for script in $(scenarios "$@"); do
+    jobs=${JOBS:-$(nproc 2>/dev/null || echo 2)}
+    list=$(scenarios "$@")
+    for script in $list; do
         [ -f "$script" ] || { echo "no scenario $script"; exit 2; }
+    done
+    for script in $list; do
+        while [ "$(jobs -p | wc -l)" -ge "$jobs" ]; do sleep 0.2; done
+        run_one "$update" "$script" &
+    done
+    wait
+    failed=""
+    for script in $list; do
         name=$(basename "$script" .sim)
-        run="$SIM/run/$name"
-        fresh "$run"
-        model=; case "$name" in pro-*) model=pro ;; esac
-        if docker_run -e SLOT_ROOT="/src/$run/card/Slot" -e SLOT_HW_ROOT="/src/$run/hw" -e SLOT_SIM_MODEL="$model" \
-            -e SLOT_SIM_TIME="$SIM_TIME" -e SLOT_SIM_SCRIPT="/src/$script" \
-            -e SLOT_UPDATE_URL="file:///src/$run/releases" -e SLOT_NTP_SERVER= -e SLOT_SIM_VERSION=v0.1 \
-            -e SLOT_SIM_OUT="/src/$SIM/out" -e SLOT_SIM_GOLDEN=/src/brick/sim/golden \
-            -e SLOT_SIM_UPDATE="$update" "$IMAGE" timeout 300 "$BIN" > "$SIM/out/$name.log" 2>&1
-        then
-            echo "PASS $name"
-        else
-            echo "FAIL $name (log: $SIM/out/$name.log)"
-            grep "^sim: " "$SIM/out/$name.log" | tail -3 | sed "s|/src/||g; s/^/    /"
-            failed="$failed $name"
-        fi
+        cat "$SIM/out/$name.result"
+        grep -q '^PASS' "$SIM/out/$name.result" || failed="$failed $name"
+        rm -f "$SIM/out/$name.result"
     done
     [ -z "$failed" ] || { echo "failed:$failed"; exit 1; }
 }
