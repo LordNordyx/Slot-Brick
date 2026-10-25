@@ -823,3 +823,115 @@ fn reset_settings_asked_and_then_left_changes_nothing() {
     assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk), "asked again, from the start");
     assert!(!read_slot_state(d.path()).rumble);
 }
+
+#[test]
+fn the_menu_pops_as_it_is_used_and_is_quiet_when_nothing_happens() {
+    use slot::audio::{MenuSound, Sfx};
+    let (_d, mut a, _) = on_carousel();
+    let mut heard = |a: &mut App, btn: Option<Btn>| {
+        match btn {
+            Some(btn) => press(a, btn),
+            None => a.apply(Action::QuickMenu),
+        }
+        a.take_sfx()
+    };
+    assert_eq!(heard(&mut a, None), Some(Sfx::Menu(MenuSound::Open)), "HOME opens the menu");
+    assert_eq!(heard(&mut a, Some(Btn::Down)), Some(Sfx::Menu(MenuSound::Move)));
+    assert_eq!(heard(&mut a, Some(Btn::A)), Some(Sfx::Menu(MenuSound::Open)), "a page opens");
+    assert_eq!(heard(&mut a, Some(Btn::Right)), Some(Sfx::Menu(MenuSound::Change)), "Fast Forward steps");
+    assert_eq!(heard(&mut a, Some(Btn::B)), Some(Sfx::Menu(MenuSound::Back)));
+    // A row that opens has no value to change: Left and Right do nothing, and say nothing.
+    assert_eq!(heard(&mut a, Some(Btn::Right)), None);
+    assert_eq!(heard(&mut a, Some(Btn::B)), Some(Sfx::Menu(MenuSound::Back)), "the menu closes");
+    assert!(matches!(a.phase(), Phase::Shelf));
+}
+
+#[test]
+fn menu_sounds_off_quiets_the_menu_from_then_on() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SoundMenu);
+    a.take_sfx();
+    press(&mut a, Btn::Right);
+    assert!(!read_slot_state(d.path()).menu_sounds);
+    assert_eq!(a.take_sfx(), None, "turned off, it is quiet at once");
+    for btn in [Btn::Up, Btn::Down] {
+        press(&mut a, btn);
+        assert_eq!(a.take_sfx(), None, "{btn:?} made a sound with Menu Sounds off");
+    }
+    while a.quick_menu().is_some() {
+        press(&mut a, Btn::B);
+        assert_eq!(a.take_sfx(), None, "B made a sound with Menu Sounds off");
+    }
+    // The star's pop is not a menu sound.
+    press(&mut a, Btn::Y);
+    assert!(matches!(a.take_sfx(), Some(slot::audio::Sfx::Pop(_))));
+}
+
+#[test]
+fn system_sounds_has_a_switch_for_each_kind_of_sound_and_each_is_kept() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SystemSounds);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), Some(QuickRow::SoundVolume), "System Sounds opens on its volume");
+    for row in QuickRow::SOUNDS.into_iter().filter(|r| *r != QuickRow::SoundVolume) {
+        open_at(&mut a, row);
+        assert_eq!(a.quick_value(row), Some(QuickValue::On), "{row:?} starts on");
+        press(&mut a, Btn::Left);
+        assert_eq!(a.quick_value(row), Some(QuickValue::Off), "{row:?}");
+    }
+    let s = read_slot_state(d.path());
+    assert!(!s.menu_sounds && !s.sound_star && !s.sound_cart && !s.sound_cart_open && !s.sound_label);
+    // Each kind is quiet once off: the star here, the cart going in below.
+    while a.quick_menu().is_some() {
+        press(&mut a, Btn::B);
+    }
+    a.take_sfx();
+    press(&mut a, Btn::Y);
+    assert_eq!(a.take_sfx(), None, "the star popped with its sound off");
+    a.apply(Action::Insert);
+    for _ in 0..90 {
+        a.update(1.0 / 60.0);
+        assert_eq!(a.take_sfx(), None, "the cart sounded with its sound off");
+    }
+}
+
+#[test]
+fn the_sounds_volume_steps_by_ten_percent_and_stops_at_each_end() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SoundVolume);
+    let shown = |a: &App| a.named_text(QuickRow::SoundVolume.named().unwrap()).to_string();
+    assert_eq!(shown(&a), "100%");
+    press(&mut a, Btn::Right);
+    assert_eq!(shown(&a), "100%", "it stops at 100%");
+    press(&mut a, Btn::Left);
+    press(&mut a, Btn::Left);
+    assert_eq!(shown(&a), "80%");
+    assert_eq!(read_slot_state(d.path()).sound_volume, 80);
+    for _ in 0..12 {
+        press(&mut a, Btn::Left);
+    }
+    assert_eq!(shown(&a), "0%", "it stops at 0%");
+    assert_eq!(read_slot_state(d.path()).sound_volume, 0);
+}
+
+#[test]
+fn the_sounds_volume_says_nothing_past_either_end() {
+    use slot::audio::{MenuSound, Sfx};
+    let (_d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SoundVolume);
+    a.take_sfx();
+    press(&mut a, Btn::Right);
+    assert_eq!(a.take_sfx(), None, "Right at 100% changed nothing, and made a sound");
+    press(&mut a, Btn::Left);
+    assert_eq!(a.take_sfx(), Some(Sfx::Menu(MenuSound::Change)));
+}
+
+#[test]
+fn every_row_that_reads_a_name_has_a_number_of_its_own() {
+    let mut seen: Vec<usize> = QuickRow::ALL.into_iter().filter_map(QuickRow::named).collect();
+    assert!(seen.iter().all(|n| *n < QuickRow::NAMED), "{seen:?} against {}", QuickRow::NAMED);
+    let n = seen.len();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), n, "two rows read the same name");
+}

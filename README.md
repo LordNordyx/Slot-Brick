@@ -184,7 +184,7 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
 | `Y` | Mark the game as a favorite (a star on its cart), or unmark it |
 | `SELECT` | Sort the shelves: A–Z, last played, most played |
-| `HOME` | Open the menu: Emulation, Gameplay, Library, Online (Wi-Fi, Cart Art, RetroAchievements, Update), and System (LEDs, Clock, Font, Rumble, Low Battery Shutdown, Reset Settings, About) |
+| `HOME` | Open the menu: Emulation, Gameplay, Library, Online (Wi-Fi, Cart Art, RetroAchievements, Update), and System (LEDs, Clock, Font, Rumble, System Sounds, Low Battery Shutdown, Reset Settings, About) |
 
 ### In game
 
@@ -410,7 +410,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
 | [Hugo Chargois](https://font.gohu.org/) | GohuFont, one of the fonts under HOME → System → Font, WTFPL |
-| [freesound_community](https://pixabay.com/sound-effects/film-special-effects-pop-91931/) | The pops a favorite's star makes, Pixabay Content License |
+| freesound_community and others on Pixabay | Slot's sounds: the favorite star's pops, the HOME menu's, a GBA cart opening and a label going on; Pixabay Content License, see `licenses/` |
 | [TrimUI](https://github.com/trimui/firmware_brick), [Debian](https://www.debian.org) | Slot OS (experimental) runs TrimUI's boot chain, kernel, drivers and firmware from their firmware 1.1.1, and Debian 12 packages (glibc, ALSA, busybox, wpa_supplicant, hostapd); licences in `slot-os/licenses` on a Slot OS card |
 
 

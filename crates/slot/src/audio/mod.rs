@@ -12,7 +12,7 @@ pub use alsa::AlsaSink;
 #[cfg(feature = "host")]
 pub use host::HostAudio;
 pub use ring::{ring_capacity, Ring};
-pub use sfx::{Sfx, POP_TAKES};
+pub use sfx::{MenuSound, Sfx, SoundKind, LABEL_TAKES, POP_TAKES};
 pub use silence::Silence;
 pub use sink::{AudioError, AudioSink};
 pub use stub::StubSink;

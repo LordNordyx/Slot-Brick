@@ -28,7 +28,7 @@ press a
 snap menu-gameplay
 press b
 press up
-press up      # System: LEDs, Clock, Font, Rumble, Low Battery Shutdown, About
+press up      # System: LEDs, Clock, Font, Rumble, System Sounds, Low Battery Shutdown, Reset Settings, About
 press a
 snap menu-system
 press down
@@ -55,6 +55,7 @@ press down
 press down
 press down
 press down
+press down
 press down    # Reset Settings
 press a
 snap menu-reset-ask
@@ -76,6 +77,21 @@ press up       # Label, at the bottom
 press a
 phase About
 press b
+press b
+press b
+press b
+phase Shelf
+# System → System Sounds: each kind of sound on or off.
+press menu
+phase QuickMenu
+press up       # System
+press a
+press down
+press down
+press down
+press down     # System Sounds
+press a
+snap menu-system-sounds
 press b
 press b
 press b

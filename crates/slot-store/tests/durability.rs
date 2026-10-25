@@ -197,6 +197,12 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             play_time_hours: false,
             title_card: true,
             rumble: true,
+            menu_sounds: true,
+            sound_star: true,
+            sound_cart: true,
+            sound_cart_open: true,
+            sound_label: true,
+            sound_volume: 100,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
             colour_correction_gb: false,
@@ -537,4 +543,37 @@ fn a_reset_keeps_the_game_the_clock_and_the_levels_and_nothing_else() {
             ..SlotState::default()
         }
     );
+}
+
+#[test]
+fn each_sound_switch_round_trips_on_its_own_line() {
+    let d = tmp_root();
+    let s = SlotState {
+        clock_set: true,
+        menu_sounds: false,
+        sound_star: true,
+        sound_cart: false,
+        sound_cart_open: true,
+        sound_label: false,
+        ..SlotState::default()
+    };
+    write_slot_state(d.path(), &s).unwrap();
+    assert_eq!(read_slot_state(d.path()), s);
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
+    for line in ["menu_sounds=0", "sound_star=1", "sound_cart=0", "sound_cart_open=1", "sound_label=0"] {
+        assert!(text.lines().any(|l| l == line), "no {line} in {text:?}");
+    }
+}
+
+#[test]
+fn the_sounds_volume_round_trips_and_a_value_off_its_steps_is_ignored() {
+    let d = tmp_root();
+    let s = SlotState { clock_set: true, sound_volume: 40, ..SlotState::default() };
+    write_slot_state(d.path(), &s).unwrap();
+    assert_eq!(read_slot_state(d.path()).sound_volume, 40);
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
+    for bad in ["sound_volume=45", "sound_volume=200", "sound_volume=loud"] {
+        std::fs::write(d.path().join("Config/slot.state"), text.replace("sound_volume=40", bad)).unwrap();
+        assert_eq!(read_slot_state(d.path()).sound_volume, 100, "{bad}");
+    }
 }

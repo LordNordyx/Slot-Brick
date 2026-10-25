@@ -1,0 +1,12 @@
+crates/slot/assets/menu-low.pcm, menu-high.pcm
+
+"Video game menu click sounds", a sound effect from Pixabay.
+
+Used under the Pixabay Content License
+https://pixabay.com/service/license-summary/
+Free to use, with no attribution required; the sounds may not be sold or redistributed
+on their own, apart from a work that they are part of.
+
+Changes: the two pops after the recording's first click cut out (60 and 45 ms), made mono
+at 48 kHz, faded in and out, and made quieter. They are played, as recorded and pitched up
+or down, as the HOME menu is used (HOME → System → System Sounds → Menu).
