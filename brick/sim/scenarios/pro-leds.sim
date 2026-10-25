@@ -3,6 +3,7 @@
 press a
 phase Shelf
 stick right
+wait 1000     # the shelf done sliding
 snap shelf-stick
 stick left
 press menu

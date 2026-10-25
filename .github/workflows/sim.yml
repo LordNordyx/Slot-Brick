@@ -1,4 +1,5 @@
-# Every pull request and every change to main runs the Brick simulator: the real Brick build,
+# Every pull request runs the Brick simulator (not the merge after it: main only takes pull
+# requests, each already run; a release runs it again before it builds): the real Brick build,
 # drawn offscreen in Docker, driven through brick/sim/scenarios and compared screen by screen
 # with brick/sim/golden. The screenshots, and what differs, are kept as the run's artifact.
 # Changes to the docs, the changelog and the licences alone change nothing it tests: skipped.
@@ -6,14 +7,6 @@ name: Brick simulator
 
 on:
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'licenses/**'
-      - 'LICENSE'
-      - 'brick/os/NOTICE.txt'
-      - 'brick/os/release-note.sh'
-  push:
-    branches: [main]
     paths-ignore:
       - '**.md'
       - 'licenses/**'
@@ -30,9 +23,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  sim:
+  # The unit tests and the scenarios, side by side: each builds Slot its own way (the tests
+  # with Slot's test code in, the scenarios the program itself), so neither waits for the other.
+  unit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       # Pinned to commits, so a moved tag cannot change what runs.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,13 +39,33 @@ jobs:
           path: |
             .docker-cache/cargo
             target-sim
-          key: sim-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/sim/Dockerfile', 'brick/sim/build-cores.sh', 'vendor/*-src.tar.gz', 'cores/*/*.patch') }}
-          restore-keys: sim-
+          key: sim-unit-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/sim/Dockerfile', 'brick/sim/build-cores.sh', 'vendor/*-src.tar.gz', 'cores/*/*.patch') }}
+          restore-keys: sim-unit-
 
       - name: Unit tests
         run: sh brick/sim.sh unit
 
+  scenarios:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .docker-cache/cargo
+            target-sim
+          key: sim-scenarios-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/sim/Dockerfile', 'brick/sim/build-cores.sh', 'vendor/*-src.tar.gz', 'cores/*/*.patch') }}
+          restore-keys: sim-scenarios-
+
+      # One at a time: on a runner's shared cores, even two side by side fall behind the timings
+      # several scenarios count on (a held button, a shelf that has to have arrived).
       - name: Scenarios
+        env:
+          JOBS: 1
         run: sh brick/sim.sh test
 
       - name: Keep the screenshots
