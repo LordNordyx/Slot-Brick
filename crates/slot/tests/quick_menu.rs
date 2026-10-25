@@ -208,7 +208,7 @@ fn colour_correction_flips_on_either_arrow_and_saves_for_its_own_system_only() {
 }
 
 #[test]
-fn rewind_and_turbo_on_the_game_page_and_eject_save_in_the_library_flip_and_save() {
+fn rewind_and_turbo_on_the_game_page_and_save_on_eject_under_saving_flip_and_save() {
     let (d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Rewind);
     let card = |d: &TempDir| {
@@ -229,11 +229,11 @@ fn rewind_and_turbo_on_the_game_page_and_eject_save_in_the_library_flip_and_save
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, false, false));
     press(&mut a, Btn::B);
-    assert_eq!(a.quick_menu(), Some(QuickRow::Library));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Saving));
 }
 
 #[test]
-fn autosave_in_the_library_and_low_battery_shutdown_in_system_step_and_save() {
+fn autosave_under_saving_and_low_battery_shutdown_in_system_step_and_save() {
     let (d, mut a, _) = on_carousel();
     let card = |d: &TempDir| {
         let s = read_slot_state(d.path());
