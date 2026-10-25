@@ -6,11 +6,19 @@ static ES: AtomicBool = AtomicBool::new(false);
 
 pub fn load(surface: &dyn Surface) {
     gl::load_with(|name| surface.proc_address(name));
-    let version = unsafe { gl::GetString(gl::VERSION) };
-    let es = !version.is_null()
-        && unsafe { std::ffi::CStr::from_ptr(version as *const std::ffi::c_char) }
-            .to_string_lossy()
-            .starts_with("OpenGL ES");
+    let text = |name| {
+        let s = unsafe { gl::GetString(name) };
+        (!s.is_null()).then(|| unsafe { std::ffi::CStr::from_ptr(s as *const std::ffi::c_char) }.to_string_lossy().into_owned())
+    };
+    let version = text(gl::VERSION);
+    let es = version.as_deref().is_some_and(|v| v.starts_with("OpenGL ES"));
+    eprintln!(
+        "slot: gl: {} / {} / {} / GLSL {}",
+        text(gl::VENDOR).unwrap_or_else(|| "?".into()),
+        text(gl::RENDERER).unwrap_or_else(|| "?".into()),
+        version.as_deref().unwrap_or("? (glGetString gave nothing)"),
+        text(gl::SHADING_LANGUAGE_VERSION).unwrap_or_else(|| "?".into())
+    );
     ES.store(es, Ordering::Relaxed);
 }
 
@@ -38,7 +46,12 @@ fn shader(kind: gl::types::GLenum, src: &str) -> Result<gl::types::GLuint, GfxEr
         if ok == 0 {
             let log = info_log(id, gl::GetShaderiv, gl::GetShaderInfoLog);
             gl::DeleteShader(id);
-            return Err(GfxError::Shader(log));
+            let what = if kind == gl::VERTEX_SHADER { "vertex" } else { "fragment" };
+            let first = src.lines().next().unwrap_or("");
+            return Err(GfxError::Shader(format!(
+                "{what} shader did not compile (shader id {id}, gl error {:#x}, source starts {first:?}): {log}",
+                gl::GetError()
+            )));
         }
         Ok(id)
     }
@@ -68,7 +81,7 @@ pub fn program(vert: &str, frag: &str) -> Result<gl::types::GLuint, GfxError> {
         if ok == 0 {
             let log = info_log(p, gl::GetProgramiv, gl::GetProgramInfoLog);
             gl::DeleteProgram(p);
-            return Err(GfxError::Shader(log));
+            return Err(GfxError::Shader(format!("program did not link: {log}")));
         }
         Ok(p)
     }

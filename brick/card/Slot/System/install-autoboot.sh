@@ -3,6 +3,13 @@
 CARD=/mnt/SDCARD
 BIN=/usr/trimui/bin
 ROOT="$CARD/Slot"
+# Runs on every start: when the hook is already in place and current, with a good backup
+# and no installer left to retire, there is nothing to do, so skip the full checks.
+if [ ! -f "$ROOT/DISABLE_AUTOBOOT" ] && [ ! -d "$CARD/trimui" ] && [ -s "$BIN/runtrimui-slot-backup.sh" ] \
+    && ! grep -q '^# SLOT_BRICK_BOOT_V[12]$' "$BIN/runtrimui-slot-backup.sh" \
+    && "$ROOT/System/slot-filecheck" compare "$ROOT/System/runtrimui-slot.sh" "$BIN/runtrimui.sh" 2>/dev/null; then
+    exit 0
+fi
 mkdir -p "$ROOT/Logs" 2>/dev/null
 if ( : >> "$ROOT/Logs/install.log" ) 2>/dev/null; then exec >> "$ROOT/Logs/install.log" 2>&1; else exec >> /tmp/slot-install.log 2>&1; echo 'WARNING: SD card is not writable'; fi
 echo "slot autoboot installer v0.5: $(date)"

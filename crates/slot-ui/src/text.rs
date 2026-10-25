@@ -1,6 +1,7 @@
 use std::sync::OnceLock;
 
-use fontdue::{Font, FontSettings};
+pub use fontdue::Font;
+use fontdue::FontSettings;
 
 const LABEL_TTF: &[u8] = include_bytes!("../assets/label.ttf");
 
@@ -10,10 +11,52 @@ pub struct Layout {
     pub tracking: f32,
 }
 
-pub fn label_font() -> Option<&'static Font> {
+/// The font picked under HOME → System → Font, set once at startup before anything is drawn.
+static CHOSEN: OnceLock<Font> = OnceLock::new();
+
+/// Slot's own font (Open Sans Bold): the default, and where a chosen font lacks a character.
+fn built_in() -> Option<&'static Font> {
     static FONT: OnceLock<Option<Font>> = OnceLock::new();
     FONT.get_or_init(|| Font::from_bytes(LABEL_TTF, FontSettings::default()).ok())
         .as_ref()
+}
+
+/// Uses `bytes` (a TTF or OTF) for all text from now on. False when they are not a font, or
+/// one was set already.
+pub fn set_label_font(bytes: &[u8]) -> bool {
+    Font::from_bytes(bytes, FontSettings::default())
+        .is_ok_and(|font| CHOSEN.set(font).is_ok())
+}
+
+thread_local! {
+    /// A font in place of the label font while one face is drawn (in_font).
+    static FOR_NOW: std::cell::Cell<Option<&'static Font>> = const { std::cell::Cell::new(None) };
+}
+
+pub fn label_font() -> Option<&'static Font> {
+    FOR_NOW.with(|f| f.get()).or_else(|| CHOSEN.get()).or_else(built_in)
+}
+
+/// `draw`, with its text in `font` (the Font row names each font in itself).
+pub fn in_font<T>(font: &'static Font, draw: impl FnOnce() -> T) -> T {
+    let before = FOR_NOW.with(|f| f.replace(Some(font)));
+    let out = draw();
+    FOR_NOW.with(|f| f.set(before));
+    out
+}
+
+/// A font to draw in for as long as Slot runs, or None if `bytes` are not one.
+pub fn leak_font(bytes: &[u8]) -> Option<&'static Font> {
+    Font::from_bytes(bytes, FontSettings::default()).ok().map(|f| &*Box::leak(Box::new(f)))
+}
+
+/// The font `ch` is drawn in: `font`, or the built-in one where `font` has no such character,
+/// so a name never shows an empty box.
+pub fn font_for(font: &Font, ch: char) -> &Font {
+    match font.lookup_glyph_index(ch) {
+        0 if !ch.is_whitespace() => built_in().unwrap_or(font),
+        _ => font,
+    }
 }
 
 pub fn fit(
@@ -88,7 +131,7 @@ pub fn coverage(dst_w: u32, dst_h: u32, layout: &Layout) -> Vec<u8> {
     for line in &layout.lines {
         let mut pen = (dst_w as f32 - line_width(font, line, layout.px, layout.tracking)) / 2.0;
         for ch in line.chars() {
-            let (m, cov) = font.rasterize(ch, layout.px);
+            let (m, cov) = font_for(font, ch).rasterize(ch, layout.px);
             stamp(
                 &mut out,
                 dst_w,
@@ -117,7 +160,7 @@ pub fn line_width(font: &Font, line: &str, px: f32, tracking: f32) -> f32 {
     let mut w = 0.0;
     let mut n = 0;
     for ch in line.chars() {
-        w += font.metrics(ch, px).advance_width;
+        w += font_for(font, ch).metrics(ch, px).advance_width;
         n += 1;
     }
     w + tracking * (n as f32 - 1.0).max(0.0)

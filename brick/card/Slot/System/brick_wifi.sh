@@ -3,12 +3,13 @@
 # slot (brick_wifi.rs) always runs this file. Brick firmware may ship its own
 # /etc/wifi/wifi_init.sh, but it calls an rfkill.elf that firmware lacks, so the
 # radio stays blocked; this helper unblocks it through sysfs and checks the result.
-# Usage: brick_wifi.sh start|stop|radio|ensure|dhcp
+# Usage: brick_wifi.sh start|stop|radio|ensure|dhcp|renew
 # start:  radio on, wpa_supplicant control socket up, DHCP client waiting.
 # stop:   DHCP + supplicant stopped, radio off.
 # ensure: for a supplicant someone else started (the firmware does at boot, with
 #         the radio still blocked): radio on, wlan0 up, DHCP client waiting.
 # dhcp:   a DHCP client for wlan0 if none is running (after joining a network).
+# renew:  joined, but no address or route: a fresh DHCP client (slot asks after a while).
 # Never blocks for long and never leaves daemons attached to our stdout,
 # because slot waits for this script to exit. Everything is logged to
 # Slot/Logs/wifi.log (or /tmp/slot/wifi.log when the card is read-only).
@@ -37,8 +38,11 @@ radio() { # radio block|unblock
     fi
     # Set the kernel switch directly too: Brick firmware has neither tool.
     soft=1; [ "$1" = block ] || soft=0
+    # Only when it changes: on Slot OS, joins stalled after "associated" whenever this was
+    # written again with the value it already had (the menu opening runs `ensure`).
     for r in "$RFKILL"/rfkill*; do
         [ "$(cat "$r/type" 2>/dev/null)" = wlan ] || continue
+        [ "$(cat "$r/soft" 2>/dev/null)" = "$soft" ] && continue
         echo "$soft" > "$r/soft" 2>/dev/null
         echo "radio $1: $(basename "$r") soft=$(cat "$r/soft" 2>/dev/null) hard=$(cat "$r/hard" 2>/dev/null)"
     done
@@ -151,6 +155,28 @@ firmware() { # firmware <verb>
     return "$rc"
 }
 
+# For 40 s after a start, in the background: each change of the supplicant's state, with the
+# uptime, in this log; and on joining, the DHCP client asks at once (SIGUSR1) rather than at
+# its next retry.
+watch_join() {
+    dir=$(find_socket) && command -v wpa_cli >/dev/null 2>&1 || return 0
+    (
+        last= n=0
+        while [ "$n" -lt 80 ]; do
+            state=$(wpa_cli -p "$dir" -i "$IFACE" status 2>/dev/null | sed -n 's/^wpa_state=//p')
+            if [ "$state" != "$last" ]; then
+                echo "$(cut -d' ' -f1 /proc/uptime) wpa_state $state"
+                last=$state
+                if [ "$state" = COMPLETED ]; then
+                    [ ! -f "$RUN/udhcpc.pid" ] || kill -USR1 "$(cat "$RUN/udhcpc.pid")" 2>/dev/null
+                    break
+                fi
+            fi
+            sleep 0.5; n=$((n + 1))
+        done
+    ) &
+}
+
 case "${1:-}" in
 start)
     # Before the firmware helper too, whose own unblock needs the missing rfkill.elf.
@@ -158,6 +184,7 @@ start)
     if firmware start && wait_for 50 iface_up && wait_for 30 supplicant_ready; then
         echo "control socket: $(find_socket)"
         start_dhcp
+        watch_join
         exit 0
     fi
     [ ! -f "$ETC/wifi/wifi_init.sh" ] || echo 'firmware helper did not bring Wi-Fi up; using slot helper'
@@ -181,6 +208,7 @@ start)
     fi
     echo "control socket: $(find_socket)"
     start_dhcp
+    watch_join
     exit 0
     ;;
 radio)
@@ -213,6 +241,16 @@ dhcp)
     start_dhcp
     exit 0
     ;;
+renew)
+    # Joined, yet no address or route out (seen after waking from sleep): whatever DHCP client
+    # there is has given up or lost track, so start a fresh one, as turning Wi-Fi off and on would.
+    echo 'joined but offline; restarting the DHCP client'
+    stop_dhcp
+    iface_up || { ifconfig "$IFACE" up && wait_for 20 iface_up; } || { echo "cannot bring $IFACE up"; exit 1; }
+    start_dhcp
+    watch_join
+    exit 0
+    ;;
 stop)
     firmware stop || :
     stop_dhcp
@@ -227,6 +265,6 @@ stop)
     exit 0
     ;;
 *)
-    echo "usage: $0 start|stop|radio|ensure|dhcp"; exit 2
+    echo "usage: $0 start|stop|radio|ensure|dhcp|renew"; exit 2
     ;;
 esac

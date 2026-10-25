@@ -118,6 +118,8 @@ pub struct CartMenuView<'a> {
     pub finish: usize,
     pub shape: usize,
     pub cart: Option<(TexId, u32, u32)>,
+    /// While a label is on its way: the cart's empty label slot, in its plastic, under the cart.
+    pub recess: Option<([f32; 4], crate::Rect)>,
     pub faces: Option<&'a CartMenuFaces>,
     /// Whether a label can be searched for at all: Y is greyed out without Wi-Fi.
     pub online: bool,
@@ -139,6 +141,9 @@ const CART_BOX: [f32; 4] = [20.0, 40.0, PANEL_X - 40.0, LEGEND_Y - 60.0];
 impl CartMenuView<'_> {
     pub fn draw(&self, out: &mut Vec<Draw>) {
         out.push(Draw::Rect { x: 0.0, y: 0.0, w: OUT_W as f32, h: OUT_H as f32, colour: opening() });
+        if let Some((colour, (x, y, w, h))) = self.recess {
+            out.push(Draw::Rect { x, y, w, h, colour });
+        }
         if let Some((tex, w, h)) = self.cart {
             let (x, y, w, h) = cart_menu_cart_at(w, h);
             out.push(Draw::Tex { x, y, w, h, tex, alpha: 1.0 });

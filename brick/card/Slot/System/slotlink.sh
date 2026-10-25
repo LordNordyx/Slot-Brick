@@ -75,8 +75,10 @@ else
     sh "$HELPER" start
     sh "$HELPER" stop
 fi
+# The helper's "radio" has unblocked it already, through sysfs where there is no rfkill tool
+# (Slot OS has none).
 if command -v rfkill.elf >/dev/null 2>&1; then rfkill.elf unblock wifi
-else rfkill unblock wifi; fi
+elif command -v rfkill >/dev/null 2>&1; then rfkill unblock wifi; fi
 ifconfig wlan0 up
 if [ "$role" = host ]; then
     command -v hostapd >/dev/null || { echo 'Firmware hostapd unavailable'; exit 1; }

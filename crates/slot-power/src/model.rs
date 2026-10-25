@@ -20,15 +20,25 @@ impl Model {
 }
 
 const MAIN_UI: &str = "/usr/trimui/bin/MainUI";
+/// On Slot OS, which has no MainUI: the model its image was built for (brick/os/make-image.sh).
+const SLOT_OS_MODEL: &str = "/etc/slot-os-model";
 
-/// The model this is running on, read once. Anything but a Brick Pro's MainUI (or none at
-/// all) is taken for a Brick.
+/// The model this is running on, read once. Anything but a Brick Pro's MainUI, or a Slot OS
+/// image built for one, is taken for a Brick.
 pub fn model() -> Model {
     static MODEL: OnceLock<Model> = OnceLock::new();
     *MODEL.get_or_init(|| match std::fs::read(crate::hw(MAIN_UI)) {
         Ok(bytes) => model_of(&bytes),
-        Err(_) => Model::Brick,
+        Err(_) => std::fs::read_to_string(crate::hw(SLOT_OS_MODEL)).map_or(Model::Brick, |m| model_named(&m)),
     })
+}
+
+/// A Slot OS image's model, as make-image.sh writes it: "brick" or "brickpro".
+fn model_named(name: &str) -> Model {
+    match name.trim() {
+        "brickpro" => Model::BrickPro,
+        _ => Model::Brick,
+    }
 }
 
 /// MainUI holds its model's name as a string of its own: "Trimui Brick Pro", or "Trimui Brick".
@@ -50,5 +60,12 @@ mod tests {
         assert_eq!(model_of(b"\x7fELF...\0Trimui Brick\0more"), Model::Brick);
         assert_eq!(model_of(b"\0Trimui Brick Pros and cons\0"), Model::Brick);
         assert_eq!(model_of(b""), Model::Brick);
+    }
+
+    #[test]
+    fn a_slot_os_image_names_its_model() {
+        assert_eq!(model_named("brickpro\n"), Model::BrickPro);
+        assert_eq!(model_named("brick\n"), Model::Brick);
+        assert_eq!(model_named(""), Model::Brick);
     }
 }

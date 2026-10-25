@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 
 /// Every platform in Platform::ALL has its four folders here (tests/dist.rs checks).
-pub const DIRS: [&str; 39] = [
+pub const DIRS: [&str; 40] = [
     "BIOS",
     "Config",
+    "Fonts",
     "Games",
     "Games/GBA",
     "Games/GB",
@@ -74,4 +75,18 @@ pub fn has_real_bios(root: &Path) -> bool {
 
 pub fn saves_dir(root: &Path) -> PathBuf {
     root.join("Saves")
+}
+
+/// Space on the card that holds `path`, in bytes: (free, size). Free is what the player can
+/// still fill, the filesystem's own reserve left out.
+pub fn card_space(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` is a NUL-terminated path and `st` a statvfs for the call to fill.
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    let block = st.f_frsize as u64;
+    Some(((st.f_bavail as u64).saturating_mul(block), (st.f_blocks as u64).saturating_mul(block)))
 }

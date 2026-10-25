@@ -192,6 +192,16 @@ impl BrickLeds {
         if before != 1 { self.previous_mode = Some(before); }
         Ok(())
     }
+    /// HOME → System → Reset Settings: the LEDs as they came. Without LED controls there is
+    /// nothing to light, but the saved choice still goes.
+    pub fn reset(&mut self) -> io::Result<()> {
+        self.previous_mode=None;
+        if !self.available {
+            self.settings=Settings::default();
+            return match fs::remove_file(self.root.join(FILE)) { Err(e) if e.kind()!=io::ErrorKind::NotFound => Err(e), _ => Ok(()) };
+        }
+        self.commit(Settings::default())
+    }
     pub fn change(&mut self,row: Row,right: bool) -> io::Result<()> {
         let mut next=self.settings;next.step(row,right);
         self.commit(next)

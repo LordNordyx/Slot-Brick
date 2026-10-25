@@ -25,7 +25,8 @@ pub const PEEL_SHADOW_PAD: u32 = 14;
 /// slot first. The smoothing is the longest, as it rolls the fold back across half the label.
 const LIFT_MS: Millis = 240;
 const FLY_FROM_MS: Millis = 120;
-const LAND_MS: Millis = 640;
+/// When the label touches down on the cart.
+pub const LAND_MS: Millis = 640;
 pub const PEEL_MS: Millis = 1_100;
 /// The framing screen is gone a little after the sticker is clear of it.
 const BACKDROP_MS: Millis = LIFT_MS + 80;

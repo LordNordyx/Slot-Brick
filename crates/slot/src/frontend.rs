@@ -97,9 +97,9 @@ struct OverlayTex {
     reading: Option<(std::path::PathBuf, std::sync::mpsc::Receiver<Option<crate::overlay::Overlay>>)>,
     /// An overlay that could not be used, so it is not read again every frame.
     refused: Option<std::path::PathBuf>,
-    texts: [[Option<TexId>; 2]; slot_store::Platform::ALL.len()],
+    texts: [[Option<TexId>; 2]; QuickRow::NAMED],
     /// A name too long for its row, scrolled while the row is lit.
-    scrolls: [Option<Scroll>; slot_store::Platform::ALL.len()],
+    scrolls: [Option<Scroll>; QuickRow::NAMED],
     /// The carets' widths, left and right, measured once.
     carets: Option<(u32, u32)>,
 }
@@ -182,25 +182,34 @@ fn shortened_value_face(text: &str, lit: bool, room: u32) -> slot_ui::UndoFace {
     quick_value_face(&(chars[..lo].iter().collect::<String>() + "..."), lit)
 }
 
-/// Each system's Overlay row reads the overlay's name, or Off, made again when it changes.
-fn sync_overlay_texts(app: &mut App, compositor: &mut Compositor, tex: &mut OverlayTex) {
+/// The rows that read a name (each system's Overlay row: the overlay's, or Off; Font: the
+/// font's) are made again when it changes.
+fn sync_named_texts(app: &mut App, compositor: &mut Compositor, tex: &mut OverlayTex) {
     if app.quick_menu().is_none() {
         return;
     }
     let carets = *tex.carets.get_or_insert_with(|| (quick_caret_face(false).w, quick_caret_face(true).w));
     let lit_row = app.quick_menu();
-    for platform in slot_store::Platform::ALL {
-        let i = platform.index();
-        let Some(row) = QuickRow::ALL.into_iter().find(|r| r.overlay_of() == Some(platform)) else {
+    for row in QuickRow::ALL {
+        let Some(i) = row.named() else {
             continue;
         };
-        if app.overlay_text_shown(platform) != Some(app.overlay_text(platform)) {
+        if app.named_text_shown(i) != Some(app.named_text(i)) {
             // The name changed: made again, cut short to fit when not lit and scrolled when lit.
-            let text = app.overlay_text(platform).to_string();
+            // The Font row names each font in that font.
+            let text = app.named_text(i).to_string();
+            let own = match (row, app.root()) {
+                (QuickRow::Font, Some(root)) => crate::fonts::preview(root, &text),
+                _ => None,
+            };
+            let in_own = |draw: &mut dyn FnMut() -> slot_ui::UndoFace| match own {
+                Some(font) => slot_ui::text::in_font(font, draw),
+                None => draw(),
+            };
             let label_w = quick_label_face(row).w;
-            let dim = shortened_value_face(&text, false, slot_ui::quick_value_room(label_w, None));
+            let dim = in_own(&mut || shortened_value_face(&text, false, slot_ui::quick_value_room(label_w, None)));
             let room = slot_ui::quick_value_room(label_w, Some(carets));
-            let whole = quick_value_face(&text, true);
+            let whole = in_own(&mut || quick_value_face(&text, true));
             let (lit, scroll) = match whole.w > room {
                 true => {
                     let scroll = Scroll { whole, room, since: std::time::Instant::now(), at: Some(0) };
@@ -213,7 +222,7 @@ fn sync_overlay_texts(app: &mut App, compositor: &mut Compositor, tex: &mut Over
             let (dim_size, lit_size) = ((dim.w, dim.h), (lit.w, lit.h));
             let dim = upload(compositor, &mut tex.texts[i][0], dim);
             let lit = upload(compositor, &mut tex.texts[i][1], lit);
-            app.set_overlay_text_faces(platform, text, [(dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1)]);
+            app.set_named_text_faces(i, text, [(dim, dim_size.0, dim_size.1), (lit, lit_size.0, lit_size.1)]);
         }
         // A long name moves along only while its row is the lit one, starting from its start.
         let (Some(scroll), Some(id)) = (&mut tex.scrolls[i], tex.texts[i][1]) else {
@@ -303,6 +312,9 @@ struct AboutFace {
 /// A favorite's star on the shelf: its size at full scale, and its gold.
 const STAR_PX: f32 = 40.0;
 const STAR_INK: [u8; 3] = [0xff, 0xc8, 0x3c];
+/// Its lit facets, and its shaded ones.
+const STAR_LIGHT: [u8; 3] = [0xff, 0xec, 0x9a];
+const STAR_SHADE: [u8; 3] = [0xd2, 0x86, 0x1c];
 
 #[derive(Default)]
 struct Clocks {
@@ -338,6 +350,7 @@ impl Frontend {
         let mut session = Session::boot(platform.root().to_path_buf());
         label_cache::forget_old(platform.root());
         let stale = label_cache::stale(platform.root(), session.app().carts());
+        crate::boot_times::mark(&format!("  label cache checked ({} new)", stale.len()));
         let rebuild = (!stale.is_empty()).then(|| {
             eprintln!("slot: label cache: {} new labels", stale.len());
             Rebuild::start(platform.root(), stale)
@@ -345,6 +358,7 @@ impl Frontend {
         session
             .app_mut()
             .set_power(Power::new(platform, DOZE_TIMEOUT));
+        crate::boot_times::mark("  power ready");
         Frontend {
             session,
             start: now,
@@ -405,13 +419,24 @@ impl Frontend {
         compositor.set_paper(info.width, &rgba);
     }
 
+    /// Everything drawn at startup: the shelf's faces, then the menus'.
     pub fn upload_faces(&mut self, compositor: &mut Compositor) {
+        self.upload_shelf_faces(compositor);
+        self.upload_menu_faces(compositor);
+    }
+
+    /// What the shelf's first frame shows. The rest (upload_menu_faces) can follow it: no menu
+    /// opens, and no toast or alert shows, before the next frame's input.
+    pub fn upload_shelf_faces(&mut self, compositor: &mut Compositor) {
         Self::upload_paper(compositor);
+        crate::boot_times::mark("  paper");
         #[cfg(feature = "brick")]
         slot_ui::upload_slot_art(|w,h,rgba|compositor.create_texture(w,h,rgba));
+        crate::boot_times::mark("  slot art");
         if self.rebuild.is_none() {
             self.cart_faces.sync(self.session.app_mut(), compositor);
         }
+        crate::boot_times::mark(&format!("  cart faces synced (label rebuild {})", if self.rebuild.is_some() { "running, skipped" } else { "none" }));
         let icons = Icon::ALL
             .iter()
             .map(|i| {
@@ -420,6 +445,55 @@ impl Frontend {
             })
             .collect();
         self.session.app_mut().set_icon_faces(icons);
+        crate::boot_times::mark("  icons");
+        let legend = legend_faces(compositor, &LEGEND);
+        self.session.app_mut().set_legend_faces(legend);
+        let hint = set_clock_hint_face();
+        self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
+        crate::boot_times::mark("  legends, clock hint");
+        let shadow = cart_shadow();
+        let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
+        self.session.app_mut().set_cart_shadow(id);
+        let notched = gb_cart_shadow(GbShell::Notched);
+        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
+        let rounded = gb_cart_shadow(GbShell::Rounded);
+        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
+        self.session.app_mut().set_gb_cart_shadows(notched, rounded);
+        let [nes, famicom] = [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom].map(|shell| {
+            let face = slot_ui::nes_cart_shadow(shell);
+            compositor.create_texture(face.w, face.h, &face.rgba)
+        });
+        self.session.app_mut().set_nes_cart_shadows(nes, famicom);
+        let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
+            let face = slot_ui::snes_cart_shadow(shell);
+            compositor.create_texture(face.w, face.h, &face.rgba)
+        });
+        self.session.app_mut().set_snes_cart_shadows(us, pal);
+        let disc = slot_ui::disc_shadow();
+        let disc = compositor.create_texture(disc.w, disc.h, &disc.rgba);
+        self.session.app_mut().set_disc_shadow(disc);
+        let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
+        let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
+        self.session.app_mut().set_bolt_face(bolt_id);
+        // The shelf's Wi-Fi symbol, in its three states; which one shows is the app's to say.
+        let wifi = [Icon::Wifi, Icon::WifiNoRoute, Icon::WifiOff].map(|icon| {
+            let face = icon_face(icon, slot_ui::WIFI_PX, HUD_INK);
+            (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
+        });
+        self.session.app_mut().set_wifi_faces(wifi);
+        // A favorite's star, gold with a lit side and a shaded one, outlined so it shows on any
+        // plastic.
+        let star = slot_ui::star_face(STAR_PX, STAR_INK, STAR_LIGHT, STAR_SHADE);
+        let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
+        self.session.app_mut().set_star_face(star);
+        crate::boot_times::mark("  shadows and HUD icons");
+        self.upload_wallpaper(compositor);
+        crate::boot_times::mark("  wallpaper");
+    }
+
+    /// What no first frame shows: the power, quick, cart, core and link menus' faces, the
+    /// shutdown lines, toasts, the link badges and the alert.
+    pub fn upload_menu_faces(&mut self, compositor: &mut Compositor) {
         let link_badges = LinkBadge::FACES
             .iter()
             .map(|b| {
@@ -435,6 +509,15 @@ impl Frontend {
         let alert = icon_face(Icon::Alert, ALERT_PX, ALERT_INK);
         let alert = compositor.create_texture(alert.w, alert.h, &alert.rgba);
         self.session.app_mut().set_alert_face(alert);
+        let toasts = Toast::all()
+            .into_iter()
+            .map(|t| {
+                let f = toast_face(t);
+                compositor.create_texture(f.w, f.h, &f.rgba)
+            })
+            .collect();
+        self.session.app_mut().set_toast_faces(toasts);
+        crate::boot_times::mark("  toasts, badges, alert");
         let lines = PowerChoice::ALL
             .iter()
             .map(|c| {
@@ -486,7 +569,9 @@ impl Frontend {
             carets,
             legend,
         });
+        crate::boot_times::mark("  power and quick menus");
         self.upload_cart_menu_faces(compositor);
+        crate::boot_times::mark("  cart menu");
         let sockets = slot_store::Core::PICKER
             .iter()
             .map(|c| {
@@ -524,6 +609,7 @@ impl Frontend {
         let search = hint_face("Y", "Search");
         let face = (compositor.create_texture(search.w, search.h, &search.rgba), search.w);
         self.session.app_mut().set_core_search_face(face);
+        crate::boot_times::mark("  core picker");
         let roles = menu_faces(compositor, LinkRow::ALL.iter().map(|r| r.text()));
         self.session.app_mut().set_link_menu_faces(roles);
         if let Some(linked) = menu_faces(compositor, ["Linked"].into_iter()).pop() {
@@ -546,53 +632,7 @@ impl Frontend {
         self.session.app_mut().set_link_step_faces(steps);
         let fails = menu_faces(compositor, LinkFail::SHOWN.iter().map(|f| f.line()));
         self.session.app_mut().set_link_fail_faces(fails);
-        let toasts = Toast::all()
-            .into_iter()
-            .map(|t| {
-                let f = toast_face(t);
-                compositor.create_texture(f.w, f.h, &f.rgba)
-            })
-            .collect();
-        self.session.app_mut().set_toast_faces(toasts);
-        let legend = legend_faces(compositor, &LEGEND);
-        self.session.app_mut().set_legend_faces(legend);
-        let hint = set_clock_hint_face();
-        self.clocks.hint = Some(compositor.create_texture(hint.w, hint.h, &hint.rgba));
-        let shadow = cart_shadow();
-        let id = compositor.create_texture(shadow.w, shadow.h, &shadow.rgba);
-        self.session.app_mut().set_cart_shadow(id);
-        let notched = gb_cart_shadow(GbShell::Notched);
-        let notched = compositor.create_texture(notched.w, notched.h, &notched.rgba);
-        let rounded = gb_cart_shadow(GbShell::Rounded);
-        let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
-        self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        let [nes, famicom] = [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom].map(|shell| {
-            let face = slot_ui::nes_cart_shadow(shell);
-            compositor.create_texture(face.w, face.h, &face.rgba)
-        });
-        self.session.app_mut().set_nes_cart_shadows(nes, famicom);
-        let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
-            let face = slot_ui::snes_cart_shadow(shell);
-            compositor.create_texture(face.w, face.h, &face.rgba)
-        });
-        self.session.app_mut().set_snes_cart_shadows(us, pal);
-        let disc = slot_ui::disc_shadow();
-        let disc = compositor.create_texture(disc.w, disc.h, &disc.rgba);
-        self.session.app_mut().set_disc_shadow(disc);
-        let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
-        let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
-        self.session.app_mut().set_bolt_face(bolt_id);
-        // The shelf's Wi-Fi symbol, in its three states; which one shows is the app's to say.
-        let wifi = [Icon::Wifi, Icon::WifiNoRoute, Icon::WifiOff].map(|icon| {
-            let face = icon_face(icon, slot_ui::WIFI_PX, HUD_INK);
-            (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
-        });
-        self.session.app_mut().set_wifi_faces(wifi);
-        // A favorite's star, gold, outlined so it shows on any plastic.
-        let star = icon_face(Icon::Star, STAR_PX, STAR_INK);
-        let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
-        self.session.app_mut().set_star_face(star);
-        self.upload_wallpaper(compositor);
+        crate::boot_times::mark("  link menus");
     }
 
     /// The cart menu's words, each value dim and lit: built once, as the quick menu's are.
@@ -748,7 +788,7 @@ impl Frontend {
         sync_disc_faces(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
-        sync_overlay_texts(self.session.app_mut(), compositor, &mut self.overlay_tex);
+        sync_named_texts(self.session.app_mut(), compositor, &mut self.overlay_tex);
         sync_overlay(self.session.app_mut(), compositor, &mut self.overlay_tex);
         sync_label_grid(self.session.app_mut(), compositor, &mut self.label_grid_tex);
         sync_label_adjust(self.session.app_mut(), compositor, &mut self.label_adjust_tex);

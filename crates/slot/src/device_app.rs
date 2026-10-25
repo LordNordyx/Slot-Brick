@@ -9,6 +9,7 @@ use slot::input::SimInput as BrickInput;
 #[cfg(not(feature = "brick"))]
 use slot::input::DeviceInput;
 use slot_gfx::{Compositor, FbdevSurface, Surface};
+use slot::boot_times::mark as boot_time;
 use slot_power::trace_first_frame;
 #[cfg(feature = "brick")]
 use slot_power::BrickPlatform;
@@ -72,6 +73,19 @@ impl Pacer {
     }
 }
 
+/// On Slot OS the GPU driver loads beside Slot's own start (init's SLOT_GPU_READY names the file
+/// it makes once loaded): the screen waits for it, the sound and the games do not.
+fn wait_for_gpu() {
+    let Some(ready) = std::env::var_os("SLOT_GPU_READY").map(PathBuf::from) else {
+        return;
+    };
+    let since = Instant::now();
+    while !ready.exists() && since.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    boot_time(&format!("GPU driver ready (waited {} ms)", since.elapsed().as_millis()));
+}
+
 /// Runs System/sleep.sh without going deaf: a Power press that lands while the
 /// script is still preparing (Wi-Fi stop, sync) cancels the suspend instead of
 /// being swallowed, which used to need a second press to wake. Once the script
@@ -126,6 +140,7 @@ fn sim_sleep(input: &mut BrickInput, frontend: &Frontend, sim: &slot::sim::Share
 }
 
 pub fn run() {
+    boot_time("started");
     let root = std::env::var_os("SLOT_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(CARD));
@@ -142,8 +157,18 @@ pub fn run() {
         eprintln!("slot: sim: stand-in hardware: {e}");
         std::process::exit(1);
     }
+    // Knowing the model means reading all of the stock MainUI (several MB): on a
+    // thread of its own, while the screen and sound open. The first to ask waits for it.
+    #[cfg(feature = "brick")]
+    let _ = std::thread::Builder::new().name("slot-model".into()).spawn(slot_power::model);
+    // The font, before anything is drawn in it.
+    eprintln!("slot: font: {}", slot::fonts::load_chosen(&root));
+    // The sound output opens, and the app boots, beside the screen, for Session::boot to take.
+    slot::audio::open_early();
+    slot::app::App::boot_early(root.clone());
     #[cfg(feature = "sim")]
     let sim = slot::sim::start();
+    wait_for_gpu();
     #[cfg(feature = "sim")]
     let surface = FbdevSurface::offscreen(slot::sim::PANEL);
     #[cfg(not(feature = "sim"))]
@@ -159,9 +184,21 @@ pub fn run() {
         Ok(c) => c,
         Err(e) => {
             eprintln!("slot: {e}");
+            // On Slot OS, what the GPU driver said about it, for the bug report.
+            if slot_power::slot_os() {
+                if let Ok(out) = std::process::Command::new("dmesg").output() {
+                    let log = String::from_utf8_lossy(&out.stdout);
+                    let tail: Vec<&str> = log.lines().rev().take(60).collect();
+                    eprintln!("slot: kernel log, last lines:");
+                    for line in tail.into_iter().rev() {
+                        eprintln!("  {line}");
+                    }
+                }
+            }
             std::process::exit(1);
         }
     };
+    boot_time("screen ready");
     #[cfg(not(feature = "brick"))]
     let platform = DevicePlatform::new(root.clone());
     #[cfg(not(feature = "brick"))]
@@ -174,8 +211,10 @@ pub fn run() {
     #[cfg(feature = "brick")]
     slot::brick_wifi::repair_at_boot();
     let mut frontend = Frontend::boot(Box::new(platform));
-    frontend.upload_faces(&mut compositor);
+    boot_time("games and settings read");
+    frontend.upload_shelf_faces(&mut compositor);
     frontend.upload_bezel(&mut compositor, surface.window_size());
+    boot_time("faces drawn");
     #[cfg(not(feature = "brick"))]
     let mut input = DeviceInput::open(&root);
     #[cfg(feature = "sim")]
@@ -188,6 +227,7 @@ pub fn run() {
             std::process::exit(1);
         }
     };
+    boot_time("joystick ready");
     #[cfg(not(feature = "brick"))]
     let card = root.clone();
     #[cfg(not(feature = "brick"))]
@@ -289,10 +329,16 @@ pub fn run() {
             std::thread::sleep(Duration::from_millis(25));
             continue;
         }
+        if !drawn {
+            boot_time("  first input and update");
+        }
         let frame_ready = frontend.step_emulator(pacer.period, STEP_TIMEOUT);
         #[cfg(not(feature = "brick"))]
         let _ = frame_ready;
         frontend.render(&mut compositor, surface.window_size());
+        if !drawn {
+            boot_time("  first render");
+        }
         let swap = Instant::now();
         let work = swap - began;
         #[cfg(feature = "brick")]
@@ -324,6 +370,11 @@ pub fn run() {
         if !drawn {
             drawn = true;
             trace_first_frame();
+            boot_time("first frame");
+            // The menus are drawn now, behind the first frame: none opens before the next
+            // frame's input.
+            frontend.upload_menu_faces(&mut compositor);
+            boot_time("menus drawn");
             #[cfg(feature = "brick")]
             slot::update::settle(&slot::update::card_of(&root));
             #[cfg(feature = "brick")]

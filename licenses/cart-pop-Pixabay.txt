@@ -1,0 +1,12 @@
+crates/slot/assets/cart-pop.pcm
+
+"Cart pop", a sound effect from Pixabay.
+
+Used under the Pixabay Content License
+https://pixabay.com/service/license-summary/
+Free to use, with no attribution required; the sound may not be sold or redistributed
+on its own, apart from a work that it is part of.
+
+Changes: cut to its one pop (140 ms), made mono at 48 kHz, faded in and out, and made
+quieter. Played as a GBA cart's lid pops open for the core picker, and lower and softer as
+it closes (HOME → System → System Sounds → Cart Opening).
