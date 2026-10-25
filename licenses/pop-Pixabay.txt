@@ -1,7 +1,6 @@
 crates/slot/assets/pop1.pcm … pop5.pcm
 
-"Pop" (sound effect 91931) by freesound_community
-https://pixabay.com/sound-effects/film-special-effects-pop-91931/
+"Pop" by freesound_community, a sound effect from Pixabay.
 
 Used under the Pixabay Content License
 https://pixabay.com/service/license-summary/

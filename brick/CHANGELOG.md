@@ -1,6 +1,9 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Sounds: the HOME menu now makes a soft pop as you move, change a setting, open a page and go back; a GBA cart pops as it opens for the core picker, and snaps shut as it closes; and a label slaps down as it lands on its cart.
+- System → System Sounds: set how loud Slot's own sounds are (Volume, 0–100%, on top of the Brick's volume), and turn each kind on or off: Menu, Favorite Star, Cart In & Out, Cart Opening and Label On. Sounds in quick succession no longer add up to louder and louder; each takes over from the last.
+- Fixed: putting a label on a GBA cart in its own colour (such as Pokémon Ruby's red) showed the cart black while framing the label and as it flew on. And while a label flies on, the cart's empty label slot now shows its plastic, in the colour you picked, rather than black.
 - Favorites: the star now pops onto the cart when you press Y, with one of five pop sounds at random, and pops off again with a lower, softer one. It's shaded too, with a lit and a dark side.
 - Library → Systems: hide the shelves of systems you don't play. The last system with games can't be hidden.
 - System → Reset Settings: puts every setting back to how it came (LEDs and font included). Press A, then A again when it asks "Sure?". Games, saves, states, play time, favorites, the clock, brightness and volume stay.

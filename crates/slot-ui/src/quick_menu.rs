@@ -82,10 +82,17 @@ pub enum QuickRow {
     AboutFirmware,
     AboutCard,
     AboutLabel,
+    SoundMenu,
+    SystemSounds,
+    SoundStar,
+    SoundCart,
+    SoundCartOpen,
+    SoundLabel,
+    SoundVolume,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 69] = [
+    pub const ALL: [QuickRow; 76] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -155,19 +162,35 @@ impl QuickRow {
         QuickRow::AboutFirmware,
         QuickRow::AboutCard,
         QuickRow::AboutLabel,
+        QuickRow::SoundMenu,
+        QuickRow::SystemSounds,
+        QuickRow::SoundStar,
+        QuickRow::SoundCart,
+        QuickRow::SoundCartOpen,
+        QuickRow::SoundLabel,
+        QuickRow::SoundVolume,
     ];
 
     #[cfg(not(feature = "brick"))]
     pub const MAIN: [QuickRow; 4] = [QuickRow::Screen, QuickRow::Game, QuickRow::Library, QuickRow::System];
     #[cfg(not(feature = "brick"))]
-    pub const SYSTEM: [QuickRow; 6] = [QuickRow::DateTime, QuickRow::Font, QuickRow::Rumble, QuickRow::BatteryShutdown, QuickRow::ResetSettings, QuickRow::About];
+    pub const SYSTEM: [QuickRow; 7] = [QuickRow::DateTime, QuickRow::Font, QuickRow::Rumble, QuickRow::SystemSounds, QuickRow::BatteryShutdown, QuickRow::ResetSettings, QuickRow::About];
 
     #[cfg(feature = "brick")]
     pub const MAIN: [QuickRow; 5] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Online,QuickRow::System];
-    /// System: the Brick's lights, its clock, the font, rumble, the battery, every setting back
-    /// to how it came, and what Slot is.
+    /// System: the Brick's lights, its clock, the font, rumble, Slot's sounds, the battery,
+    /// every setting back to how it came, and what Slot is.
     #[cfg(feature = "brick")]
-    pub const SYSTEM: [QuickRow; 7] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::BatteryShutdown,QuickRow::ResetSettings,QuickRow::About];
+    pub const SYSTEM: [QuickRow; 8] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::SystemSounds,QuickRow::BatteryShutdown,QuickRow::ResetSettings,QuickRow::About];
+    /// System → System Sounds: how loud they all are, and each kind on or off.
+    pub const SOUNDS: [QuickRow; 6] = [
+        QuickRow::SoundVolume,
+        QuickRow::SoundMenu,
+        QuickRow::SoundStar,
+        QuickRow::SoundCart,
+        QuickRow::SoundCartOpen,
+        QuickRow::SoundLabel,
+    ];
     /// Clock: setting it by hand, and from the internet.
     pub const CLOCK: [QuickRow; 2] = [QuickRow::DateTime,QuickRow::AutoClock];
     /// Online: what needs Wi-Fi, and Wi-Fi itself.
@@ -220,13 +243,15 @@ impl QuickRow {
     }
 
     /// The system an Overlay row picks the overlay for.
-    /// Rows that read a name rather than a fixed value (an overlay's, the font's, About's),
-    /// numbered: the overlay rows by their platform, then Font, then About's.
-    pub const NAMED: usize = slot_store::Platform::ALL.len() + 1 + Self::ABOUT_INFO.len();
+    /// Rows that read a name rather than a fixed value (an overlay's, the font's, About's, the
+    /// sounds' volume), numbered: the overlay rows by their platform, then Font, then About's,
+    /// then Volume.
+    pub const NAMED: usize = slot_store::Platform::ALL.len() + 1 + Self::ABOUT_INFO.len() + 1;
     pub fn named(self) -> Option<usize> {
         let about = slot_store::Platform::ALL.len() + 1;
         match self {
             QuickRow::Font => Some(slot_store::Platform::ALL.len()),
+            QuickRow::SoundVolume => Some(Self::NAMED - 1),
             row if row.info() => Self::ABOUT_INFO.iter().position(|r| *r == row).map(|at| about + at),
             _ => self.overlay_of().map(|p| p.index()),
         }
@@ -294,6 +319,7 @@ impl QuickRow {
             | QuickRow::Clock
             | QuickRow::Font
             | QuickRow::Rumble
+            | QuickRow::SystemSounds
             | QuickRow::BatteryShutdown
             | QuickRow::ResetSettings
             | QuickRow::About => &QuickRow::SYSTEM,
@@ -303,6 +329,12 @@ impl QuickRow {
             | QuickRow::ShowNes
             | QuickRow::ShowSnes
             | QuickRow::ShowPs1 => &QuickRow::SYSTEMS,
+            QuickRow::SoundVolume
+            | QuickRow::SoundMenu
+            | QuickRow::SoundStar
+            | QuickRow::SoundCart
+            | QuickRow::SoundCartOpen
+            | QuickRow::SoundLabel => &QuickRow::SOUNDS,
             QuickRow::AboutVersion
             | QuickRow::AboutBuild
             | QuickRow::AboutDevice
@@ -332,6 +364,7 @@ impl QuickRow {
             QuickRow::LibrarySort => Some(QuickRow::Library),
             QuickRow::ShowGba => Some(QuickRow::LibrarySystems),
             QuickRow::AboutVersion => Some(QuickRow::About),
+            QuickRow::SoundVolume => Some(QuickRow::SystemSounds),
             QuickRow::Wifi => Some(QuickRow::Online),
             QuickRow::AutoSave => Some(QuickRow::Saving),
             #[cfg(feature = "brick")]
@@ -355,6 +388,7 @@ impl QuickRow {
             QuickRow::Library => Some(QuickRow::LIBRARY[0]),
             QuickRow::LibrarySystems => Some(QuickRow::SYSTEMS[0]),
             QuickRow::About => Some(QuickRow::ABOUT[0]),
+            QuickRow::SystemSounds => Some(QuickRow::SOUNDS[0]),
             QuickRow::Online => Some(QuickRow::ONLINE[0]),
             QuickRow::Clock => Some(QuickRow::CLOCK[0]),
             QuickRow::Saving => Some(QuickRow::SAVING[0]),
@@ -405,6 +439,13 @@ impl QuickRow {
             QuickRow::AboutFirmware => "Firmware",
             QuickRow::AboutCard => "SD Card",
             QuickRow::AboutLabel => "Label",
+            QuickRow::SoundMenu => "Menu",
+            QuickRow::SystemSounds => "System Sounds",
+            QuickRow::SoundStar => "Favorite Star",
+            QuickRow::SoundCart => "Cart In & Out",
+            QuickRow::SoundCartOpen => "Cart Opening",
+            QuickRow::SoundLabel => "Label On",
+            QuickRow::SoundVolume => "Volume",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Emulation",
@@ -436,7 +477,7 @@ impl QuickRow {
         matches!(
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
-                | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutLabel
+                | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutLabel | QuickRow::SystemSounds
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1
         )
     }

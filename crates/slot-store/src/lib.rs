@@ -33,7 +33,7 @@ pub use ring::{StateEntry, StateRing, RING_MAX};
 pub use scan::{initial, is_hidden, labels_of, listing, scan, sort_key, Cart, StoreError, FAMICOM_LABELS};
 pub use slot_state::{
     read_slot_state, write_slot_state, Shader, SlotState, BLUE_LIGHT_MAX, BRIGHTNESS_MAX,
-    AUTOSAVE_MINS, AUTOSAVE_MIN_DEFAULT, BATTERY_SHUTDOWNS, BATTERY_SHUTDOWN_DEFAULT, FF_SPEEDS, FF_SPEED_DEFAULT, UTC_OFFSET_MAX, UTC_OFFSET_MIN, VOLUME_MAX,
+    AUTOSAVE_MINS, AUTOSAVE_MIN_DEFAULT, BATTERY_SHUTDOWNS, BATTERY_SHUTDOWN_DEFAULT, FF_SPEEDS, FF_SPEED_DEFAULT, SOUND_VOLUME_STEP, UTC_OFFSET_MAX, UTC_OFFSET_MIN, VOLUME_MAX,
 };
 pub use stamp::{
     civil_from_days, days_from_civil, days_in_month, format_stamp, parse_stamp, stamp_now,

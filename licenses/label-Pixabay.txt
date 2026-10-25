@@ -1,0 +1,12 @@
+crates/slot/assets/label1.pcm, label2.pcm, label3.pcm
+
+"Label put on", a sound effect from Pixabay.
+
+Used under the Pixabay Content License
+https://pixabay.com/service/license-summary/
+Free to use, with no attribution required; the sound may not be sold or redistributed
+on its own, apart from a work that it is part of.
+
+Changes: its three takes cut apart (360 ms each, each slap 240 ms in), made mono at 48 kHz,
+faded in and out, and made quieter. One of them, at random, is played as a label lands on
+its cart (HOME → System → System Sounds → Label On).

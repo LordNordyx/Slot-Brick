@@ -61,8 +61,13 @@ impl Session {
             return;
         }
         let mut samples = sfx.render(rate);
-        crate::audio::volume::apply(&mut samples, self.app.output_volume());
-        ring.mix(&samples);
+        // The volume, and System Sounds' own on top of it, in one pass.
+        let gain = crate::audio::volume::gain(self.app.output_volume()) * crate::audio::volume::gain(self.app.sound_volume());
+        for s in samples.iter_mut() {
+            *s = (*s as f32 * gain) as i16;
+        }
+        // A sound of the same kind still playing (a menu pop, the star's) gives way to it.
+        ring.mix_over(&samples, sfx.kind() as u8);
     }
 
     pub fn audio_queued(&self) -> usize {

@@ -22,7 +22,7 @@ use slot_ui::{
     SHADOW_H, SHADOW_W, SOCKET_H, SOCKET_U, SOCKET_V, SOCKET_W, TURN_PAD,
 };
 
-use crate::audio::Sfx;
+use crate::audio::{MenuSound, Sfx, SoundKind};
 use crate::core_picker::{Chip, CorePicker, Outcome, Press};
 use crate::link_kind::{link_carried, link_kind, serial_option, LinkKind};
 use crate::link_radio::{radio_jobs, LinkRole, RadioJob, RadioJobs};
@@ -440,8 +440,11 @@ pub struct App {
     updating: bool,
     /// HOME → System → Reset Settings: asked (A again resets) or done, until the menu moves on.
     reset_asked: Option<QuickValue>,
-    /// The pop last played for a star (Sfx::Pop), so the next is another.
+    /// The pop last played for a star (Sfx::Pop), so the next is another; the same for labels.
     last_pop: Option<usize>,
+    last_label: Option<usize>,
+    /// The core picker's lid was heard opening, and closing.
+    picker_heard: (bool, bool),
     /// HOME → System → About: what each of its rows says (QuickRow::ABOUT_INFO), read as it opens.
     about: [String; QuickRow::ABOUT_INFO.len()],
     /// HOME → Library: every game, A–Z, whatever the shelves show; and play time, last played
@@ -622,6 +625,8 @@ impl App {
             updating: false,
             reset_asked: None,
             last_pop: None,
+            last_label: None,
+            picker_heard: (false, false),
             about: Default::default(),
             all_carts,
             library: slot_store::Library::default(),
@@ -847,7 +852,8 @@ impl App {
         record.favorite = !record.favorite;
         let favorite = record.favorite;
         self.shelf_mut().set_favorite(at, favorite);
-        self.sfx = Some(if favorite { Sfx::Pop(self.next_pop()) } else { Sfx::Unpop(self.next_pop()) });
+        let take = self.next_pop();
+        self.sound(if favorite { Sfx::Pop(take) } else { Sfx::Unpop(take) });
         self.save_library();
         // A game that is no longer a favorite leaves a shelf of favorites.
         if self.state.favorites_only {
@@ -896,13 +902,35 @@ impl App {
 
     /// One of the pops at random, never the one just played.
     fn next_pop(&mut self) -> usize {
-        let (n, roll) = (crate::audio::POP_TAKES, system_nanos() as usize);
-        let next = match self.last_pop {
-            Some(last) => (last + 1 + roll % (n - 1)) % n,
-            None => roll % n,
+        another(&mut self.last_pop, crate::audio::POP_TAKES)
+    }
+
+    /// A GBA cart's lid: a pop as it starts to lift (timed so the pop's crack lands with it),
+    /// and a lower one as it snaps shut again. Once each for each time the picker is open.
+    fn picker_sounds(&mut self, now: Millis) {
+        let Some(picker) = self.core_picker else {
+            self.picker_heard = (false, false);
+            return;
         };
-        self.last_pop = Some(next);
-        next
+        // Shut for a label, the lid lies flat: it pops again as it lifts once the label is on.
+        if picker.is_shut() {
+            self.picker_heard.0 = false;
+        }
+        let lift = (crate::core_picker::SLIDE_MS as f32 - Sfx::CartOpen.lead() * 1000.0) / crate::core_picker::OPEN_MS as f32;
+        let lifting = !picker.closing() && !picker.waiting() && !picker.is_shut();
+        if !self.picker_heard.0 && lifting && picker.openness(now) >= lift {
+            self.picker_heard.0 = true;
+            self.sound(Sfx::CartOpen);
+        }
+        // Closing, the lid comes down first and snaps shut where it started to lift: the crack
+        // of the (slower) closing pop lands then.
+        // Only a lid that was heard to lift is heard to shut.
+        let close_lead = Sfx::CartClose.lead() * 1000.0 / crate::core_picker::CLOSE_MS as f32;
+        let snap = crate::core_picker::SLIDE_MS as f32 / crate::core_picker::OPEN_MS as f32 + close_lead;
+        if self.picker_heard.0 && !self.picker_heard.1 && picker.closing() && picker.openness(now) <= snap {
+            self.picker_heard.1 = true;
+            self.sound(Sfx::CartClose);
+        }
     }
 
     /// The library written out, on a thread of its own: it is small, but the card may be slow.
@@ -1117,6 +1145,7 @@ impl App {
             self.phase = Phase::QuickMenu {
                 row: QuickRow::DateTime,
             };
+            self.menu_sound(MenuSound::Back);
         } else {
             self.start();
         }
@@ -1242,6 +1271,11 @@ impl App {
             QuickRow::Ps1Shader => Some(shader_value(self.state.shader_ps1)),
             QuickRow::Ps1Dithering => Some(QuickValue::flag(self.state.ps1_dithering)),
             QuickRow::Rumble => Some(QuickValue::flag(self.state.rumble)),
+            QuickRow::SoundMenu => Some(QuickValue::flag(self.state.menu_sounds)),
+            QuickRow::SoundStar => Some(QuickValue::flag(self.state.sound_star)),
+            QuickRow::SoundCart => Some(QuickValue::flag(self.state.sound_cart)),
+            QuickRow::SoundCartOpen => Some(QuickValue::flag(self.state.sound_cart_open)),
+            QuickRow::SoundLabel => Some(QuickValue::flag(self.state.sound_label)),
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::AutoSave => QuickValue::minutes(self.state.autosave_min),
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
@@ -1266,7 +1300,7 @@ impl App {
                 row.shelf_of().map(|p| QuickValue::flag(self.state.shows(p)))
             }
             QuickRow::ResetSettings => self.reset_asked,
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel | QuickRow::SystemSounds | QuickRow::SoundVolume => None,
         }
     }
 
@@ -1591,6 +1625,9 @@ impl App {
         match Platform::ALL.get(at) {
             Some(platform) => self.overlay_text(*platform),
             None if at == Platform::ALL.len() => &self.font,
+            None if at == QuickRow::NAMED - 1 => {
+                PERCENTS[((self.state.sound_volume / slot_store::SOUND_VOLUME_STEP) as usize).min(PERCENTS.len() - 1)]
+            }
             None => self.about.get(at - Platform::ALL.len() - 1).map_or("", String::as_str),
         }
     }
@@ -2096,6 +2133,8 @@ impl App {
                 // The label keyboard closed: with what was typed, the search for it begins.
                 let typed = wifi.take_label_query();
                 self.wifi=None;
+                // Opened from the HOME menu (Wi-Fi, Cart Art, …): back to it, with its sound.
+                if matches!(self.phase, Phase::QuickMenu { .. }) {self.menu_sound(MenuSound::Back);}
                 let stem = self.cart_menu.as_ref().or(self.picker_look.as_ref()).map(|m| m.stem.clone());
                 if let (Some(query), Some(stem)) = (typed, stem) {self.search_labels(&stem, query);}
             }
@@ -2114,7 +2153,8 @@ impl App {
                 Action::GbaDown(Btn::B) if *from_menu => {
                     self.phase = Phase::QuickMenu {
                         row: QuickRow::DateTime,
-                    }
+                    };
+                    self.menu_sound(MenuSound::Back);
                 }
                 _ => {}
             }
@@ -2158,7 +2198,10 @@ impl App {
                 Action::ShelfRight | Action::GbaDown(Btn::Right) => {
                     self.shelf_mut().hold_right(now)
                 }
-                Action::QuickMenu => self.open_quick_menu(),
+                Action::QuickMenu => {
+                    self.open_quick_menu();
+                    self.menu_sound(MenuSound::Open);
+                }
                 Action::GbaDown(Btn::A) => self.play_held = Some(now),
                 Action::GbaUp(Btn::A) => {
                     if self.play_held.take().is_some() {
@@ -2201,7 +2244,8 @@ impl App {
             Phase::About if action == Action::GbaDown(Btn::B) || action == Action::QuickMenu => {
                 self.phase = Phase::QuickMenu {
                     row: QuickRow::AboutLabel,
-                }
+                };
+                self.menu_sound(MenuSound::Back);
             }
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
             _ => {}
@@ -2215,7 +2259,57 @@ impl App {
         };
     }
 
+    /// A press in the HOME menu, and its sound (System → Menu Sounds): a pop as the bar moves,
+    /// a higher one as a value changes, higher still as something opens, and a lower one back.
+    /// Only for a press that did something: a value that would not change is silent.
     fn quick_menu_input(&mut self, row: QuickRow, action: Action) {
+        let (says, place) = (self.row_says(row), self.menu_place());
+        self.quick_menu_step(row, action);
+        let sound = match action {
+            Action::GbaDown(Btn::Up | Btn::Down) => Some(MenuSound::Move),
+            Action::GbaDown(Btn::Left | Btn::Right) if self.row_says(row) != says => Some(MenuSound::Change),
+            Action::GbaDown(Btn::A) if self.menu_place() != place || self.row_says(row) != says => Some(MenuSound::Open),
+            Action::GbaDown(Btn::B) | Action::QuickMenu => Some(MenuSound::Back),
+            _ => None,
+        };
+        if let Some(sound) = sound {
+            self.menu_sound(sound);
+        }
+    }
+
+    /// What a HOME menu row reads: its value, or its text.
+    fn row_says(&self, row: QuickRow) -> (Option<QuickValue>, Option<String>) {
+        (self.quick_value(row), row.named().map(|at| self.named_text(at).to_string()))
+    }
+
+    /// Where the HOME menu is: the screen, the row, and whether an overlay (Wi-Fi) is open.
+    fn menu_place(&self) -> (std::mem::Discriminant<Phase>, Option<QuickRow>, bool) {
+        #[cfg(feature = "brick")]
+        let overlay = self.wifi.is_some();
+        #[cfg(not(feature = "brick"))]
+        let overlay = false;
+        (std::mem::discriminant(&self.phase), self.quick_menu(), overlay)
+    }
+
+    fn menu_sound(&mut self, sound: MenuSound) {
+        self.sound(Sfx::Menu(sound));
+    }
+
+    /// A sound played, unless its kind is turned off under System → System Sounds.
+    fn sound(&mut self, sfx: Sfx) {
+        let on = match sfx.kind() {
+            SoundKind::Menu => self.state.menu_sounds,
+            SoundKind::Star => self.state.sound_star,
+            SoundKind::Cart => self.state.sound_cart,
+            SoundKind::Lid => self.state.sound_cart_open,
+            SoundKind::Label => self.state.sound_label,
+        };
+        if on {
+            self.sfx = Some(sfx);
+        }
+    }
+
+    fn quick_menu_step(&mut self, row: QuickRow, action: Action) {
         // Reset Settings asks once; any other press takes the question back.
         let pressed = matches!(action, Action::GbaDown(_) | Action::QuickMenu);
         if pressed && !(row == QuickRow::ResetSettings && action == Action::GbaDown(Btn::A)) {
@@ -2291,6 +2385,7 @@ impl App {
             | QuickRow::Clock
             | QuickRow::Online
             | QuickRow::System
+            | QuickRow::SystemSounds
             | QuickRow::Library
             | QuickRow::Lights => {
                 if let Some(row) = row.child() {
@@ -2331,6 +2426,12 @@ impl App {
             | QuickRow::ShowNes
             | QuickRow::ShowSnes
             | QuickRow::ShowPs1
+            | QuickRow::SoundMenu
+            | QuickRow::SoundStar
+            | QuickRow::SoundCart
+            | QuickRow::SoundCartOpen
+            | QuickRow::SoundLabel
+            | QuickRow::SoundVolume
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
@@ -2408,6 +2509,22 @@ impl App {
                 self.ps1_dithering_changed = true;
             }
             QuickRow::Rumble => s.rumble = !s.rumble,
+            QuickRow::SoundMenu => s.menu_sounds = !s.menu_sounds,
+            QuickRow::SoundStar => s.sound_star = !s.sound_star,
+            QuickRow::SoundCart => s.sound_cart = !s.sound_cart,
+            QuickRow::SoundCartOpen => s.sound_cart_open = !s.sound_cart_open,
+            QuickRow::SoundLabel => s.sound_label = !s.sound_label,
+            QuickRow::SoundVolume => {
+                let step = slot_store::SOUND_VOLUME_STEP;
+                let to = match right {
+                    true => s.sound_volume.saturating_add(step).min(100),
+                    false => s.sound_volume.saturating_sub(step),
+                };
+                if to == s.sound_volume {
+                    return;
+                }
+                s.sound_volume = to;
+            }
             QuickRow::EjectSave => s.eject_save = !s.eject_save,
             QuickRow::AutoSave => {
                 s.autosave_min = step(&AUTOSAVE_MINS, s.autosave_min, right);
@@ -2447,7 +2564,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel | QuickRow::SystemSounds => return,
         }
         self.persist();
     }
@@ -2681,6 +2798,11 @@ impl App {
         }
     }
 
+    /// How loud Slot's own sounds are, on top of the volume (System → System Sounds → Volume).
+    pub fn sound_volume(&self) -> u8 {
+        self.state.sound_volume
+    }
+
     pub fn output_volume(&self) -> u8 {
         if self.muted() {
             0
@@ -2728,6 +2850,7 @@ impl App {
                 picker.start(now);
             }
         }
+        self.picker_sounds(now);
         if self.core_picker.is_some_and(|p| p.finished(now)) {
             self.core_picker = None;
         }
@@ -2772,7 +2895,7 @@ impl App {
             _ => None,
         };
         if touched {
-            self.sfx = Some(match self.phase {
+            self.sound(match self.phase {
                 Phase::Ejecting { .. } => Sfx::Eject,
                 _ => Sfx::Insert,
             });
@@ -3646,9 +3769,11 @@ impl App {
         // While a sticker is on its way the lid lies shut with its slot clear, for it to land in.
         let clear = self.peel.as_ref().filter(|p| p.picker).zip(self.label_adjust_faces.as_ref());
         if let Some((peel, faces)) = clear {
-            // The recess is dark, as in the cart menu: the board must not show through it.
+            // The recess is the cart's plastic, as chosen, a shade darker: the board must not
+            // show through it.
             let (sx, sy, sw, sh) = peel.to;
-            out.push(Draw::Rect { x: sx, y: sy, w: sw, h: sh, colour: slot_ui::opening() });
+            let colour = self.picker_look.as_ref().map_or(slot_ui::opening(), |look| recess_colour(look.plastic()));
+            out.push(Draw::Rect { x: sx, y: sy, w: sw, h: sh, colour });
             let (x, y, w, h) = self.picker_front();
             out.push(Draw::Tex { x, y, w, h, tex: faces.cart, alpha: 1.0 });
         } else if ready {
@@ -4222,10 +4347,14 @@ impl App {
         let Some(cart) = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i)) else {
             return;
         };
-        let (face, slot) = slot_ui::cart_cutout_face(cart);
+        // As the shelf's faces do: the scan leaves ROM headers unread, and a GBA cart's own
+        // plastic comes from its game code. Read once here, not each time the framing moves.
+        let mut cart = cart.clone();
+        cart.read_header();
+        let (face, slot) = slot_ui::cart_cutout_face(&cart);
         let crop = (cut.x as f32, cut.y as f32, cut.w as f32, cut.h as f32);
         let mut adjust =
-            Adjust { source, size, crop, original: crop, face: (face.w, face.h), slot, sizing: false, held: None };
+            Adjust { source, size, crop, original: crop, face: (face.w, face.h), slot, cart, sizing: false, held: None };
         adjust.clamp();
         if let Some(pick) = &mut self.label_pick {
             pick.adjust = Some(adjust);
@@ -4413,6 +4542,14 @@ impl App {
         // Nothing to fly: the label could not be cut, so there are no curls.
         let nothing = peel.curled && peel.baked.is_none() && peel.faces.is_none();
         let written = peel.written;
+        // The slap, started early enough to land as the label touches down.
+        let slap_at = slot_ui::PEEL_LAND_MS.saturating_sub((Sfx::Label(0).lead() * 1000.0) as Millis);
+        let slap = !peel.sounded && started.is_some_and(|at| now.saturating_sub(at) >= slap_at);
+        peel.sounded |= slap;
+        if slap {
+            let take = another(&mut self.last_label, crate::audio::LABEL_TAKES);
+            self.sound(Sfx::Label(take));
+        }
         if let Some(kept) = kept {
             match kept {
                 Ok(kept) => eprintln!("slot: label: kept {} for {stem}", kept.display()),
@@ -4764,8 +4901,10 @@ impl App {
         let index = self.shelf_index_of(&menu.stem);
         let cart = index.and_then(|i| self.shelf().carts.get(i));
         // While a sticker is on its way the slot is clear, for the sticker to land in.
-        let clear = self.peel.as_ref().filter(|p| p.stem == menu.stem).and(self.label_adjust_faces.as_ref());
+        let peel = self.peel.as_ref().filter(|p| p.stem == menu.stem);
+        let clear = peel.and(self.label_adjust_faces.as_ref());
         let tex = clear.map(|f| f.cart).or_else(|| index.and_then(|i| self.shelf().face(i)));
+        let recess = clear.and(peel).map(|p| (recess_colour(menu.plastic()), p.to));
         let face = tex.zip(cart).map(|(tex, cart)| {
             let (w, h) = slot_ui::cart_box(cart.platform);
             (tex, w, h)
@@ -4783,6 +4922,7 @@ impl App {
                     _ => 0,
                 },
             cart: face,
+            recess,
             faces: self.cart_menu_faces.as_ref(),
             online: self.online(),
         }
@@ -4825,7 +4965,7 @@ impl App {
         let pick = self.label_pick.as_ref()?;
         let adjust = pick.adjust.as_ref()?;
         let choice = pick.choices.get(pick.cursor())?;
-        let cart = self.shelf_index_of(&pick.stem).and_then(|i| self.shelf().carts.get(i))?.clone();
+        let cart = adjust.cart.clone();
         // How large the picture is against the size it came in at, which is what moves as it
         // is stretched: the frame's own measurements run the other way and read as nonsense.
         let across = adjust.original.2 / adjust.crop.2.max(1.0) * 100.0;
@@ -5703,6 +5843,21 @@ fn clock_screen(utc: i64, offset_min: i16, from_menu: bool) -> Phase {
     }
 }
 
+/// System → System Sounds → Volume, as its row reads.
+const PERCENTS: [&str; 11] = ["0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%", "90%", "100%"];
+const _: () = assert!(slot_store::SOUND_VOLUME_STEP as usize * (PERCENTS.len() - 1) == 100, "PERCENTS is one per step");
+
+/// One of `n` takes at random, never `last` again; `last` becomes it.
+fn another(last: &mut Option<usize>, n: usize) -> usize {
+    let roll = system_nanos() as usize;
+    let next = match *last {
+        Some(was) if n > 1 => (was + 1 + roll % (n - 1)) % n,
+        _ => roll % n.max(1),
+    };
+    *last = Some(next);
+    next
+}
+
 /// The clock's nanoseconds, as a cheap random number (which pop plays).
 fn system_nanos() -> u32 {
     std::time::SystemTime::now()
@@ -5896,6 +6051,8 @@ struct Peel {
     written: bool,
     asked: Millis,
     started: Option<Millis>,
+    /// Its slap was played, timed to land as it touches down.
+    sounded: bool,
 }
 
 impl Peel {
@@ -5956,6 +6113,7 @@ impl Peel {
             written: false,
             asked: now,
             started: None,
+            sounded: false,
         })
     }
 
@@ -6020,6 +6178,8 @@ struct Adjust {
     /// settled when the framing starts: the cart cannot change shape while it is going on.
     face: (u32, u32),
     slot: (u32, u32, u32, u32),
+    /// The cart itself, its ROM header read, as the framing screen draws it.
+    cart: Cart,
     /// L is down, so the d-pad stretches the picture rather than moving it.
     sizing: bool,
     /// The direction being held, when it began and when it last stepped, so holding a key
@@ -6144,6 +6304,13 @@ fn finish_of(finish: ShellFinish) -> slot_ui::Finish {
     }
 }
 
+/// A cart's empty label slot while a label is on its way: its plastic, a shade darker, as a
+/// recess moulded into it would be.
+fn recess_colour(plastic: [u8; 3]) -> [f32; 4] {
+    let [r, g, b] = plastic.map(|c| c as f32 / 255.0 * 0.8);
+    [r, g, b, 1.0]
+}
+
 fn shell_finish(finish: slot_ui::Finish) -> ShellFinish {
     match finish {
         slot_ui::Finish::Solid => ShellFinish::Solid,
@@ -6258,6 +6425,11 @@ impl CartMenu {
         if !self.offered.contains(&self.colour) {
             self.colour = 0;
         }
+    }
+
+    /// The plastic the cart is in so far: the colour picked, or its own.
+    fn plastic(&self) -> [u8; 3] {
+        self.chosen().map_or(self.own.colour, |c| c.colour)
     }
 
     fn chosen(&self) -> Option<ShellChoice> {

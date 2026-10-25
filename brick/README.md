@@ -45,7 +45,7 @@ doesn't flash anything to the device.
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
 | `Y`              | Favorite: a star on the cart, or off again |
 | `SELECT`         | Sort: A–Z, last played, most played     |
-| `HOME`           | Menu (Emulation, Gameplay, Library, Online: Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Clock, Font, Rumble, Low Battery Shutdown, Reset Settings, About) |
+| `HOME`           | Menu (Emulation, Gameplay, Library, Online: Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Clock, Font, Rumble, System Sounds, Low Battery Shutdown, Reset Settings, About) |
 
 ### In game
 
@@ -259,5 +259,7 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 Hugo Chargois, WTFPL, see `Slot/System/licenses`), or any `.ttf` / `.otf` you put in `Slot/Fonts`.
 Slot restarts to use it when you close the menu.
 
-**Sounds:** the pops a favorite's star makes are freesound_community's "Pop" from Pixabay
-(Pixabay Content License, see `Slot/System/licenses`).
+**Sounds:** the pops a favorite's star makes are freesound_community's "Pop", the HOME menu's
+sounds come from "Video game menu click sounds", and a cart opening and a label going on have
+sounds of their own, all from Pixabay (Pixabay Content License, see `Slot/System/licenses`).
+**HOME → System → System Sounds** turns each kind on or off.
