@@ -283,6 +283,22 @@ More of KrutzOtrem's sets are in their [repository](https://github.com/KrutzOtre
 
 </details>
 
+<a name="fonts"></a>
+<details>
+<summary><h2>Fonts</h2></summary>
+
+**HOME → System → Font** picks the font all of Slot's text is drawn in. Each font's name is shown in that font, and Slot restarts to use a new one when you close the menu.
+
+| Font | Where |
+| :--- | :--- |
+| Slot's own (Open Sans Bold) | Built in |
+| [GohuFont](https://font.gohu.org/), by Hugo Chargois | Comes with Slot, in `Slot/System/Fonts` |
+| Your own | Any `.ttf` or `.otf` you put in `Slot/Fonts`; it shows up by its file name |
+
+A character a font doesn't have is drawn in Slot's own font, so game names never show empty boxes. A file that isn't a font Slot can draw leaves Slot's own font in place.
+
+</details>
+
 <a name="stock-firmware-apps"></a>
 <details>
 <summary><h2>Stock firmware apps</h2></summary>
