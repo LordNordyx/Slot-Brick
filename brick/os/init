@@ -26,6 +26,12 @@ stamp init started
 # The kernel arms the hardware watchdog at boot (16 s): unless it is fed, the Brick resets,
 # whatever it is writing to the card at the time. Fed every 5 s from here on.
 watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
+# The Brick Pro's 5 V rail (PD11), as TrimUI's runtrimui.sh switches it on before its input
+# daemon starts: the sticks' converters may need it.
+if [ "$(cat /etc/slot-os-model 2>/dev/null)" = brickpro ]; then
+    [ -d /sys/class/gpio/gpio107 ] || echo 107 > /sys/class/gpio/export
+    echo out > /sys/class/gpio/gpio107/direction && echo 1 > /sys/class/gpio/gpio107/value
+fi 2>/dev/null
 # The LEDs speak only when something out of the ordinary happens before Slot starts: white
 # while a system update (boot.img) is written; red and a long buzz when no card with Slot on
 # it can be mounted, as nothing will then reach the screen.

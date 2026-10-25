@@ -69,6 +69,10 @@ jobs:
           SLOT_OS_VERSION="dev $(git rev-parse --short HEAD)" sh brick/os/build.sh dist-brick
           mv dist-os/slot-os.img.xz slot-os-dev-sd-card.img.xz
           mv dist-os/slot-os-update.zip slot-os-dev-update.zip
+          # The Brick Pro's (experimental): its own boot chain, kernel and drivers.
+          SLOT_OS_MODEL=brickpro SLOT_OS_VERSION="dev $(git rev-parse --short HEAD)" sh brick/os/build.sh dist-brick
+          mv dist-os/slot-os-brickpro.img.xz slot-os-brickpro-dev-sd-card.img.xz
+          mv dist-os/slot-os-brickpro-update.zip slot-os-brickpro-dev-update.zip
 
       # update.txt, signed when the release key is set: what Slot's Update screen finds and
       # checks the zip by.
@@ -79,6 +83,7 @@ jobs:
           version=$(head -1 brick/README.md | grep -o 'v[0-9][0-9.]*')
           bash brick/update-manifest.sh dev "$version" slot-brick-dev-sd-card.zip update
           bash brick/update-manifest.sh dev "$version" slot-os-dev-update.zip update update-os.txt
+          bash brick/update-manifest.sh dev "$version" slot-os-brickpro-dev-update.zip update update-os-brickpro.txt
 
       - name: Replace the Dev build release
         env:
@@ -90,4 +95,5 @@ jobs:
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           gh release create dev slot-brick-dev-sd-card.zip update/update.txt* \
             slot-os-dev-sd-card.img.xz slot-os-dev-update.zip update/update-os.txt* \
+            slot-os-brickpro-dev-sd-card.img.xz slot-os-brickpro-dev-update.zip update/update-os-brickpro.txt* \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease

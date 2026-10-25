@@ -45,7 +45,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
 | **Overlays** | Frames for GB, GBC, GBA, NES and SNES games, by KrutzOtrem, or your own 1024×768 ones; the game fits itself into the overlay's window. |
 | **Brick and Brick Hammer integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
-| **Brick Pro** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. On stock firmware; Slot OS doesn't read its sticks yet. |
+| **Brick Pro** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. On Slot OS it has an image of its own (experimental, not yet tried on a Brick Pro). |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under System → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
@@ -127,6 +127,9 @@ Flashing the image erases **the whole card**. Copy everything on it to your comp
 
 Download `slot-os-<version>-sd-card.img.xz` from the [Releases](../../releases) page. There is no need to extract it.
 
+> [!IMPORTANT]
+> On a **Brick Pro**, download `slot-os-brickpro-<version>-sd-card.img.xz` instead: the Brick Pro is wired differently (screen, buttons, sticks) and needs its own. It is **experimental and has not been tried on a Brick Pro yet**. If you try it, please report how it went in [issue #65](../../issues/65), with the card's `Slot/Logs` folder. Nothing on the Brick Pro is changed: take the card out and it starts as before.
+
 #### 3. Flash it onto the card
 
 1. Install [Raspberry Pi Imager](https://www.raspberrypi.com/software/) (balenaEtcher works too).
@@ -153,7 +156,7 @@ The card now shows one drive in Windows, **SLOT**, with a `Slot` folder. From yo
 - The stock firmware apps (below) are not there; take the card out to use the stock OS.
 - **HOME → Online → Update** updates Slot OS itself as well as Slot. If an update does not start, the previous version is put back.
 - If the Brick loses power while running, the card is checked and repaired at the next start.
-- A Brick Pro's sticks don't work yet.
+- A Brick Pro needs its own image, `slot-os-brickpro-…` (experimental, not yet tried on a Brick Pro). Its left stick works as the D-pad, as on stock firmware.
 
 #### Going back to stock firmware
 
@@ -371,7 +374,8 @@ secret (an Ed25519 private key, PEM); its public half is in `crates/slot/src/upd
 Slot installs nothing it doesn't verify. Without the secret, a release refuses to build.
 The same release carries Slot OS, built from the same card (`brick/os/build.sh`, see
 [`brick/os/README.md`](brick/os/README.md)): `slot-os-vX.Y-sd-card.img.xz` to flash, and
-`slot-os-vX.Y-update.zip` with its own signed `update-os.txt`, which Slot OS's Update reads.
+`slot-os-vX.Y-update.zip` with its own signed `update-os.txt`, which Slot OS's Update reads, and the
+Brick Pro's the same as `slot-os-brickpro-…` with `update-os-brickpro.txt` (`SLOT_OS_MODEL=brickpro`, from TrimUI's Brick Pro firmware).
 Every merge to `main` does the same for the Dev build.
 Pushing a tag needs write access, so only maintainers can start one. Before tagging:
 
@@ -411,7 +415,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
 | [Hugo Chargois](https://font.gohu.org/) | GohuFont, one of the fonts under HOME → System → Font, WTFPL |
 | freesound_community and others on Pixabay | Slot's sounds: the favorite star's pops, the HOME menu's, a GBA cart opening and a label going on; Pixabay Content License, see `licenses/` |
-| [TrimUI](https://github.com/trimui/firmware_brick), [Debian](https://www.debian.org) | Slot OS (experimental) runs TrimUI's boot chain, kernel, drivers and firmware from their firmware 1.1.1, and Debian 12 packages (glibc, ALSA, busybox, wpa_supplicant, hostapd); licences in `slot-os/licenses` on a Slot OS card |
+| [TrimUI](https://github.com/trimui/firmware_brick), [Debian](https://www.debian.org) | Slot OS (experimental) runs TrimUI's boot chain, kernel, drivers and firmware from their firmware 1.1.1 (the [Brick Pro's](https://github.com/trimui/firmware_brickpro) for its image), and Debian 12 packages (glibc, ALSA, busybox, wpa_supplicant, hostapd); licences in `slot-os/licenses` on a Slot OS card |
 
 
 </details>

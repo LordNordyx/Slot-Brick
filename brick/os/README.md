@@ -8,6 +8,7 @@ README (Installation → Slot OS); this is how it is built and how it works.
 
     sh brick/docker-build.sh          # Slot's card files, in dist-brick/
     sh brick/os/build.sh dist-brick   # needs Docker
+    SLOT_OS_MODEL=brickpro sh brick/os/build.sh dist-brick   # the Brick Pro's (experimental)
 
 Out in `dist-os/`:
 
@@ -31,7 +32,15 @@ Out in `dist-os/`:
   (checking it first if it was left in use), installs a `slot-os/boot.img` it finds there,
   loads the GPU and Wi-Fi drivers, sets the mixer (`mixer.sh`) and runs Slot again and again.
   Slot's exit code says what next: 64 power off, 66 start again (an update).
-- **Updates:** Slot reads `update-os.txt` instead of `update.txt` (`crates/slot/src/update.rs`).
+- **The Brick Pro** has an image of its own (`slot-os-brickpro…`), built the same way from
+  TrimUI's Brick Pro firmware (platform tg4040): the same boot0 and kernel version, but its own
+  u-boot and device tree (another panel and backlight pin, other button pins, and the I2C bus its
+  sticks are on) and its own kernel build. The image writes `brickpro` to `/etc/slot-os-model`:
+  Slot then reads the Pro's button pins and its sticks (two converters on `/dev/i2c-3`,
+  `crates/slot/src/input/pro_sticks.rs`), and `init` switches on its 5 V rail (PD11). Not yet
+  tried on a Brick Pro.
+- **Updates:** Slot reads `update-os.txt` instead of `update.txt` (`update-os-brickpro.txt` on a
+  Brick Pro's Slot OS; `crates/slot/src/update.rs`).
   An update that brings a boot image keeps the old one with the files it replaced, and `init`
   puts them all back if the new Slot never shows a frame.
 

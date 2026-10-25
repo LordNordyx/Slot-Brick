@@ -1,4 +1,4 @@
-# Image box for Slot OS: partitioning and FAT tools, and the arm64 Debian libraries the RAM
+# Image box for Slot OS: partitioning and FAT tools, 7-Zip (the Brick Pro's firmware comes as a .7z), and the arm64 Debian libraries the RAM
 # system is made of (glibc, libstdc++ for the GPU's shader compiler, ALSA, busybox, the card's
 # file system tools and sgdisk, which grows the card's partition on first boot,
 # wpa_supplicant for Wi-Fi, hostapd for a two-Brick link's host).
@@ -7,7 +7,7 @@ FROM debian:bookworm-slim
 RUN dpkg --add-architecture arm64 \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates cpio dosfstools e2fsprogs gdisk mtools python3 python3-pil u-boot-tools xz-utils \
+      ca-certificates cpio dosfstools e2fsprogs gdisk mtools p7zip-full python3 python3-pil u-boot-tools xz-utils \
       binutils-aarch64-linux-gnu \
  && mkdir -p /opt/arm64-debs && cd /opt/arm64-debs \
  && apt-get download libc6:arm64 libgcc-s1:arm64 libstdc++6:arm64 libasound2:arm64 \

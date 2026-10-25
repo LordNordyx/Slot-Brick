@@ -128,6 +128,10 @@ jobs:
           sh brick/os/build.sh dist-brick
           mv dist-os/slot-os.img.xz "slot-os-$TAG-sd-card.img.xz"
           mv dist-os/slot-os-update.zip "slot-os-$TAG-update.zip"
+          # The Brick Pro's (experimental): its own boot chain, kernel and drivers.
+          SLOT_OS_MODEL=brickpro sh brick/os/build.sh dist-brick
+          mv dist-os/slot-os-brickpro.img.xz "slot-os-brickpro-$TAG-sd-card.img.xz"
+          mv dist-os/slot-os-brickpro-update.zip "slot-os-brickpro-$TAG-update.zip"
 
       - name: Zip the card
         env:
@@ -142,6 +146,7 @@ jobs:
         run: |
           bash brick/update-manifest.sh release "$TAG" "slot-brick-$TAG-sd-card.zip" update
           bash brick/update-manifest.sh release "$TAG" "slot-os-$TAG-update.zip" update update-os.txt
+          bash brick/update-manifest.sh release "$TAG" "slot-os-brickpro-$TAG-update.zip" update update-os-brickpro.txt
 
       - name: Publish the release
         env:
@@ -153,4 +158,6 @@ jobs:
           bash brick/os/release-note.sh "$TAG" >> notes.md
           gh release create "$TAG" "slot-brick-$TAG-sd-card.zip" update/update.txt update/update.txt.sig \
             "slot-os-$TAG-sd-card.img.xz" "slot-os-$TAG-update.zip" update/update-os.txt update/update-os.txt.sig \
+            "slot-os-brickpro-$TAG-sd-card.img.xz" "slot-os-brickpro-$TAG-update.zip" \
+            update/update-os-brickpro.txt update/update-os-brickpro.txt.sig \
             --title "$TAG" --notes-file notes.md --verify-tag

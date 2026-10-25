@@ -7,4 +7,9 @@
 # trimui-firmware.py, its u-boot settings too. TrimUI publishes no source for them.
 #
 # <sha256> <file under .docker-cache/os/> <url>
+#
+# The Brick Pro's (github.com/trimui/firmware_brickpro, platform tg4040), for its own Slot OS image:
+# the same chip, boot0 and kernel version, but its own u-boot and device tree (another panel,
+# backlight pin and button pins, and the I2C bus its sticks are on) and its own kernel build.
 488db02176e81ad4fdcf9e0bb4dbf406c883199f5b3521445e038bf81c8916ef TG3040_Brick_firmware_v1.1.1.zip https://github.com/trimui/firmware_brick/releases/download/v1.1.1-20251126/TG3040_Brick_firmware_v1.1.1.zip
+36189b7966717c520901e6ef7318d1b092067598959b030cc0fd66b0747e5585 trimui_tg4040_20260717_v1.1.1.7z https://github.com/trimui/firmware_brickpro/releases/download/v1.1.1-20260717/trimui_tg4040_20260717_v1.1.1.7z
