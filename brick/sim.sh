@@ -25,13 +25,19 @@ docker_run() {
         -e HOME=/tmp -e CARGO_HOME=/src/.docker-cache/cargo "$@"
 }
 
-build() {
+# The simulator's image and the Brick's five cores (from the same sources, for this PC; built
+# once, then kept): what both the unit tests and the scenarios need.
+prepare() {
     docker build -q -t "$IMAGE" -f brick/sim/Dockerfile brick/sim > /dev/null
     mkdir -p .docker-cache/cargo
+    docker_run "$IMAGE" sh brick/sim/build-cores.sh
+}
+
+# And Slot itself, for the scenarios and serve (the unit tests build their own).
+build() {
+    prepare
     docker_run "$IMAGE" cargo build --locked --release --target-dir "$SIM" \
         -p slot --no-default-features --features sim
-    # The Brick's five cores, from the same sources, for this PC. Built once, then kept.
-    docker_run "$IMAGE" sh brick/sim/build-cores.sh
 }
 
 # A fresh SD card and fresh stand-in hardware in $1: the card layout slot makes itself, the
@@ -119,6 +125,8 @@ run_scenarios() {
     rm -rf "$SIM/out"
     mkdir -p "$SIM/out"
     jobs=${JOBS:-$(nproc 2>/dev/null || echo 2)}
+    # Each runs a game at full speed: more at once than there are cores to spare and they
+    # fall behind their own timings (a held button let go late, a screenshot mid-animation).
     list=$(scenarios "$@")
     for script in $list; do
         [ -f "$script" ] || { echo "no scenario $script"; exit 2; }
@@ -159,7 +167,7 @@ case "$cmd" in
     test) run_scenarios 0 "$@" ;;
     update) run_scenarios 1 "$@" ;;
     unit)
-        build
+        prepare
         docker_run "$IMAGE" cargo test --locked --release --target-dir "$SIM" \
             -p slot -p slot-power --no-default-features --features sim --lib --test led
         ;;
