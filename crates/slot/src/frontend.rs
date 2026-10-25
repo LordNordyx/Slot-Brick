@@ -312,6 +312,9 @@ struct AboutFace {
 /// A favorite's star on the shelf: its size at full scale, and its gold.
 const STAR_PX: f32 = 40.0;
 const STAR_INK: [u8; 3] = [0xff, 0xc8, 0x3c];
+/// Its lit facets, and its shaded ones.
+const STAR_LIGHT: [u8; 3] = [0xff, 0xec, 0x9a];
+const STAR_SHADE: [u8; 3] = [0xd2, 0x86, 0x1c];
 
 #[derive(Default)]
 struct Clocks {
@@ -478,8 +481,9 @@ impl Frontend {
             (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
         });
         self.session.app_mut().set_wifi_faces(wifi);
-        // A favorite's star, gold, outlined so it shows on any plastic.
-        let star = icon_face(Icon::Star, STAR_PX, STAR_INK);
+        // A favorite's star, gold with a lit side and a shaded one, outlined so it shows on any
+        // plastic.
+        let star = slot_ui::star_face(STAR_PX, STAR_INK, STAR_LIGHT, STAR_SHADE);
         let star = (compositor.create_texture(star.w, star.h, &star.rgba), star.w, star.h);
         self.session.app_mut().set_star_face(star);
         crate::boot_times::mark("  shadows and HUD icons");

@@ -70,7 +70,7 @@ pub use hud::{
     badge_at, ff_badge, FfState, Hud, HudKind, LinkBadge, Millis, ALARM_BAND_H, HUD_ICON_PX,
     HUD_INK, HUD_MS, LINK_HOST_INK, LINK_JOIN_INK, PLATE_H,
 };
-pub use icon::{badge_face, icon_box, icon_face, Badge, Icon};
+pub use icon::{badge_face, icon_box, icon_face, star_face, Badge, Icon};
 pub use link_art::{
     link_art, LinkArt, ADAPTER_BASE_X, ADAPTER_BASE_Y, ADAPTER_H, ADAPTER_W, ARCS, ARROW_H,
     ARROW_LEFT_X, ARROW_RIGHT_X, ARROW_W, ARROW_Y, CLICKS_H, CLICKS_W, CLICKS_X, CLICKS_Y, PLUG_H,
@@ -90,7 +90,7 @@ pub use quick_menu::{
 };
 pub use rebuild::{rebuild_count_face, rebuild_title_face, RebuildScreen};
 pub use refusal::Refusal;
-pub use shelf::{foot_y, rest_y, set_shelf_slack, Shelf};
+pub use shelf::{foot_y, pop_in, pop_out, rest_y, set_shelf_slack, Shelf};
 pub use shell::{
     gb_table_shells, gba_shell_for, lookup_order_is_exact_then_family_then_default, shell_for,
     famicom_shell, nes_shell_for, shell_presets, snes_pal, table_keys, Finish, Shell, DEFAULT_SHELL, DMG_SHELL,

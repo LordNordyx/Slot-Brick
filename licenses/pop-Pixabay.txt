@@ -1,0 +1,13 @@
+crates/slot/assets/pop1.pcm … pop5.pcm
+
+"Pop" (sound effect 91931) by freesound_community
+https://pixabay.com/sound-effects/film-special-effects-pop-91931/
+
+Used under the Pixabay Content License
+https://pixabay.com/service/license-summary/
+Free to use, with no attribution required; the sound may not be sold or redistributed
+on its own, apart from a work that it is part of.
+
+Changes: the recording's five pops cut apart (120 ms each), made mono at 48 kHz, faded
+in and out, and brought to the same loudness. They are played when a game is starred
+(HOME's favorites, Y on the shelf), and lower and quieter when the star is taken off.
