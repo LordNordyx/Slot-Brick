@@ -2,6 +2,8 @@
 pub mod brick;
 #[cfg(feature = "brick")]
 mod brick_gpio;
+#[cfg(feature = "brick")]
+mod pro_sticks;
 mod device;
 #[cfg(feature = "brick")]
 pub use brick::BrickInput;

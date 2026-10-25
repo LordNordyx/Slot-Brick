@@ -210,18 +210,19 @@ pub fn offer(installed: &Installed, m: &Manifest) -> Offer {
 }
 
 /// The manifest this Slot reads: Slot OS cards hold other files than stock cards (slot-os/,
-/// the boot image, no stock hooks), so each has its own zip and its own update-os.txt.
-fn manifest_name(slot_os: bool) -> &'static str {
-    if slot_os {
-        "update-os.txt"
-    } else {
-        "update.txt"
+/// the boot image, no stock hooks), so each has its own zip and its own update-os.txt. A Slot
+/// OS card for the Brick Pro has its own again: its boot image is built from the Pro's kernel.
+fn manifest_name(slot_os: bool, model: slot_power::Model) -> &'static str {
+    match (slot_os, model) {
+        (false, _) => "update.txt",
+        (true, slot_power::Model::Brick) => "update-os.txt",
+        (true, slot_power::Model::BrickPro) => "update-os-brickpro.txt",
     }
 }
 
 /// Where the manifest and the zip are, for each channel.
 fn manifest_url(base: &str, channel: Channel) -> String {
-    let name = manifest_name(slot_power::slot_os());
+    let name = manifest_name(slot_power::slot_os(), slot_power::model());
     match channel {
         Channel::Release => format!("{base}/latest/download/{name}"),
         Channel::Dev => format!("{base}/download/dev/{name}"),
@@ -670,8 +671,11 @@ mod tests {
 
     #[test]
     fn slot_os_reads_its_own_manifest() {
-        assert_eq!(manifest_name(false), "update.txt");
-        assert_eq!(manifest_name(true), "update-os.txt");
+        use slot_power::Model;
+        assert_eq!(manifest_name(false, Model::Brick), "update.txt");
+        assert_eq!(manifest_name(false, Model::BrickPro), "update.txt", "stock takes the same card on either");
+        assert_eq!(manifest_name(true, Model::Brick), "update-os.txt");
+        assert_eq!(manifest_name(true, Model::BrickPro), "update-os-brickpro.txt");
     }
 
     #[test]

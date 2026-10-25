@@ -1,7 +1,14 @@
 #!/bin/sh
 # Runs inside brick/os/Dockerfile's image (build.sh starts it): makes the SD card image.
 #   $1  card files (docker-build.sh's output)   $2  output image   $3  FAT size in MiB
+#   SLOT_OS_MODEL  brick (the default: the Brick and Brick Hammer) or brickpro
 set -eu
+MODEL=${SLOT_OS_MODEL:-brick}
+case "$MODEL" in
+    brick) FIRMWARE=TG3040_Brick_firmware_v1.1.1.zip ;;
+    brickpro) FIRMWARE=trimui_tg4040_20260717_v1.1.1.7z ;;
+    *) echo "unknown model $MODEL" >&2; exit 1 ;;
+esac
 CARD_FILES=$1
 IMG=$2
 FAT_MIB=${3:-2560}
@@ -14,7 +21,7 @@ trap 'rm -rf "$WORK"' 0
 # From TrimUI's firmware release (sources.txt): the boot image as it is, and from their
 # system, each file below.
 TRIMUI=$WORK/trimui
-python3 "$OS/trimui-firmware.py" "$SRC/TG3040_Brick_firmware_v1.1.1.zip" "$TRIMUI"
+python3 "$OS/trimui-firmware.py" "$SRC/$FIRMWARE" "$TRIMUI"
 for f in lib/modules/4.9.191/pvrsrvkm.ko lib/modules/4.9.191/dc_sunxi.ko \
          lib/modules/4.9.191/xradio_mac.ko lib/modules/4.9.191/xradio_core.ko lib/modules/4.9.191/xradio_wlan.ko \
          lib/firmware/rgx.fw.22.102.54.38 lib/firmware/rgx.sh.22.102.54.38 \
@@ -83,6 +90,9 @@ install -m 755 "$OS/init" "$R/init"
 ln -sf /init "$R/rdinit"
 ln -sf /init "$R/sbin/init"
 echo "${SLOT_OS_VERSION:-dev}" > "$R/etc/slot-os-version"
+# Which Brick the image is for: Slot reads it (slot_power::model), as Slot OS has no MainUI to
+# name the model, and init sets up the Brick Pro's own pins by it.
+echo "$MODEL" > "$R/etc/slot-os-model"
 install -m 644 "$OS/asound.conf" "$R/etc/asound.conf"
 install -m 755 "$OS/mixer.sh" "$R/etc/mixer.sh"
 # Every library Slot, its cores and the GPU driver ask for (and what Slot opens itself:

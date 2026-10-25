@@ -2,7 +2,8 @@
 # update.txt for a card zip: what Slot's Update screen reads to find and check an update
 # (crates/slot/src/update.rs). With UPDATE_SIGNING_KEY set (the release key, PEM), it is also
 # signed, as update.txt.sig beside it; Slot installs nothing whose signature does not match.
-# NAME is update.txt for the stock card zip (the default), update-os.txt for Slot OS's.
+# NAME is update.txt for the stock card zip (the default), update-os.txt for Slot OS's,
+# update-os-brickpro.txt for the Brick Pro's Slot OS.
 # Usage: brick/update-manifest.sh release|dev VERSION ZIP OUT_DIR [NAME]
 set -eu
 cd "$(dirname "$0")/.."

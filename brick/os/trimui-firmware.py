@@ -5,18 +5,24 @@ boot.fex (the boot image with
 TrimUI's kernel) and rootfs.fex (their system, ext4, from which make-image.sh takes the drivers, the
 GPU libraries and the firmware with debugfs).
 
-Usage: python3 trimui-firmware.py <firmware zip> <out dir>
+The Brick Pro's release (trimui_tg4040_*.7z, its trimui_tg4040.awimg) is read the same way.
+
+Usage: python3 trimui-firmware.py <firmware .zip or .7z> <out dir>
 """
-import os, shutil, struct, sys, zipfile
+import os, shutil, struct, subprocess, sys, zipfile
 
 src, out = sys.argv[1:3]
 os.makedirs(out, exist_ok=True)
 WANT = {'boot0_sdcard.fex', 'boot_package.fex', 'env.fex', 'boot.fex', 'rootfs.fex'}
-with zipfile.ZipFile(src) as z:
-    name = next(n for n in z.namelist() if n.endswith('.awimg'))
-    awimg = os.path.join(out, 'firmware.awimg')
-    with z.open(name) as i, open(awimg, 'wb') as o:
-        shutil.copyfileobj(i, o, 1 << 20)
+awimg = os.path.join(out, 'firmware.awimg')
+if src.endswith('.7z'):
+    with open(awimg, 'wb') as o:
+        subprocess.run(['7z', 'e', '-so', src, '*.awimg', '-r'], stdout=o, stderr=subprocess.DEVNULL, check=True)
+else:
+    with zipfile.ZipFile(src) as z:
+        name = next(n for n in z.namelist() if n.endswith('.awimg'))
+        with z.open(name) as i, open(awimg, 'wb') as o:
+            shutil.copyfileobj(i, o, 1 << 20)
 with open(awimg, 'rb') as f:
     head = f.read(1024)
     assert head[:8] == b'IMAGEWTY', 'not an IMAGEWTY image'
