@@ -63,3 +63,20 @@ snap menu-reset-done
 press b
 press b
 phase Shelf
+# System → About: a page of what this Slot is, and Label opens the label (not snapped: it
+# carries the commit it was built from).
+press menu
+phase QuickMenu
+press up       # System
+press a
+press up       # About, at the bottom
+press a
+snap menu-about
+press up       # Label, at the bottom
+press a
+phase About
+press b
+press b
+press b
+press b
+phase Shelf

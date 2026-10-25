@@ -750,11 +750,17 @@ fn both_b_and_menu_take_the_about_screen_back_to_the_quick_menu() {
         }
         s.app_mut()
             .apply(slot_input::Action::GbaDown(slot_input::Btn::A));
+        for _ in 0..slot_ui::QuickRow::AboutLabel.position() {
+            s.app_mut()
+                .apply(slot_input::Action::GbaDown(slot_input::Btn::Down));
+        }
+        s.app_mut()
+            .apply(slot_input::Action::GbaDown(slot_input::Btn::A));
         assert!(matches!(s.app().phase(), slot::app::Phase::About));
         s.app_mut().apply(out);
         assert_eq!(
             s.app().quick_menu(),
-            Some(slot_ui::QuickRow::About),
+            Some(slot_ui::QuickRow::AboutLabel),
             "{out:?} did not take the label back to the menu"
         );
     }

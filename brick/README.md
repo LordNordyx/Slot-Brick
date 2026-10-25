@@ -170,7 +170,8 @@ Play time, last played and favorites are kept in `Slot/Config/library.txt`.
 
 **Reset Settings:** **HOME → System → Reset Settings**, then A again, puts every setting back to how it
 came, the LEDs and the font included. Your games, saves, states, play time, favorites, the clock,
-brightness and volume stay. **About** shows how much of the SD card is used and free.
+brightness and volume stay. **About** shows the version, whether it is a Dev build or a release, the device,
+the firmware, and how much of the SD card is free; **About → Label** shows the label.
 
 **Update:** **HOME → Online → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
 and shows what is new in it. Choose INSTALL, then press A again: Slot downloads it, checks it,
