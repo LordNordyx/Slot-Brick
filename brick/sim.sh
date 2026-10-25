@@ -132,6 +132,11 @@ run_scenarios() {
         [ -f "$script" ] || { echo "no scenario $script"; exit 2; }
     done
     for script in $list; do
+        # One at a time, each runs in the foreground, as it always did.
+        if [ "$jobs" -le 1 ]; then
+            run_one "$update" "$script"
+            continue
+        fi
         while [ "$(jobs -p | wc -l)" -ge "$jobs" ]; do sleep 0.2; done
         run_one "$update" "$script" &
     done
