@@ -21,4 +21,5 @@ press b
 phase Shelf
 snap shelf-favorites-only
 press r1       # no other shelf has a favorite: it stays
+wait 2500      # the title card gone, however fast this machine got here
 snap shelf-favorites-only-r1

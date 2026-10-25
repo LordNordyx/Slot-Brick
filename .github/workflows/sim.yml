@@ -61,11 +61,11 @@ jobs:
           key: sim-scenarios-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'brick/sim/Dockerfile', 'brick/sim/build-cores.sh', 'vendor/*-src.tar.gz', 'cores/*/*.patch') }}
           restore-keys: sim-scenarios-
 
-      # One at a time: two scenarios (library, pro-leds) snap mid-animation, and side by side
-      # on a runner's shared cores they catch a later moment of it than their goldens.
+      # Two at a time: a GitHub runner's four cores, shared, hold two games at full speed. A
+      # scenario snaps only once what it shows has settled, so how fast it runs does not matter.
       - name: Scenarios
         env:
-          JOBS: 1
+          JOBS: 2
         run: sh brick/sim.sh test
 
       - name: Keep the screenshots
