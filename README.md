@@ -39,13 +39,13 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | Feature | Details |
 | :--- | :--- |
 | **NES and SNES** | Their own shelves of NES and SNES cartridges, running on FCEUmm and Snes9x. No BIOS needed. |
-| **PlayStation (experimental)** | A shelf of discs that spin into a disc slot, on PCSX ReARMed: `.cue`/`.bin`, `.chd`, `.pbp`, `.iso` and `.m3u`, with a disc picker for games of several discs. Not yet tested on a Brick ([#41](../../issues/41)). |
+| **PlayStation** | A shelf of discs that spin into a disc slot, on PCSX ReARMed: `.cue`/`.bin`, `.chd`, `.pbp`, `.iso` and `.m3u`, with a disc picker for games of several discs. |
 | **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
 | **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
 | **Overlays** | Frames for GB, GBC, GBA, NES and SNES games, by KrutzOtrem, or your own 1024×768 ones; the game fits itself into the overlay's window. |
 | **Brick and Brick Hammer integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
-| **Brick Pro (experimental)** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. Not yet tested on a Brick Pro; reports welcome ([#45](../../issues/45)). |
+| **Brick Pro** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. On stock firmware; Slot OS doesn't read its sticks yet. |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under System → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
@@ -153,6 +153,7 @@ The card now shows one drive in Windows, **SLOT**, with a `Slot` folder. From yo
 - The stock firmware apps (below) are not there; take the card out to use the stock OS.
 - **HOME → Online → Update** updates Slot OS itself as well as Slot. If an update does not start, the previous version is put back.
 - If the Brick loses power while running, the card is checked and repaired at the next start.
+- A Brick Pro's sticks don't work yet.
 
 #### Going back to stock firmware
 

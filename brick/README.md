@@ -1,4 +1,4 @@
-# Slot. for TrimUI Brick — v0.44
+# Slot. for TrimUI Brick — v0.50
 
 An unofficial port of **Slot.**, Brandon T. Kowalski's GB/GBC/GBA frontend for the Anbernic RG SP,
 to the **original TrimUI Brick** on stock firmware, with NES and SNES added. Port by **LordNordyx**.
@@ -110,7 +110,7 @@ cart; Slot reads where a game was sold from the ROM, so a ripped `Terranigma.sfc
 on SNES), so `SELECT + X` switches the picture between original and full screen. Cart Art fetches
 SNES labels too, and RetroAchievements work.
 
-**PlayStation (experimental):** put games in `Slot/Games/PS1`: `.cue` with its `.bin` tracks,
+**PlayStation:** put games in `Slot/Games/PS1`: `.cue` with its `.bin` tracks,
 `.chd`, `.pbp`, `.iso`, or for a game of several discs an `.m3u` listing them. A game may have a
 folder of its own; each shows once on the shelf. PlayStation games are discs, not carts: on their
 shelf the slot turns into a disc slot, and a disc spins as it goes in. For a game of several discs
@@ -125,7 +125,7 @@ far as its buttons allow. Each game's memory card is kept in `Slot/Saves/PS1`. *
 PlayStation** has Shader, Dithering (on as the PlayStation drew, off for smoother colour) and
 Overlay. Cart Art fetches disc scans (below), or put your own round picture in `Slot/Labels/PS1`;
 a disc of a game of several can have its own, named after that disc's file. RetroAchievements
-work, `.chd` included. Not yet tested on a Brick: reports welcome ([#41](../../issues/41)).
+work, `.chd` included.
 
 **Cart art:** connect to Wi-Fi, then open **HOME → Online → Cart Art** (greyed out while Wi-Fi is off).
 **GET CART ART** gives every game with no label a scan of its real cartridge label; labels you
@@ -181,10 +181,10 @@ The time zone is still yours to choose under **Date & Time**, and summer time is
 make there. On the clock screen shown at first start, the date and time fill themselves in
 once Wi-Fi connects, unless you have already changed them.
 
-**Brick Pro (experimental):** Slot tells a Brick Pro from a Brick by itself. Its left stick
+**Brick Pro:** Slot tells a Brick Pro from a Brick by itself. Its left stick
 works as the D-pad, in menus and in games (in a PlayStation game, as the DualShock's left stick), and **HOME → System → LEDs** gains a **Sticks** row
 for the lights around the sticks (**Triggers** sets the shoulder lights at the back). The right
-stick, the stick clicks and the F1/F2 keys do nothing yet. Not yet tested on a real Brick Pro.
+stick, the stick clicks and the F1/F2 keys do nothing yet. On Slot OS its sticks don't work yet.
 
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.
