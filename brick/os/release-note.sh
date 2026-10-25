@@ -6,7 +6,8 @@ cat <<NOTE
 
 ## INTRODUCING: Slot OS
 
-A custom firmware (experimental) that boots the Brick straight from the SD card into Slot, in
-about 4 seconds. Flash \`slot-os-$tag-sd-card.img.xz\` onto a card (it erases the card); the
-README has the guide. It keeps itself up to date through HOME → Update.
+Slot as its own custom firmware: the Brick boots straight from the SD card into Slot, in under
+3 seconds instead of about 9. Otherwise it is the same Slot, with the same games, saves and
+settings. Flash \`slot-os-$tag-sd-card.img.xz\` onto a card (it erases the card); the README has
+the guide. It keeps itself up to date through HOME → Online → Update.
 NOTE

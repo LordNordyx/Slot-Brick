@@ -1,14 +1,16 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- PlayStation (experimental): PS1 games from `Slot/Games/PS1` on a shelf of discs, games of several discs included.
-- Favorites (Y), sorting (SELECT), play time and a title card for the selected game.
-- Rumble works.
-- Brick Pro (experimental): recognised, with its left stick as the D-pad and its own LED row.
-- Faster first screen, and Wi-Fi fixes.
-- Slot shows its shelf sooner; on Slot OS in under 3 seconds.
-- HOME → System → Font: pick the font all of Slot's text is drawn in. GohuFont comes with Slot, and any `.ttf` or `.otf` you put in `Slot/Fonts` shows up too.
-- A tidier HOME menu: Screen is now Emulation; Wi-Fi, Cart Art, RetroAchievements and Update are under Online; Auto Save and Save on Eject under Gameplay → Saving; Rumble and Low Battery Shutdown under System; Date & Time and Auto Clock under System → Clock. The LEDs page's on/off row is now called All LEDs.
+
+## v0.50
+**New since v0.44:**
+- PlayStation: PS1 games from `Slot/Games/PS1` (`.cue`/`.bin`, `.chd`, `.pbp`, `.iso`, `.m3u`) on a shelf of discs that spin into the slot, games of several discs included.
+- Rumble: games that rumble now drive the Brick's motor.
+- Favorites (Y) and sorting (SELECT), with play time and a title card for the selected game.
+- Brick Pro support: its left stick works as the D-pad, and its stick lights have their own LED row.
+- Fonts: HOME → System → Font, with GohuFont included, and room for your own in `Slot/Fonts`.
+- A reworked HOME menu: Emulation, Gameplay, Library, Online and System.
+- Faster startup, and Wi-Fi fixes.
 
 ## v0.44
 **New since v0.43:**
