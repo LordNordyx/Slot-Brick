@@ -2,13 +2,16 @@
 # update.txt for a card zip: what Slot's Update screen reads to find and check an update
 # (crates/slot/src/update.rs). With UPDATE_SIGNING_KEY set (the release key, PEM), it is also
 # signed, as update.txt.sig beside it; Slot installs nothing whose signature does not match.
-# Usage: brick/update-manifest.sh release|dev VERSION ZIP OUT_DIR
+# NAME is update.txt for the stock card zip (the default), update-os.txt for Slot OS's,
+# update-os-brickpro.txt for the Brick Pro's Slot OS.
+# Usage: brick/update-manifest.sh release|dev VERSION ZIP OUT_DIR [NAME]
 set -eu
 cd "$(dirname "$0")/.."
 channel=${1:?Usage: update-manifest.sh release|dev VERSION ZIP OUT_DIR}
 version=${2:?}
 zip=${3:?}
 out=${4:?}
+name=${5:-update.txt}
 case "$channel" in release | dev) ;; *) echo "unknown channel $channel" >&2; exit 2 ;; esac
 
 # The notes Slot shows: the release's changelog section, or for the Dev build, Unreleased.
@@ -30,16 +33,16 @@ mkdir -p "$out"
     echo "sha256=$(sha256sum "$zip" | cut -d' ' -f1)"
     echo
     printf '%s\n' "$notes"
-} > "$out/update.txt"
+} > "$out/$name"
 
 if [ -z "${UPDATE_SIGNING_KEY:-}" ]; then
-    echo "UPDATE_SIGNING_KEY is not set: update.txt is not signed, and Slot will not install it" >&2
+    echo "UPDATE_SIGNING_KEY is not set: $name is not signed, and Slot will not install it" >&2
     exit 0
 fi
 key=$(mktemp)
 trap 'rm -f "$key"' EXIT
 printf '%s\n' "$UPDATE_SIGNING_KEY" > "$key"
-openssl pkeyutl -sign -rawin -inkey "$key" -in "$out/update.txt" -out "$out/update.txt.sig"
+openssl pkeyutl -sign -rawin -inkey "$key" -in "$out/$name" -out "$out/$name.sig"
 # The key must be the one Slot checks with (RELEASE_KEY in crates/slot/src/update.rs): signed
 # with any other, every Brick would refuse the update, and only a Brick would find out.
 ours=$(openssl pkey -in "$key" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
@@ -49,6 +52,6 @@ if [ "$ours" != "$built_in" ]; then
     exit 1
 fi
 openssl pkey -in "$key" -pubout > "$key.pub"
-openssl pkeyutl -verify -rawin -pubin -inkey "$key.pub" -in "$out/update.txt" -sigfile "$out/update.txt.sig" > /dev/null
+openssl pkeyutl -verify -rawin -pubin -inkey "$key.pub" -in "$out/$name" -sigfile "$out/$name.sig" > /dev/null
 rm -f "$key.pub"
-echo "wrote $out/update.txt and its signature"
+echo "wrote $out/$name and its signature"

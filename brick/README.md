@@ -1,4 +1,4 @@
-# Slot. for TrimUI Brick — v0.44
+# Slot. for TrimUI Brick — v0.50
 
 An unofficial port of **Slot.**, Brandon T. Kowalski's GB/GBC/GBA frontend for the Anbernic RG SP,
 to the **original TrimUI Brick** on stock firmware, with NES and SNES added. Port by **LordNordyx**.
@@ -45,7 +45,7 @@ doesn't flash anything to the device.
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
 | `Y`              | Favorite: a star on the cart, or off again |
 | `SELECT`         | Sort: A–Z, last played, most played     |
-| `HOME`           | Menu (Screen, Gameplay, Library, Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Date & Time, Auto Clock, About) |
+| `HOME`           | Menu (Emulation, Gameplay, Library, Online: Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Clock, Font, Rumble, System Sounds, Low Battery Shutdown, Reset Settings, About) |
 
 ### In game
 
@@ -76,7 +76,7 @@ doesn't flash anything to the device.
 | Volume `+` / `−`   | Volume (press both together to mute)   |
 | `Fn` slider        | Mute / unmute                          |
 | Press `Power`      | Sleep / wake                           |
-| Hold `Power`       | Shut down, or exit to the stock OS     |
+| Hold `Power`       | Shut down, or exit to the stock OS (Slot OS: shut down) |
 
 **Cart colour:** press `START` on a game on the shelf to change its cartridge: any colour and a
 solid, see-through or glitter finish for Game Boy and GBA carts, and the shape: original or Color
@@ -111,7 +111,7 @@ cart; Slot reads where a game was sold from the ROM, so a ripped `Terranigma.sfc
 on SNES), so `SELECT + X` switches the picture between original and full screen. Cart Art fetches
 SNES labels too, and RetroAchievements work.
 
-**PlayStation (experimental):** put games in `Slot/Games/PS1`: `.cue` with its `.bin` tracks,
+**PlayStation:** put games in `Slot/Games/PS1`: `.cue` with its `.bin` tracks,
 `.chd`, `.pbp`, `.iso`, or for a game of several discs an `.m3u` listing them. A game may have a
 folder of its own; each shows once on the shelf. PlayStation games are discs, not carts: on their
 shelf the slot turns into a disc slot, and a disc spins as it goes in. For a game of several discs
@@ -122,13 +122,13 @@ disc in: the game carries on with it. They run on PCSX ReARMed, with your BIOS w
 fast-forward is `HOME + R2`, and there is no rewind: a PlayStation's state is too large to keep
 snapshots of on the Brick. Every game gets a DualShock; on a Brick Pro the left stick is its left
 stick in game. Games that need more buttons or sticks than the Brick has still start, and play as
-far as its buttons allow. Each game's memory card is kept in `Slot/Saves/PS1`. **HOME → Screen →
+far as its buttons allow. Each game's memory card is kept in `Slot/Saves/PS1`. **HOME → Emulation →
 PlayStation** has Shader, Dithering (on as the PlayStation drew, off for smoother colour) and
 Overlay. Cart Art fetches disc scans (below), or put your own round picture in `Slot/Labels/PS1`;
 a disc of a game of several can have its own, named after that disc's file. RetroAchievements
-work, `.chd` included. Not yet tested on a Brick: reports welcome ([#41](../../issues/41)).
+work, `.chd` included.
 
-**Cart art:** connect to Wi-Fi, then open **HOME → Cart Art** (greyed out while Wi-Fi is off).
+**Cart art:** connect to Wi-Fi, then open **HOME → Online → Cart Art** (greyed out while Wi-Fi is off).
 **GET CART ART** gives every game with no label a scan of its real cartridge label; labels you
 already have are never replaced. The scans come from the slot art set behind
 [Cart Studio](https://studio.slot-cfw.fyi) (scans from ScreenScraper), downloaded over HTTPS.
@@ -152,7 +152,7 @@ scan of each, but which is which isn't recorded, so all its discs share one.
 `Slot/Logs/cart-art.txt` lists each game and what it got. Below GET CART ART, every game with a
 label is listed: press A twice on one to delete its label, then GET CART ART fetches a new one.
 
-**RetroAchievements:** **HOME → RetroAchievements** (greyed out while Wi-Fi is off) logs in to
+**RetroAchievements:** **HOME → Online → RetroAchievements** (greyed out while Wi-Fi is off) logs in to
 your [RetroAchievements](https://retroachievements.org) account and tests the connection.
 Your password is sent once, over HTTPS, and never stored: Slot keeps only the login token, in `Slot/Config/retroachievements.txt`; delete that file or choose **LOG OUT** to forget
 it. While logged in, games earn achievements in softcore mode (save states, rewind and
@@ -166,9 +166,15 @@ Beside the battery, the shelf shows how long you have played it: in minutes ("20
 favorite. `SELECT` sorts the shelves A–Z, by the game played last,
 or by the most played, and names the order in the slot; **HOME → Library** has the same order
 (**Sort By**) and **Show: Favorites**, which leaves only your favorites on the shelves (all games,
-while you have none). Play time, last played and favorites are kept in `Slot/Config/library.txt`.
+while you have none). **HOME → Library → Systems** hides the shelves of systems you don't play.
+Play time, last played and favorites are kept in `Slot/Config/library.txt`.
 
-**Update:** **HOME → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
+**Reset Settings:** **HOME → System → Reset Settings**, then A again, puts every setting back to how it
+came, the LEDs and the font included. Your games, saves, states, play time, favorites, the clock,
+brightness and volume stay. **About** shows the version, whether it is a Dev build or a release, the device,
+the firmware, and how much of the SD card is free; **About → Label** shows the label.
+
+**Update:** **HOME → Online → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
 and shows what is new in it. Choose INSTALL, then press A again: Slot downloads it, checks it,
 puts it in place and starts again. It needs 20% battery or a charger. Only Slot's own files
 are replaced (`Slot/System`, the `Apps` it came with, `.slot-boot`, the bundled overlays and
@@ -176,21 +182,21 @@ this README); your games, saves, states, labels, BIOS files, settings and wallpa
 as they are. Every update is signed, and one whose signature or checksum doesn't match is
 never installed. If the new version doesn't start, the previous one is put back.
 
-**Auto Clock:** **HOME → System → Auto Clock** (on to start with) sets the clock from an
+**Auto Clock:** **HOME → System → Clock → Auto Clock** (on to start with) sets the clock from an
 internet time server whenever Wi-Fi connects, and every six hours while it stays connected.
 The time zone is still yours to choose under **Date & Time**, and summer time is a change you
 make there. On the clock screen shown at first start, the date and time fill themselves in
 once Wi-Fi connects, unless you have already changed them.
 
-**Brick Pro (experimental):** Slot tells a Brick Pro from a Brick by itself. Its left stick
+**Brick Pro:** Slot tells a Brick Pro from a Brick by itself. Its left stick
 works as the D-pad, in menus and in games (in a PlayStation game, as the DualShock's left stick), and **HOME → System → LEDs** gains a **Sticks** row
 for the lights around the sticks (**Triggers** sets the shoulder lights at the back). The right
-stick, the stick clicks and the F1/F2 keys do nothing yet. Not yet tested on a real Brick Pro.
+stick, the stick clicks and the F1/F2 keys do nothing yet. On Slot OS its sticks don't work yet.
 
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.
 
-**Overlays:** pick one under **HOME → Screen →** the system **→ Overlay**. Slot comes with
+**Overlays:** pick one under **HOME → Emulation →** the system **→ Overlay**. Slot comes with
 KrutzOtrem's overlays for the Brick (the *Vanilla* set for GB, GBC and GBA, the *CRT* set for NES
 and SNES; MIT, see `Slot/System/licenses`). Add your own 1024×768 PNGs to `Slot/Overlays/GB`,
 `GBC`, `GBA`, `NES` or `SNES`. The game is fitted into the part of the overlay that isn't fully
@@ -244,3 +250,17 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 | Stock menu appears instead of Slot    | Open **Apps → Check** and read `startup-report.txt` on the card     |
 | You want to skip Slot at startup      | Create an empty file `Slot/DISABLE_AUTOBOOT`; delete it to re-enable |
 | You need stock emulators or RetroArch | They aren't included; keep your original card backup                |
+
+---
+
+**Slot OS** cards also carry TrimUI's boot chain, kernel, drivers and firmware (their firmware
+1.1.1) and Debian 12 packages; what each is and its licence is in `slot-os/licenses`.
+
+**Fonts:** HOME → System → Font picks the font Slot draws its text in: Slot's own, GohuFont (by
+Hugo Chargois, WTFPL, see `Slot/System/licenses`), or any `.ttf` / `.otf` you put in `Slot/Fonts`.
+Slot restarts to use it when you close the menu.
+
+**Sounds:** the pops a favorite's star makes are freesound_community's "Pop", the HOME menu's
+sounds come from "Video game menu click sounds", and a cart opening and a label going on have
+sounds of their own, all from Pixabay (Pixabay Content License, see `Slot/System/licenses`).
+**HOME → System → System Sounds** turns each kind on or off.

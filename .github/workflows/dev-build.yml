@@ -1,11 +1,18 @@
 # Every change to main builds the SD card and puts it in the "Dev build" release, replacing
 # the one before, so its download link always gives the latest card. Numbered releases are
-# still made by hand.
+# still made by hand. Changes to the docs, the changelog and the licences alone build nothing
+# new, so they are skipped (the next code change brings their notes along).
 name: Dev build
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'licenses/**'
+      - 'LICENSE'
+      - 'brick/os/NOTICE.txt'
+      - 'brick/os/release-note.sh'
   workflow_dispatch:
 
 # Only the release is written; nothing else in the repository.
@@ -25,13 +32,13 @@ jobs:
     timeout-minutes: 60
     steps:
       # Pinned to commits, so a moved tag cannot change what runs with write access.
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           # The whole history and tags: the notes list what changed since the last release.
           fetch-depth: 0
 
-      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .docker-cache/cargo
@@ -49,6 +56,24 @@ jobs:
       - name: Zip the card
         run: python3 brick/zip-card.py dist-brick slot-brick-dev-sd-card.zip
 
+      # TrimUI's firmware (118 MB) and the boot chain Slot OS is built from, pinned by sha256.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .docker-cache/os
+          key: slot-os-${{ hashFiles('brick/os/sources.txt') }}
+
+      # Slot OS, from the same card: a Dev build is how Slot OS's own Update is tried before a
+      # release.
+      - name: Build Slot OS
+        run: |
+          SLOT_OS_VERSION="dev $(git rev-parse --short HEAD)" sh brick/os/build.sh dist-brick
+          mv dist-os/slot-os.img.xz slot-os-dev-sd-card.img.xz
+          mv dist-os/slot-os-update.zip slot-os-dev-update.zip
+          # The Brick Pro's (experimental): its own boot chain, kernel and drivers.
+          SLOT_OS_MODEL=brickpro SLOT_OS_VERSION="dev $(git rev-parse --short HEAD)" sh brick/os/build.sh dist-brick
+          mv dist-os/slot-os-brickpro.img.xz slot-os-brickpro-dev-sd-card.img.xz
+          mv dist-os/slot-os-brickpro-update.zip slot-os-brickpro-dev-update.zip
+
       # update.txt, signed when the release key is set: what Slot's Update screen finds and
       # checks the zip by.
       - name: Describe and sign the update
@@ -57,6 +82,8 @@ jobs:
         run: |
           version=$(head -1 brick/README.md | grep -o 'v[0-9][0-9.]*')
           bash brick/update-manifest.sh dev "$version" slot-brick-dev-sd-card.zip update
+          bash brick/update-manifest.sh dev "$version" slot-os-dev-update.zip update update-os.txt
+          bash brick/update-manifest.sh dev "$version" slot-os-brickpro-dev-update.zip update update-os-brickpro.txt
 
       - name: Replace the Dev build release
         env:
@@ -64,6 +91,9 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           bash brick/dev-notes.sh > notes.md
+          bash brick/os/release-note.sh dev >> notes.md
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           gh release create dev slot-brick-dev-sd-card.zip update/update.txt* \
+            slot-os-dev-sd-card.img.xz slot-os-dev-update.zip update/update-os.txt* \
+            slot-os-brickpro-dev-sd-card.img.xz slot-os-brickpro-dev-update.zip update/update-os-brickpro.txt* \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease

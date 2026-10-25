@@ -168,9 +168,7 @@ fn rumble_and_fast_forward_sound_flip_on_either_arrow_and_save() {
     );
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, true));
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
+    open_at(&mut a, QuickRow::Rumble);
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, false));
     assert!(!a.rumble_enabled());
@@ -210,7 +208,7 @@ fn colour_correction_flips_on_either_arrow_and_saves_for_its_own_system_only() {
 }
 
 #[test]
-fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
+fn rewind_and_turbo_on_the_game_page_and_save_on_eject_under_saving_flip_and_save() {
     let (d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::Rewind);
     let card = |d: &TempDir| {
@@ -225,16 +223,17 @@ fn the_game_page_flips_eject_save_turbo_and_rewind_and_saves_each() {
     press(&mut a, Btn::Left);
     assert_eq!(card(&d), (true, false, false));
     assert!(!a.turbo());
-    press(&mut a, Btn::Down);
-    press(&mut a, Btn::Down);
+    press(&mut a, Btn::B);
+    assert_eq!(a.quick_menu(), Some(QuickRow::Game));
+    open_at(&mut a, QuickRow::EjectSave);
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (false, false, false));
     press(&mut a, Btn::B);
-    assert_eq!(a.quick_menu(), Some(QuickRow::Game));
+    assert_eq!(a.quick_menu(), Some(QuickRow::Saving));
 }
 
 #[test]
-fn the_game_page_steps_the_autosave_and_the_low_battery_shutdown_and_saves_each() {
+fn autosave_under_saving_and_low_battery_shutdown_in_system_step_and_save() {
     let (d, mut a, _) = on_carousel();
     let card = |d: &TempDir| {
         let s = read_slot_state(d.path());
@@ -249,7 +248,7 @@ fn the_game_page_steps_the_autosave_and_the_low_battery_shutdown_and_saves_each(
     press(&mut a, Btn::Left);
     assert_eq!(card(&d), (0, 5));
     assert_eq!(a.quick_value(QuickRow::AutoSave), Some(QuickValue::Off));
-    press(&mut a, Btn::Down);
+    open_at(&mut a, QuickRow::BatteryShutdown);
     press(&mut a, Btn::Right);
     assert_eq!(card(&d), (0, 10));
     press(&mut a, Btn::Right);
@@ -383,13 +382,47 @@ fn the_arrows_change_nothing_on_a_row_that_opens() {
 }
 
 #[test]
-fn a_on_about_opens_the_label_and_b_comes_back_to_the_menu() {
+fn about_opens_a_page_and_its_label_row_opens_the_label() {
     let (_d, mut a, _) = on_carousel();
     open_at(&mut a, QuickRow::About);
     press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), Some(QuickRow::AboutVersion));
+    open_at(&mut a, QuickRow::AboutLabel);
+    press(&mut a, Btn::A);
     assert!(matches!(a.phase(), Phase::About), "{:?}", a.phase());
     press(&mut a, Btn::B);
-    assert_eq!(a.quick_menu(), Some(QuickRow::About));
+    assert_eq!(a.quick_menu(), Some(QuickRow::AboutLabel));
+    press(&mut a, Btn::B);
+    assert_eq!(a.quick_menu(), Some(QuickRow::About), "B from the page goes back to System");
+}
+
+/// What an About row says, as the menu prints it.
+fn about_text(a: &App, row: QuickRow) -> String {
+    a.named_text(row.named().expect("an About row reads a text")).to_string()
+}
+
+#[test]
+fn about_says_the_version_the_build_the_firmware_and_the_cards_space() {
+    let (d, mut a, _) = on_carousel();
+    let before = std::fs::read(d.path().join("Config/slot.state")).unwrap();
+    open_at(&mut a, QuickRow::About);
+    press(&mut a, Btn::A);
+    assert_eq!(about_text(&a, QuickRow::AboutVersion), slot_ui::PORT_VERSION.to_lowercase());
+    // Built without SLOT_CHANNEL (as releases are): a release.
+    assert_eq!(about_text(&a, QuickRow::AboutBuild), "Release");
+    assert!(about_text(&a, QuickRow::AboutDevice).starts_with("TrimUI Brick") || about_text(&a, QuickRow::AboutDevice) == "PC");
+    assert_eq!(about_text(&a, QuickRow::AboutFirmware), "Stock");
+    let card = about_text(&a, QuickRow::AboutCard);
+    assert!(card.contains('/') && card.ends_with(" GB free"), "{card}");
+    // The rows only say something: the arrows and A change nothing.
+    for row in QuickRow::ABOUT_INFO {
+        open_at(&mut a, row);
+        for btn in [Btn::Left, Btn::Right, Btn::A] {
+            press(&mut a, btn);
+            assert_eq!(a.quick_menu(), Some(row), "{btn:?} on {row:?}");
+        }
+    }
+    assert_eq!(std::fs::read(d.path().join("Config/slot.state")).unwrap(), before);
 }
 
 #[test]
@@ -511,7 +544,7 @@ fn fake_faces(a: &mut App) {
             .map(|i| [(id(200 + i), 60, 40), (id(210 + i), 60, 40)])
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
-        legend: [(id(400), 70), (id(401), 110), (id(402), 80)],
+        legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 80)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
 }
@@ -594,7 +627,8 @@ fn the_arrows_stand_only_around_the_selected_rows_value() {
         drawn(&out, value(QuickValue::On, false)),
         "rumble's ON is not grey"
     );
-    open_at(&mut a, QuickRow::About);
+    // Beside Auto Clock (on a Brick, on the Clock page; else on System, with About).
+    open_at(&mut a, QuickRow::AutoClock.page().last().copied().unwrap_or(QuickRow::About));
     let out = frame(&a);
     assert!(drawn(&out, 500), "the date and time is not grey");
 
@@ -742,4 +776,162 @@ fn an_overlay_row_steps_through_off_and_the_overlays_there_are_and_saves_each() 
         assert_eq!(a.overlay_text(Platform::Gba), shown);
     }
     assert_eq!(read_slot_state(d.path()).overlay(Platform::Gb), None, "the Game Boy took the GBA's");
+}
+
+#[test]
+fn reset_settings_asks_once_then_puts_every_setting_back() {
+    let (d, mut a, _) = on_carousel_with(SlotState {
+        brightness: 8,
+        utc_offset_min: 60,
+        rumble: false,
+        ff_speed: 2,
+        shader_gba: Shader::Dot,
+        ..SlotState::default()
+    });
+    std::fs::write(d.path().join("Config/font.txt"), "Pixel\n").unwrap();
+    open_at(&mut a, QuickRow::ResetSettings);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), None);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk));
+    assert!(!read_slot_state(d.path()).rumble, "asked, not done");
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetDone));
+    let s = read_slot_state(d.path());
+    assert!(s.rumble);
+    assert_eq!((s.ff_speed, s.shader_gba), (SlotState::default().ff_speed, SlotState::default().shader_gba));
+    assert_eq!((s.brightness, s.utc_offset_min, s.clock_set), (8, 60, true), "the levels and the clock stay");
+    assert_eq!(std::fs::read_to_string(d.path().join("Config/font.txt")).unwrap().trim(), "Slot");
+    // A third A does nothing more; moving off clears the row.
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetDone));
+    press(&mut a, Btn::Down);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), None);
+}
+
+#[test]
+fn reset_settings_asked_and_then_left_changes_nothing() {
+    let (d, mut a, _) = on_carousel_with(SlotState { rumble: false, ..SlotState::default() });
+    open_at(&mut a, QuickRow::ResetSettings);
+    press(&mut a, Btn::A);
+    press(&mut a, Btn::Up);
+    press(&mut a, Btn::Down);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk));
+    press(&mut a, Btn::B);
+    open_at(&mut a, QuickRow::ResetSettings);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk), "asked again, from the start");
+    assert!(!read_slot_state(d.path()).rumble);
+}
+
+#[test]
+fn the_menu_pops_as_it_is_used_and_is_quiet_when_nothing_happens() {
+    use slot::audio::{MenuSound, Sfx};
+    let (_d, mut a, _) = on_carousel();
+    let mut heard = |a: &mut App, btn: Option<Btn>| {
+        match btn {
+            Some(btn) => press(a, btn),
+            None => a.apply(Action::QuickMenu),
+        }
+        a.take_sfx()
+    };
+    assert_eq!(heard(&mut a, None), Some(Sfx::Menu(MenuSound::Open)), "HOME opens the menu");
+    assert_eq!(heard(&mut a, Some(Btn::Down)), Some(Sfx::Menu(MenuSound::Move)));
+    assert_eq!(heard(&mut a, Some(Btn::A)), Some(Sfx::Menu(MenuSound::Open)), "a page opens");
+    assert_eq!(heard(&mut a, Some(Btn::Right)), Some(Sfx::Menu(MenuSound::Change)), "Fast Forward steps");
+    assert_eq!(heard(&mut a, Some(Btn::B)), Some(Sfx::Menu(MenuSound::Back)));
+    // A row that opens has no value to change: Left and Right do nothing, and say nothing.
+    assert_eq!(heard(&mut a, Some(Btn::Right)), None);
+    assert_eq!(heard(&mut a, Some(Btn::B)), Some(Sfx::Menu(MenuSound::Back)), "the menu closes");
+    assert!(matches!(a.phase(), Phase::Shelf));
+}
+
+#[test]
+fn menu_sounds_off_quiets_the_menu_from_then_on() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SoundMenu);
+    a.take_sfx();
+    press(&mut a, Btn::Right);
+    assert!(!read_slot_state(d.path()).menu_sounds);
+    assert_eq!(a.take_sfx(), None, "turned off, it is quiet at once");
+    for btn in [Btn::Up, Btn::Down] {
+        press(&mut a, btn);
+        assert_eq!(a.take_sfx(), None, "{btn:?} made a sound with Menu Sounds off");
+    }
+    while a.quick_menu().is_some() {
+        press(&mut a, Btn::B);
+        assert_eq!(a.take_sfx(), None, "B made a sound with Menu Sounds off");
+    }
+    // The star's pop is not a menu sound.
+    press(&mut a, Btn::Y);
+    assert!(matches!(a.take_sfx(), Some(slot::audio::Sfx::Pop(_))));
+}
+
+#[test]
+fn system_sounds_has_a_switch_for_each_kind_of_sound_and_each_is_kept() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SystemSounds);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_menu(), Some(QuickRow::SoundVolume), "System Sounds opens on its volume");
+    for row in QuickRow::SOUNDS.into_iter().filter(|r| *r != QuickRow::SoundVolume) {
+        open_at(&mut a, row);
+        assert_eq!(a.quick_value(row), Some(QuickValue::On), "{row:?} starts on");
+        press(&mut a, Btn::Left);
+        assert_eq!(a.quick_value(row), Some(QuickValue::Off), "{row:?}");
+    }
+    let s = read_slot_state(d.path());
+    assert!(!s.menu_sounds && !s.sound_star && !s.sound_cart && !s.sound_cart_open && !s.sound_label);
+    // Each kind is quiet once off: the star here, the cart going in below.
+    while a.quick_menu().is_some() {
+        press(&mut a, Btn::B);
+    }
+    a.take_sfx();
+    press(&mut a, Btn::Y);
+    assert_eq!(a.take_sfx(), None, "the star popped with its sound off");
+    a.apply(Action::Insert);
+    for _ in 0..90 {
+        a.update(1.0 / 60.0);
+        assert_eq!(a.take_sfx(), None, "the cart sounded with its sound off");
+    }
+}
+
+#[test]
+fn the_sounds_volume_steps_by_ten_percent_and_stops_at_each_end() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SoundVolume);
+    let shown = |a: &App| a.named_text(QuickRow::SoundVolume.named().unwrap()).to_string();
+    assert_eq!(shown(&a), "100%");
+    press(&mut a, Btn::Right);
+    assert_eq!(shown(&a), "100%", "it stops at 100%");
+    press(&mut a, Btn::Left);
+    press(&mut a, Btn::Left);
+    assert_eq!(shown(&a), "80%");
+    assert_eq!(read_slot_state(d.path()).sound_volume, 80);
+    for _ in 0..12 {
+        press(&mut a, Btn::Left);
+    }
+    assert_eq!(shown(&a), "0%", "it stops at 0%");
+    assert_eq!(read_slot_state(d.path()).sound_volume, 0);
+}
+
+#[test]
+fn the_sounds_volume_says_nothing_past_either_end() {
+    use slot::audio::{MenuSound, Sfx};
+    let (_d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SoundVolume);
+    a.take_sfx();
+    press(&mut a, Btn::Right);
+    assert_eq!(a.take_sfx(), None, "Right at 100% changed nothing, and made a sound");
+    press(&mut a, Btn::Left);
+    assert_eq!(a.take_sfx(), Some(Sfx::Menu(MenuSound::Change)));
+}
+
+#[test]
+fn every_row_that_reads_a_name_has_a_number_of_its_own() {
+    let mut seen: Vec<usize> = QuickRow::ALL.into_iter().filter_map(QuickRow::named).collect();
+    assert!(seen.iter().all(|n| *n < QuickRow::NAMED), "{seen:?} against {}", QuickRow::NAMED);
+    let n = seen.len();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), n, "two rows read the same name");
 }

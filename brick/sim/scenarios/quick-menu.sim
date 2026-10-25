@@ -28,12 +28,70 @@ press a
 snap menu-gameplay
 press b
 press up
-press up      # System: LEDs, Date & Time and About
+press up      # System: LEDs, Clock, Font, Rumble, System Sounds, Low Battery Shutdown, Reset Settings, About
 press a
 snap menu-system
 press down
+press down    # Font: each named in itself
+press right
+snap menu-font-gohufont
+press left    # back to Slot's own: no restart on closing
+press up      # Clock: Date & Time and Auto Clock
+press a
+snap menu-clock
 press a
 snap menu-date-time
+press b
+press b
+press b
+press b
+phase Shelf
+# System → Reset Settings asks first, then says it is done.
+press menu
+phase QuickMenu
+press up       # System
+press a
+press down
+press down
+press down
+press down
+press down
+press down    # Reset Settings
+press a
+snap menu-reset-ask
+press a
+snap menu-reset-done
+press b
+press b
+phase Shelf
+# System → About: a page of what this Slot is, and Label opens the label (not snapped: it
+# carries the commit it was built from).
+press menu
+phase QuickMenu
+press up       # System
+press a
+press up       # About, at the bottom
+press a
+snap menu-about
+press up       # Label, at the bottom
+press a
+phase About
+press b
+press b
+press b
+press b
+phase Shelf
+# System → System Sounds: each kind of sound on or off.
+press menu
+phase QuickMenu
+press up       # System
+press a
+press down
+press down
+press down
+press down     # System Sounds
+press a
+snap menu-system-sounds
 press b
 press b
 press b

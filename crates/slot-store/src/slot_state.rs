@@ -9,6 +9,9 @@ pub const BRIGHTNESS_MAX: u8 = 9;
 pub const BLUE_LIGHT_MAX: u8 = 9;
 pub const VOLUME_MAX: u8 = 100;
 
+/// HOME → System → System Sounds → Volume goes in steps of this many percent.
+pub const SOUND_VOLUME_STEP: u8 = 10;
+
 pub const UTC_OFFSET_MIN: i16 = -720;
 pub const UTC_OFFSET_MAX: i16 = 840;
 
@@ -41,11 +44,22 @@ pub struct SlotState {
     /// HOME → Library: the order of each shelf, and whether only favorites are on them.
     pub library_sort: crate::LibrarySort,
     pub favorites_only: bool,
+    /// HOME → Library → Systems: the systems kept off the shelves, in the order of Platform::ALL.
+    pub hidden_systems: [bool; Platform::ALL.len()],
     /// Play time in hours and minutes rather than minutes alone.
     pub play_time_hours: bool,
     /// The selected game's name on a card under its cart.
     pub title_card: bool,
     pub rumble: bool,
+    /// HOME → System → System Sounds: the HOME menu's pops, the favorite star's, the cart going
+    /// in and out, a GBA cart's lid popping open, and a label going on.
+    pub menu_sounds: bool,
+    pub sound_star: bool,
+    pub sound_cart: bool,
+    pub sound_cart_open: bool,
+    pub sound_label: bool,
+    /// How loud all of them are, 0 to 100 in steps of SOUND_VOLUME_STEP, on top of the volume.
+    pub sound_volume: u8,
     pub ff_speed: u8,
     pub ff_sound: bool,
     /// Colour correction, one for the Game Boys (GB and GBC) and one for the GBA.
@@ -71,6 +85,30 @@ pub struct SlotState {
 }
 
 impl SlotState {
+    pub fn shows(&self, platform: Platform) -> bool {
+        !self.hidden_systems[platform.index()]
+    }
+
+    /// What HOME → System → Reset Settings leaves: the game in, the clock (and whether it
+    /// sets itself), and the levels set with the buttons (brightness, blue light, volume, mute). Everything else goes back
+    /// to how it came.
+    pub fn reset(&self) -> SlotState {
+        SlotState {
+            cart: self.cart.clone(),
+            cart_platform: self.cart_platform,
+            brightness: self.brightness,
+            blue_light: self.blue_light,
+            volume: self.volume,
+            volume_hp: self.volume_hp,
+            muted: self.muted,
+            muted_hp: self.muted_hp,
+            clock_set: self.clock_set,
+            utc_offset_min: self.utc_offset_min,
+            auto_clock: self.auto_clock,
+            ..SlotState::default()
+        }
+    }
+
     pub fn overlay(&self, platform: Platform) -> Option<&str> {
         self.overlays[platform.index()].as_deref()
     }
@@ -144,9 +182,16 @@ impl Default for SlotState {
             auto_clock: true,
             library_sort: crate::LibrarySort::Az,
             favorites_only: false,
+            hidden_systems: [false; Platform::ALL.len()],
             play_time_hours: false,
             title_card: true,
             rumble: true,
+            menu_sounds: true,
+            sound_star: true,
+            sound_cart: true,
+            sound_cart_open: true,
+            sound_label: true,
+            sound_volume: 100,
             ff_speed: FF_SPEED_DEFAULT,
             ff_sound: false,
             colour_correction_gb: false,
@@ -222,6 +267,18 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     for platform in Platform::ALL {
         let _ = writeln!(text, "overlay_{}={}", platform_key(platform), s.overlay(platform).unwrap_or(""));
     }
+    for (key, on) in [
+        ("menu_sounds", s.menu_sounds),
+        ("sound_star", s.sound_star),
+        ("sound_cart", s.sound_cart),
+        ("sound_cart_open", s.sound_cart_open),
+        ("sound_label", s.sound_label),
+    ] {
+        let _ = writeln!(text, "{key}={}", on as u8);
+    }
+    let _ = writeln!(text, "sound_volume={}", s.sound_volume);
+    let hidden: Vec<String> = Platform::ALL.into_iter().filter(|p| s.hidden_systems[p.index()]).map(platform_key).collect();
+    let _ = writeln!(text, "hidden_systems={}", hidden.join(","));
     atomic_write(&state_path(root), text.as_bytes())
 }
 
@@ -239,9 +296,16 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut auto_clock = None;
     let mut library_sort = None;
     let mut favorites_only = None;
+    let mut hidden_systems = [false; Platform::ALL.len()];
     let mut play_time_hours = None;
     let mut title_card = None;
     let mut rumble = None;
+    let mut menu_sounds = None;
+    let mut sound_star = None;
+    let mut sound_cart = None;
+    let mut sound_cart_open = None;
+    let mut sound_label = None;
+    let mut sound_volume = None;
     let mut ff_speed = None;
     let mut ff_sound = None;
     let mut colour_correction = None;
@@ -279,9 +343,22 @@ fn parse(text: &str) -> Option<SlotState> {
             "auto_clock" => auto_clock = flag(value),
             "library_sort" => library_sort = crate::LibrarySort::parse(value),
             "favorites_only" => favorites_only = flag(value),
+            // hidden_systems=gb,nes: a system not known (or not written) is shown.
+            "hidden_systems" => {
+                hidden_systems = [false; Platform::ALL.len()];
+                for platform in value.split(',').map(str::trim).filter_map(platform_value) {
+                    hidden_systems[platform.index()] = true;
+                }
+            }
             "play_time_hours" => play_time_hours = flag(value),
             "title_card" => title_card = flag(value),
             "rumble" => rumble = flag(value),
+            "menu_sounds" => menu_sounds = flag(value),
+            "sound_star" => sound_star = flag(value),
+            "sound_cart" => sound_cart = flag(value),
+            "sound_cart_open" => sound_cart_open = flag(value),
+            "sound_label" => sound_label = flag(value),
+            "sound_volume" => sound_volume = level(value, 100).filter(|v| v % SOUND_VOLUME_STEP == 0),
             "ff_speed" => ff_speed = ff_speed_value(value),
             "ff_sound" => ff_sound = flag(value),
             // Before it was one setting for all three: it carries over to both.
@@ -326,9 +403,16 @@ fn parse(text: &str) -> Option<SlotState> {
         auto_clock: auto_clock.unwrap_or(fallback.auto_clock),
         library_sort: library_sort.unwrap_or(fallback.library_sort),
         favorites_only: favorites_only.unwrap_or(fallback.favorites_only),
+        hidden_systems,
         play_time_hours: play_time_hours.unwrap_or(fallback.play_time_hours),
         title_card: title_card.unwrap_or(fallback.title_card),
         rumble: rumble.unwrap_or(fallback.rumble),
+        menu_sounds: menu_sounds.unwrap_or(fallback.menu_sounds),
+        sound_star: sound_star.unwrap_or(fallback.sound_star),
+        sound_cart: sound_cart.unwrap_or(fallback.sound_cart),
+        sound_cart_open: sound_cart_open.unwrap_or(fallback.sound_cart_open),
+        sound_label: sound_label.unwrap_or(fallback.sound_label),
+        sound_volume: sound_volume.unwrap_or(fallback.sound_volume),
         ff_speed: ff_speed.unwrap_or(fallback.ff_speed),
         ff_sound: ff_sound.unwrap_or(fallback.ff_sound),
         colour_correction_gb: colour_correction_gb.or(colour_correction).unwrap_or(fallback.colour_correction_gb),

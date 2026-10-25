@@ -3,7 +3,7 @@
 set -u
 OUT="${1:-./slot-diagnostics.txt}"
 {
-    echo 'slot Brick v0.44 diagnostics'
+    echo 'slot Brick v0.50 diagnostics'
     date
     uname -a
     for f in /etc/os-release /proc/device-tree/model /sys/class/graphics/fb0/virtual_size /sys/class/graphics/fb0/modes; do
@@ -19,6 +19,8 @@ OUT="${1:-./slot-diagnostics.txt}"
     done
     echo '--- audio devices'
     [ ! -r /proc/asound/cards ] || cat /proc/asound/cards
+    echo '--- mixer'
+    amixer contents 2>&1 | head -120
     echo '--- power supply'
     for d in /sys/class/power_supply/*; do
         [ -d "$d" ] || continue

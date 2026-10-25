@@ -32,3 +32,12 @@ fn menu_routes_exit_and_shutdown_separately() {
     assert_eq!(PowerChoice::PowerOff.index(), 0);
     assert_eq!(PowerChoice::Restart.index(), 1);
 }
+#[test]
+fn on_slot_os_holding_power_shuts_down_without_a_menu() {
+    let mut app = App::new(Vec::new());
+    app.set_power_off_only(true);
+    app.apply(Action::PowerHold);
+    assert!(app.power_menu().is_none());
+    assert!(app.powering_off());
+    assert!(!app.restarting());
+}

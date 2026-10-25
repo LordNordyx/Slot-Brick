@@ -1,0 +1,360 @@
+#!/bin/sh
+# Slot OS: the first and only program the kernel starts (PID 1). It loads the GPU driver,
+# mounts the card and runs Slot, again and again, until Slot asks to power off or restart.
+# Only this script and busybox live in RAM; the system's libraries, the GPU driver, Slot and
+# the player's files are on the card (/lib and /usr point into its slot-os folder).
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+export LD_LIBRARY_PATH=/usr/lib:/lib/aarch64-linux-gnu:/usr/lib/aarch64-linux-gnu
+CARD=/mnt/SDCARD
+ROOT=$CARD/Slot
+DEV=/dev/mmcblk0p4
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o mode=1777 tmpfs /tmp
+mount -t tmpfs -o mode=755 tmpfs /run
+exec < /dev/console > /dev/console 2>&1
+
+# Uptime at each step, kept in /run until the card is there to hold it.
+TIMES=/run/boot-times.log
+stamp() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$TIMES"; }
+stamp init started
+# The kernel arms the hardware watchdog at boot (16 s): unless it is fed, the Brick resets,
+# whatever it is writing to the card at the time. Fed every 5 s from here on.
+watchdog -T 16 -t 5 /dev/watchdog0 2>/dev/null || watchdog -t 5 /dev/watchdog
+# The Brick Pro's 5 V rail (PD11), as TrimUI's runtrimui.sh switches it on before its input
+# daemon starts: the sticks' converters may need it.
+if [ "$(cat /etc/slot-os-model 2>/dev/null)" = brickpro ]; then
+    [ -d /sys/class/gpio/gpio107 ] || echo 107 > /sys/class/gpio/export
+    echo out > /sys/class/gpio/gpio107/direction && echo 1 > /sys/class/gpio/gpio107/value
+fi 2>/dev/null
+# The LEDs speak only when something out of the ordinary happens before Slot starts: white
+# while a system update (boot.img) is written; red and a long buzz when no card with Slot on
+# it can be mounted, as nothing will then reach the screen.
+LEDS=/sys/class/led_anim
+leds() {
+    [ -d "$LEDS" ] || return 0
+    echo 1 > "$LEDS/effect_enable"
+    for f in max_scale max_scale_f1f2 max_scale_lr; do [ ! -w "$LEDS/$f" ] || echo 60 > "$LEDS/$f"; done
+    for z in m f1 f2 lr; do
+        echo "$1 " > "$LEDS/effect_rgb_hex_$z"; echo -1 > "$LEDS/effect_cycles_$z"
+        echo 2000 > "$LEDS/effect_duration_$z"; echo 4 > "$LEDS/effect_$z"
+    done 2>/dev/null
+}
+RUMBLE=/sys/class/gpio/gpio227
+buzz() {
+    [ -d "$RUMBLE" ] || echo 227 > /sys/class/gpio/export
+    echo out > "$RUMBLE/direction" && echo 1 > "$RUMBLE/value" && sleep "$1"
+    echo 0 > "$RUMBLE/value"
+} 2>/dev/null
+
+# The card: its fourth partition, FAT, holds Slot, the system's libraries (slot-os) and the
+# player's files. It should be mmcblk0p4; failing that, the partition that
+# holds slot-os. Each is looked at read-only first: the Brick's internal storage must never
+# be written to.
+mount_card() {
+    mount -t vfat -o ro,noatime,utf8,shortname=mixed,errors=remount-ro "$1" "$CARD" 2>>/run/mount.log \
+        || mount -t exfat -o ro,noatime "$1" "$CARD" 2>>/run/mount.log
+}
+# Whether the file system was left in use (the Brick switched off or reset while it was
+# mounted): the flag the kernel sets on mounting and clears on unmounting, in the boot sector.
+# $1 the partition, $2 its file system (as mounted).
+# Only FAT32 (sectors per FAT at 22 is 0; FAT12/16 keep their flag elsewhere) and exFAT; a
+# byte that cannot be read is not taken for the flag, nor may it stop this script.
+byte() { dd if="$1" bs=1 skip="$2" count=1 2>/dev/null | od -An -tu1 | tr -d ' '; }
+dirty() {
+    case "$2" in
+        exfat) at=106 bit=2 ;;
+        *) [ "$(byte "$1" 22)$(byte "$1" 23)" = 00 ] || return 1; at=65 bit=1 ;;
+    esac
+    flags=$(byte "$1" "$at")
+    [ -n "$flags" ] && [ $((flags & bit)) -ne 0 ]
+}
+# Repairs it. The checkers are in RAM, but glibc is on the card: it is copied to RAM first,
+# as the card cannot be mounted while it is checked.
+repair() {
+    mkdir -p /run/fsck
+    cp "$CARD/slot-os/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1" "$CARD/slot-os/lib/aarch64-linux-gnu/libc.so.6" /run/fsck/ || return 1
+    umount "$CARD" || return 1
+    case "$2" in
+        exfat) check=/sbin/fsck.exfat; opts=-y ;;
+        *) check=/sbin/fsck.fat; opts='-a -w' ;;
+    esac
+    # shellcheck disable=SC2086
+    /run/fsck/ld-linux-aarch64.so.1 --library-path /run/fsck "$check" $opts "$1" > /run/fsck.log 2>&1
+    echo "exit $?" >> /run/fsck.log
+    rm -rf /run/fsck
+    mount_card "$1"
+}
+# First boot: the image's card partition is 2.5 GiB, whatever the card's size. Its FAT32
+# was made for a 1 TiB partition (make-image.sh) and then told it is only 2.5 GiB, so
+# growing it is two small writes, with the player's files where they are:
+# 1. the partition table: the partition runs to the card's end (1 TiB at most). The kernel
+#    learns of the new size by rereading the table, or else at a restart.
+# 2. the file system's size in its boot sector (and the boot sector's backup), and its
+#    count of free space marked unknown, for the kernel and the PC to count again.
+# Each step looks at the card, not at a note, so a power cut or a second start picks up
+# where it stopped. $1 the partition, mounted read-only on $CARD.
+DISK=/dev/mmcblk0
+# A little-endian number of $3 bytes at byte $2 of $1, read and written.
+peek() { dd if="$1" bs=1 skip="$2" count="$3" 2>/dev/null | od -An -tu"$3" | tr -d ' '; }
+poke4() {
+    printf "$(printf '\\%03o\\%03o\\%03o\\%03o' $(($3 & 255)) $(($3 >> 8 & 255)) $(($3 >> 16 & 255)) $(($3 >> 24 & 255)))" \
+        | dd of="$1" bs=1 seek="$2" conv=notrunc 2>/dev/null
+}
+grow() {
+    part=$(basename "$1")
+    start=$(cat "/sys/class/block/$part/start") size=$(cat "/sys/class/block/$part/size")
+    total=$(cat "/sys/class/block/$(basename "$DISK")/size")
+    sectors=$(peek "$1" 32 4) fat=$(peek "$1" 36 4)
+    [ "$(peek "$1" 11 2)" = 512 ] && [ "$fat" -gt 0 ] || return 0 # not a FAT32 Slot OS made
+    # The most its FAT has room for: reserved sectors, the FATs, then a cluster per entry.
+    max=$(( $(peek "$1" 14 2) + $(peek "$1" 16 1) * fat + (fat * 128 - 2) * $(peek "$1" 13 1) ))
+    # To the card's end (sgdisk's 0: its last sectors hold the partition table's backup),
+    # or as far as the FAT reaches.
+    end=0 room=$((total - 34 - start - size))
+    [ $((start + max)) -ge $((total - 34)) ] || { end=$((start + max - 1)) room=$((max - size)); }
+    grow_part=$((room > 131072)) grow_fs=$((size - sectors > 131072))
+    [ "$grow_part" = 1 ] || [ "$grow_fs" = 1 ] || return 0
+    stamp "growing the card ($((size / 2048)) MiB, file system $((sectors / 2048)) MiB, card $((total / 2048)) MiB)"
+    umount "$CARD" || return 1
+    if [ "$grow_part" = 1 ]; then
+        # sgdisk's libraries are on the card, which cannot be mounted while its table
+        # changes: they are copied to RAM, with the names RAM's links give them (FAT has
+        # no links: libuuid.so.1 is libuuid.so.1.3.0).
+        mount_card "$1" || return 1
+        T=/run/grow
+        mkdir -p "$T"
+        cp "$CARD"/slot-os/lib/aarch64-linux-gnu/* "$CARD"/slot-os/usr/lib/aarch64-linux-gnu/lib* "$T/" 2>/dev/null
+        umount "$CARD" || return 1
+        for l in $(find /lib/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu -type l); do
+            case "$(readlink "$l")" in /*) ;; *) ln -sf "$(readlink "$l")" "$T/${l##*/}" ;; esac
+        done
+        n=${part##*p}
+        # Its name, type and flags as the image made them: u-boot finds it by name.
+        "$T/ld-linux-aarch64.so.1" --library-path "$T" /sbin/sgdisk -e -d "$n" -n "$n:$start:$end" \
+            -c "$n:boot-resource" -t "$n:0700" -A "$n:set:2" "$DISK" || { rm -rf "$T"; return 1; }
+        rm -rf "$T"
+        sync
+        if ! blockdev --rereadpt "$DISK"; then
+            echo 'card partition grown; restarting to use it'; reboot -f
+        fi
+        # The kernel drops the partition and adds it back at its new size; its device file
+        # follows a moment later.
+        w=0
+        while [ "$(cat "/sys/class/block/$part/size" 2>/dev/null || echo 0)" -le "$size" ] || [ ! -b "$1" ]; do
+            sleep 0.1; w=$((w + 1))
+            [ "$w" -lt 50 ] || { echo "$1 not back after rereading; restarting"; reboot -f; }
+        done
+        sleep 0.2
+        size=$(cat "/sys/class/block/$part/size")
+    fi
+    [ "$size" -le "$max" ] || size=$max
+    if [ "$size" -gt "$sectors" ]; then
+        fsinfo=$(peek "$1" 48 2)
+        for at in 0 3072; do # the boot sector, and its backup at sector 6
+            poke4 "$1" $((at + 32)) "$size"
+            poke4 "$1" $((at + fsinfo * 512 + 488)) 4294967295
+        done
+        sync
+    fi
+    mount_card "$1" || return 1
+    stamp "card grown to $((size / 2048)) MiB"
+}
+n=0
+while [ ! -b "$DEV" ] && [ "$n" -lt 500 ]; do sleep 0.01; n=$((n + 1)); done
+mkdir -p "$CARD"
+mounted=
+for dev in "$DEV" $(ls /dev/mmcblk*p* 2>/dev/null); do
+    [ -b "$dev" ] || continue
+    if mount_card "$dev"; then
+        if [ -d "$CARD/Slot" ] && [ -d "$CARD/slot-os" ]; then
+            fs=$(awk -v d="$dev" '$1 == d { print $3 }' /proc/mounts)
+            if dirty "$dev" "$fs"; then
+                stamp "card left in use: checking it"
+                repair "$dev" "$fs" || mount_card "$dev"
+                stamp "card checked"
+            fi
+            [ "$dev" != "$DEV" ] || [ "$fs" != vfat ] || grow "$dev" >> /run/grow.log 2>&1 || mount_card "$dev"
+            if mount -o remount,rw "$CARD"; then mounted=$dev; break; fi
+        fi
+        umount "$CARD"
+    fi
+done
+if [ -n "$mounted" ]; then
+    stamp "card mounted ($mounted)"
+    # Read ahead 2 MB at a time, not the kernel's 128 KB: Slot's program and the GPU's
+    # libraries are read from the card while both start.
+    echo 2048 > "/sys/block/$(basename "${mounted%p*}")/queue/read_ahead_kb" 2>/dev/null
+
+else
+    stamp "card NOT mounted: $(cat /run/mount.log)"
+    leds FF0000
+    buzz 1.5
+    # Nothing more can run without the card: a shell on the serial port, for a UART cable.
+    # (PID 1 must never end, or the kernel panics.)
+    setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1' &
+    while :; do sleep 3600; done
+fi
+
+# A new kernel and RAM system: slot-os/boot.img on the card (an update, or a developer
+# copying one on) is written to the boot partition, checked, removed, and the Brick restarts
+# into it. A power cut while it is written leaves the Brick unable to start until the card
+# is flashed again: it takes about a second.
+# Part of an update from HOME → Update (.slot-update/pending, see crates/slot/src/update.rs),
+# the boot partition as it was is kept with the other files the update replaced: should the
+# new Slot not start, putting those back puts it back too.
+UPDATE=$CARD/.slot-update
+NEW=$CARD/slot-os/boot.img
+if [ -f "$NEW" ]; then
+    # The partition named boot on the card itself: never one of the Brick's internal storage,
+    # which has its own.
+    disk=$(basename "${mounted%p*}")
+    BOOT=$(grep -l '^PARTNAME=boot$' /sys/class/block/"$disk"p*/uevent 2>/dev/null | head -1)
+    BOOT=/dev/$(basename "$(dirname "$BOOT")")
+    room=$(( $(cat "/sys/class/block/$(basename "$BOOT")/size" 2>/dev/null || echo 0) * 512 ))
+    size=$(stat -c %s "$NEW")
+    if [ "$(head -c 8 "$NEW")" != 'ANDROID!' ] || [ "$size" -gt "$room" ] || [ ! -b "$BOOT" ]; then
+        stamp "slot-os/boot.img not used: not a boot image, or no room for it in $BOOT"
+        mv -f "$NEW" "$NEW.refused"
+    else
+        leds FFFFFF
+        if [ -f "$UPDATE/pending" ] && [ ! -f "$UPDATE/old/slot-os/boot.img" ]; then
+            mkdir -p "$UPDATE/old/slot-os" && dd if="$BOOT" of="$UPDATE/old/slot-os/boot.img" bs=1M 2>/dev/null && sync
+        fi
+        # The partition as it is, in RAM: should the new image not read back the same three
+        # times, it goes back, so the next start finds a kernel that boots.
+        dd if="$BOOT" of=/run/boot.previous bs=1M 2>/dev/null
+        want=$(md5sum < "$NEW" | cut -d' ' -f1)
+        for try in 1 2 3; do
+            stamp "writing slot-os/boot.img to $BOOT ($try)"
+            dd if="$NEW" of="$BOOT" bs=1M conv=fsync 2>/dev/null
+            if [ "$(head -c "$size" "$BOOT" | md5sum | cut -d' ' -f1)" = "$want" ]; then
+                rm -f "$NEW" /run/boot.previous; sync
+                stamp "boot.img written; restarting"
+                cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null
+                umount "$CARD"; reboot -f
+            fi
+        done
+        dd if=/run/boot.previous of="$BOOT" bs=1M conv=fsync 2>/dev/null
+        rm -f /run/boot.previous
+        stamp "boot.img did not read back the same; the previous one put back, the new one kept for the next start"
+    fi
+fi
+
+# New u-boot settings (an update, or a developer copying them on): slot-os/env.img written to
+# both of the card's settings partitions, checked, removed. They take effect at the next start.
+# Part of an update, the settings as they were are kept with the update's other old files.
+ENVNEW=$CARD/slot-os/env.img
+if [ -f "$ENVNEW" ] && [ "$(stat -c %s "$ENVNEW")" = 131072 ]; then
+    disk=$(basename "${mounted%p*}")
+    for name in env env-redund; do
+        part=$(grep -l "^PARTNAME=$name\$" /sys/class/block/"$disk"p*/uevent 2>/dev/null | head -1)
+        [ -n "$part" ] || continue
+        dev=/dev/$(basename "$(dirname "$part")")
+        if [ "$name" = env ] && [ -f "$UPDATE/pending" ] && [ ! -f "$UPDATE/old/slot-os/env.img" ]; then
+            mkdir -p "$UPDATE/old/slot-os" && head -c 131072 "$dev" > "$UPDATE/old/slot-os/env.img" && sync
+        fi
+        dd if="$ENVNEW" of="$dev" bs=128k conv=fsync 2>/dev/null
+        [ "$(head -c 131072 "$dev" | md5sum)" = "$(md5sum < "$ENVNEW")" ] || stamp "env.img did not read back the same on $dev"
+    done
+    rm -f "$ENVNEW"; sync
+    stamp "u-boot settings written"
+fi
+
+# The GPU driver (pvrsrvkm, dc_sunxi): pvrsrvctl loads both from here.
+# In the background, beside Slot's own start: Slot opens its sound and reads the games while
+# this loads, and waits for /run/gpu-ready (SLOT_GPU_READY) before it opens the screen.
+export SLOT_GPU_READY=/run/gpu-ready
+( cd /lib/modules/4.9.191 && pvrsrvctl --start > /run/gpu.log 2>&1; : > "$SLOT_GPU_READY" ) &
+
+# The Wi-Fi chip's driver, in the background: it loads the chip's firmware, and Slot only
+# needs wlan0 once Wi-Fi is turned on (brick_wifi.sh waits for it).
+( cd /lib/modules/4.9.191 && insmod xradio_mac.ko && insmod xradio_core.ko && insmod xradio_wlan.ko ) > /run/wifi.log 2>&1 &
+
+# The mixer: the codec starts with its outputs switched off.
+# In the background: Slot opens its sound a moment later, and the mixer only has to be set
+# before sound plays.
+sh /etc/mixer.sh > /run/alsa.log 2>&1 &
+
+# For working on Slot OS: a script on the card, run before Slot, its output in Logs/debug.log.
+if [ -f "$CARD/slot-os/debug.sh" ]; then
+    mkdir -p "$ROOT/Logs"
+    sh "$CARD/slot-os/debug.sh" > "$ROOT/Logs/debug.log" 2>&1
+    stamp debug.sh done
+fi
+
+# A shell on the serial port (debug pads), for anyone with a UART adapter attached.
+[ -c /dev/ttyS0 ] && setsid sh -c 'exec sh </dev/ttyS0 >/dev/ttyS0 2>&1' &
+
+mkdir -p "$ROOT/Logs" 2>/dev/null
+[ ! -f "$ROOT/Logs/boot-times.log" ] || mv -f "$ROOT/Logs/boot-times.log" "$ROOT/Logs/boot-times.previous.log"
+cp "$TIMES" "$ROOT/Logs/boot-times.log" 2>/dev/null && TIMES="$ROOT/Logs/boot-times.log"
+export SLOT_BOOT_TIMES="$TIMES"
+# Written meanwhile, not before Slot starts: the card is slow to write to.
+{
+    echo "Slot OS $(cat /etc/slot-os-version)"; uname -a
+    echo '--- mount'; cat /run/mount.log; echo '--- gpu'; cat /run/gpu.log; echo '--- wifi driver'; cat /run/wifi.log; echo '--- mixer'; cat /run/alsa.log
+    [ ! -f /run/fsck.log ] || { echo '--- card check'; cat /run/fsck.log; }
+    [ ! -s /run/grow.log ] || { echo '--- card grown'; cat /run/grow.log; }
+    echo '--- kernel log'; dmesg
+} > "$ROOT/Logs/os.log" 2>&1 &
+
+export SLOT_ROOT="$ROOT"
+export SLOT_OS=1
+# Before powering off or restarting: every other program ended first (wpa_supplicant and the
+# DHCP client keep Logs/wifi.log open, and an open file keeps the card from being unmounted),
+# so the card is left closed and is not checked at the next start.
+cleanup() {
+    kill -TERM -1 2>/dev/null; sleep 0.3; kill -KILL -1 2>/dev/null
+    sync
+    umount "$CARD" 2>/dev/null || mount -o remount,ro "$CARD" 2>/dev/null \
+        || echo "Slot OS: the card could not be closed: $(cat /proc/mounts | grep " $CARD ")" > /dev/console
+}
+quick=0
+while :; do
+    if [ ! -x "$ROOT/System/slot" ]; then
+        echo "Slot OS: $ROOT/System/slot is missing" | tee -a "$ROOT/Logs/os.log"
+        sleep 30; cleanup; poweroff -f
+    fi
+    [ ! -f "$ROOT/Logs/slot.log" ] || mv -f "$ROOT/Logs/slot.log" "$ROOT/Logs/slot.previous.log"
+    stamp starting slot
+    started=$(cut -d. -f1 /proc/uptime)
+    ( cd "$ROOT" && exec ./System/slot ) > "$ROOT/Logs/slot.log" 2>&1
+    status=$?
+    echo "slot exit code: $status" >> "$ROOT/Logs/slot.log"
+    { echo "--- kernel log after slot ended ($status)"; dmesg | tail -40; } >> "$ROOT/Logs/os.log"
+    sync
+    # An update swapped in: Slot removes .slot-update/pending once the new one has shown a
+    # frame. Still there when it ends, the new one never started, so the files it replaced
+    # go back (the boot image too, if it brought one), as launch.sh does on stock.
+    if [ "$status" != 66 ] && [ -f "$UPDATE/pending" ] && [ -d "$UPDATE/old" ]; then
+        echo 'Slot OS: the update did not start; putting the previous version back' >> "$ROOT/Logs/os.log"
+        ( cd "$UPDATE/old" && find . -type f ) | while IFS= read -r f; do
+            mkdir -p "$(dirname "$CARD/$f")"
+            mv -f "$UPDATE/old/$f" "$CARD/$f"
+        done
+        rm -rf "$UPDATE"
+        sync
+        status=66
+    fi
+    case "$status" in
+        64) cleanup; poweroff -f ;;
+        # Updated: Slot starts again on the new files; a new boot image needs a restart.
+        66) quick=0; [ ! -f "$NEW" ] || { cleanup; reboot -f; }; continue ;;
+    esac
+    # Anything else (a crash, or the exit chord, with no stock menu to go back to): start
+    # Slot again, keeping the crash log; three quick ends in a row and it powers off.
+    if [ "$status" -ge 128 ]; then
+        mkdir -p "$ROOT/Logs/crash" && cp "$ROOT/Logs/slot.log" "$ROOT/Logs/crash/slot-$(date '+%Y-%m-%d_%H-%M-%S').log"
+        # The last five, as launch.sh keeps on stock.
+        ls -1t "$ROOT"/Logs/crash/slot-*.log 2>/dev/null | tail -n +6 | while read -r old; do rm -f "$old"; done
+    fi
+    if [ $(( $(cut -d. -f1 /proc/uptime) - started )) -lt 10 ]; then quick=$((quick + 1)); else quick=0; fi
+    [ "$quick" -lt 3 ] || { echo 'Slot OS: Slot keeps ending; powering off' >> "$ROOT/Logs/os.log"; cleanup; poweroff -f; }
+    sleep 1
+done

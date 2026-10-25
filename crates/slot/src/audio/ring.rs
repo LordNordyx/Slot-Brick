@@ -18,6 +18,12 @@ struct Inner {
     placed: usize,
     pending_at: u64,
     drained: u64,
+    /// The clip last mixed in with `mix_over`, its kind, where it started, and how much of it
+    /// is in `buf`: a new clip of the same kind takes its place rather than adding to it.
+    voice: Vec<i16>,
+    voice_kind: Option<u8>,
+    voice_at: u64,
+    voice_laid: usize,
 }
 
 pub struct Ring {
@@ -45,6 +51,10 @@ impl Ring {
                 placed: 0,
                 pending_at: 0,
                 drained: 0,
+                voice: Vec::new(),
+                voice_kind: None,
+                voice_at: 0,
+                voice_laid: 0,
             }),
             room: Condvar::new(),
             queued: AtomicUsize::new(0),
@@ -68,6 +78,9 @@ impl Ring {
         i.placed = 0;
         i.pending_at = 0;
         i.drained = 0;
+        i.voice.clear();
+        i.voice_kind = None;
+        i.voice_laid = 0;
         i.len = drc_target(frames) * 2;
         self.queued.store(i.len, Ordering::Relaxed);
         self.capacity.store(frames, Ordering::Relaxed);
@@ -116,16 +129,51 @@ impl Ring {
         }
     }
 
+    /// Adds a clip (Slot's own sounds) into whatever is queued, the game's sound included.
     pub fn mix(&self, samples: &[i16]) {
+        self.mix_voice(samples, None);
+    }
+
+    /// As `mix`, but a clip of the same `kind` still playing is taken out first, fading over
+    /// VOICE_FADE samples: menu pops in quick succession replace one another rather than
+    /// adding up to louder and louder. One of another kind (the cart going in) plays on.
+    pub fn mix_over(&self, samples: &[i16], kind: u8) {
+        self.mix_voice(samples, Some(kind));
+    }
+
+    fn mix_voice(&self, samples: &[i16], kind: Option<u8>) {
         self.priming.store(false, Ordering::Relaxed);
+        // Copied before the lock: the audio thread waits on it.
+        let voice = kind.map(|_| samples.to_vec()).unwrap_or_default();
         let mut i = self.lock();
+        let at = i.placed.min(i.pending.len());
+        let (tail, tail_at) = (i.pending.split_off(at), i.pending_at);
         i.pending.clear();
         i.placed = 0;
         if i.buf.is_empty() {
             return;
         }
-        i.pending_at = i.drained;
-        i.pending.extend_from_slice(samples);
+        let start = i.drained;
+        let mut merged = samples.to_vec();
+        if kind.is_some() && i.voice_kind == kind {
+            // The same kind: it gives way, and what of it had not reached `buf` goes too.
+            silence_voice(&mut i);
+        } else if let Some(shift) = tail_at.checked_sub(start) {
+            // Another kind plays on: the rest of it, not yet in `buf`, goes in with this one.
+            let shift = shift as usize;
+            if merged.len() < shift + tail.len() {
+                merged.resize(shift + tail.len(), 0);
+            }
+            for (k, v) in tail.into_iter().enumerate() {
+                merged[shift + k] = merged[shift + k].saturating_add(v);
+            }
+        }
+        i.pending_at = start;
+        i.voice = voice;
+        i.voice_kind = kind;
+        i.voice_at = start;
+        i.voice_laid = 0;
+        i.pending = merged;
         lay_pending(&mut i);
         self.queued.store(i.len, Ordering::Relaxed);
     }
@@ -203,6 +251,30 @@ impl Ring {
     }
 }
 
+/// How long a clip cut short by the next takes to fade out (samples, both channels): 2 ms at
+/// 48 kHz, enough not to click.
+const VOICE_FADE: usize = 192;
+
+/// Takes the part of the last clip not yet played out of `buf`, fading it out from where
+/// playback is.
+fn silence_voice(i: &mut Inner) {
+    let cap = i.buf.len();
+    // From where playback is: what has been played is gone already.
+    let played = i.drained.saturating_sub(i.voice_at) as usize;
+    for k in played..i.voice_laid.min(i.voice.len()) {
+        let off = (i.voice_at + k as u64 - i.drained) as usize;
+        if off >= i.len || cap == 0 {
+            break;
+        }
+        let keep = 1.0 - (off as f32 / VOICE_FADE as f32).min(1.0);
+        let at = (i.head + off) % cap;
+        let take = (i.voice[k] as f32 * (1.0 - keep)) as i16;
+        i.buf[at] = i.buf[at].saturating_sub(take);
+    }
+    i.voice.clear();
+    i.voice_laid = 0;
+}
+
 fn lay_pending(i: &mut Inner) {
     let cap = i.buf.len();
     if cap == 0 || i.placed >= i.pending.len() {
@@ -230,6 +302,7 @@ fn lay_pending(i: &mut Inner) {
     }
     i.len = i.len.max(off + n);
     i.placed += n;
+    i.voice_laid += n;
     i.pending_at += n as u64;
     if i.placed >= i.pending.len() {
         i.pending = Vec::new();

@@ -2,15 +2,25 @@
 
 ## Unreleased
 - Pause menu: tap HOME in a game to pause it and choose Resume, Save State, Load State (opens the save state switcher), Reset Game or Quit Game. Reset Game starts the game over, as the console's reset button does: its battery save stays, play since your last save is lost. B or HOME resumes. Hold HOME and double-tap HOME work as before. Not during multiplayer, where the game can't pause.
-- PlayStation (experimental, not yet tested on a Brick): put games in `Slot/Games/PS1` (`.cue`/`.bin`, `.chd`, `.pbp`, `.iso`, or an `.m3u` for a game of several discs) and they get a shelf of their own, as discs. The slot turns into a disc slot, and the disc spins as it goes in. They run on PCSX ReARMed, with your BIOS from `Slot/BIOS` if you have one.
-- PlayStation games of several discs: A fans the discs out; pick one with left / right and A puts it in. To change discs mid-game, eject and put in the next one: the game carries on with it.
-- PlayStation: L2 and R2 are the game's own buttons, so fast-forward is HOME + R2. No rewind for PlayStation games. A Brick Pro's left stick is the DualShock's left stick in game. Memory cards are saved in `Slot/Saves/PS1`, one per game. HOME → Screen → PlayStation has Shader, Dithering and Overlay.
-- Cart Art fetches PlayStation disc scans, and RetroAchievements work for PlayStation games (`.chd` too).
-- Title card: when you pick a game, its name shows on a card under its cart for a moment, then fades. Turn it off under HOME → Library → Title Card.
-- Play time: how long you have played the selected game shows beside the battery on the shelf, in minutes ("200M") or in hours and minutes ("3H20M", HOME → Library → Play Time).
-- Favorites: Y stars a game (a gold star on its cart), and HOME → Library → Show: Favorites shows only those.
-- Sort the shelves with SELECT, or under HOME → Library → Sort By: A–Z, last played, or most played.
-- Brick Pro (experimental, not yet tested on one): Slot recognises it, its left stick works as the D-pad, and System → LEDs has a Sticks row for the lights around its sticks.
+- Slot OS for the Brick Pro (experimental, not yet tried on a Brick Pro): flash `slot-os-brickpro-…-sd-card.img.xz`. It is built from TrimUI's Brick Pro firmware, reads the Pro's own button layout, and its left stick works as the D-pad, as on stock firmware. Please report how it goes in issue #65.
+- Sounds: the HOME menu now makes a soft pop as you move, change a setting, open a page and go back; a GBA cart pops as it opens for the core picker, and snaps shut as it closes; and a label slaps down as it lands on its cart.
+- System → System Sounds: set how loud Slot's own sounds are (Volume, 0–100%, on top of the Brick's volume), and turn each kind on or off: Menu, Favorite Star, Cart In & Out, Cart Opening and Label On. Sounds in quick succession no longer add up to louder and louder; each takes over from the last.
+- Fixed: putting a label on a GBA cart in its own colour (such as Pokémon Ruby's red) showed the cart black while framing the label and as it flew on. And while a label flies on, the cart's empty label slot now shows its plastic, in the colour you picked, rather than black.
+- Favorites: the star now pops onto the cart when you press Y, with one of five pop sounds at random, and pops off again with a lower, softer one. It's shaded too, with a lit and a dark side.
+- Library → Systems: hide the shelves of systems you don't play. The last system with games can't be hidden.
+- System → Reset Settings: puts every setting back to how it came (LEDs and font included). Press A, then A again when it asks "Sure?". Games, saves, states, play time, favorites, the clock, brightness and volume stay.
+- System → About is now a page: the version, whether it is a Dev build or a release, the device, the firmware (stock or Slot OS), and how much of the SD card is free. The label is still there, under About → Label.
+- Fixed: after waking from sleep, Wi-Fi could say it was connected while Cart Art, RetroAchievements and Update stayed greyed out until Wi-Fi was turned off and on. Slot now notices and gets an address again by itself.
+
+## v0.50
+**New since v0.44:**
+- PlayStation: PS1 games from `Slot/Games/PS1` (`.cue`/`.bin`, `.chd`, `.pbp`, `.iso`, `.m3u`) on a shelf of discs that spin into the slot, games of several discs included.
+- Rumble: games that rumble now drive the Brick's motor.
+- Favorites (Y) and sorting (SELECT), with play time and a title card for the selected game.
+- Brick Pro support: its left stick works as the D-pad, and its stick lights have their own LED row.
+- Fonts: HOME → System → Font, with GohuFont included, and room for your own in `Slot/Fonts`.
+- A reworked HOME menu: Emulation, Gameplay, Library, Online and System.
+- Faster startup, and Wi-Fi fixes.
 
 ## v0.44
 **New since v0.43:**

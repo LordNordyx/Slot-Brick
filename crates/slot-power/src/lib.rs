@@ -15,6 +15,10 @@ pub use device::{
     trace_first_frame, uptime_seconds, DevicePlatform,
 };
 pub use hw::hw;
+/// Slot runs on Slot OS (its init sets SLOT_OS), not on TrimUI's stock system.
+pub fn slot_os() -> bool {
+    std::env::var_os("SLOT_OS").is_some()
+}
 #[cfg(feature = "sim")]
 pub use hw::sim_root;
 pub use motor::Motor;

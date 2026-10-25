@@ -9,7 +9,7 @@ use slot_ui::FfState;
 pub const RUMBLE_HOLD_MS: Millis = 100;
 
 use crate::app::{App, Phase};
-use crate::audio::{open_sink, AudioSink, Ring, Sfx, GBA_HZ};
+use crate::audio::{AudioSink, Ring, Sfx};
 use crate::core::open_core;
 use crate::emu::{CoreState, EmuHandle, Speed};
 use crate::frames::FrameRef;
@@ -35,12 +35,10 @@ pub struct Session {
 
 impl Session {
     pub fn boot(root: PathBuf) -> Self {
-        let mut sink: Box<dyn AudioSink> = open_sink();
-        if let Err(e) = sink.open(GBA_HZ) {
-            eprintln!("slot: audio: {e}");
-        }
+        let sink = crate::audio::take_opened();
+        crate::boot_times::mark("  audio open");
         Session {
-            app: App::boot(&root),
+            app: App::take_booted(&root),
             root,
             emu: None,
             sink,
@@ -63,8 +61,13 @@ impl Session {
             return;
         }
         let mut samples = sfx.render(rate);
-        crate::audio::volume::apply(&mut samples, self.app.output_volume());
-        ring.mix(&samples);
+        // The volume, and System Sounds' own on top of it, in one pass.
+        let gain = crate::audio::volume::gain(self.app.output_volume()) * crate::audio::volume::gain(self.app.sound_volume());
+        for s in samples.iter_mut() {
+            *s = (*s as f32 * gain) as i16;
+        }
+        // A sound of the same kind still playing (a menu pop, the star's) gives way to it.
+        ring.mix_over(&samples, sfx.kind() as u8);
     }
 
     pub fn audio_queued(&self) -> usize {
