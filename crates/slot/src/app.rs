@@ -387,7 +387,10 @@ pub struct App {
     quick_menu_faces: Option<QuickMenuFaces>,
     quick_clock_faces: Option<[(TexId, u32, u32); 2]>,
     /// Each system's overlay name as shown on its Overlay row, and its faces, dim and lit.
-    overlay_texts: [Option<(String, [(TexId, u32, u32); 2])>; Platform::ALL.len()],
+    /// The faces of rows that read a name (QuickRow::named): each overlay's, and the font's.
+    named_texts: [Option<(String, [(TexId, u32, u32); 2])>; QuickRow::NAMED],
+    /// The font picked under HOME → System → Font (crate::fonts).
+    font: String,
     /// The overlay laid over the game being played: its file, its picture and its window.
     overlay: Option<(PathBuf, TexId, [f32; 4])>,
     sticker_face: Option<TexId>,
@@ -610,7 +613,8 @@ impl App {
             clock_faces: None,
             quick_menu_faces: None,
             quick_clock_faces: None,
-            overlay_texts: Default::default(),
+            named_texts: Default::default(),
+            font: crate::fonts::running(),
             overlay: None,
             sticker_face: None,
             wallpaper: None,
@@ -1151,7 +1155,7 @@ impl App {
                 false => QuickValue::Minutes,
             }),
             QuickRow::LibraryTitleCard => Some(QuickValue::flag(self.state.title_card)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving => None,
         }
     }
 
@@ -1470,12 +1474,20 @@ impl App {
         }
     }
 
-    pub fn overlay_text_shown(&self, platform: Platform) -> Option<&str> {
-        self.overlay_texts[platform.index()].as_ref().map(|(text, _)| text.as_str())
+    /// How a row that reads a name (QuickRow::named) reads: an overlay's, or the font's.
+    pub fn named_text(&self, at: usize) -> &str {
+        match Platform::ALL.get(at) {
+            Some(platform) => self.overlay_text(*platform),
+            None => &self.font,
+        }
     }
 
-    pub fn set_overlay_text_faces(&mut self, platform: Platform, text: String, faces: [(TexId, u32, u32); 2]) {
-        self.overlay_texts[platform.index()] = Some((text, faces));
+    pub fn named_text_shown(&self, at: usize) -> Option<&str> {
+        self.named_texts[at].as_ref().map(|(text, _)| text.as_str())
+    }
+
+    pub fn set_named_text_faces(&mut self, at: usize, text: String, faces: [(TexId, u32, u32); 2]) {
+        self.named_texts[at] = Some((text, faces));
     }
 
     /// The previous or next overlay for `platform`, from Off through those there are. False
@@ -2101,6 +2113,11 @@ impl App {
                     Some(row) => Phase::QuickMenu { row },
                     None => Phase::Shelf,
                 };
+                // Everything is drawn in the font: a new one takes a restart, as the menu closes.
+                #[cfg(feature = "brick")]
+                if matches!(self.phase, Phase::Shelf) && self.font != crate::fonts::running() {
+                    self.updating = true;
+                }
                 return;
             }
             _ => return,
@@ -2137,6 +2154,9 @@ impl App {
             | QuickRow::ScreenSnes
             | QuickRow::ScreenPs1
             | QuickRow::Game
+            | QuickRow::Saving
+            | QuickRow::Clock
+            | QuickRow::Online
             | QuickRow::System
             | QuickRow::Library
             | QuickRow::Lights => {
@@ -2159,6 +2179,7 @@ impl App {
             | QuickRow::SnesShader
             | QuickRow::Ps1Shader
             | QuickRow::Ps1Dithering
+            | QuickRow::Font
             | QuickRow::GbOverlay
             | QuickRow::GbcOverlay
             | QuickRow::GbaOverlay
@@ -2186,6 +2207,15 @@ impl App {
 
         if let Some(platform) = row.overlay_of() {
             self.step_overlay(platform, right);
+            return;
+        }
+        if row == QuickRow::Font {
+            if let Some(root) = &self.root {
+                self.font = crate::fonts::step(root, &self.font, right);
+                if let Err(e) = crate::fonts::save(root, &self.font) {
+                    eprintln!("slot: font: {e}");
+                }
+            }
             return;
         }
         let s = &mut self.state;
@@ -2272,7 +2302,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving => return,
         }
         self.persist();
     }
@@ -3099,10 +3129,7 @@ impl App {
                 row: *row,
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
-                texts: QuickRow::ALL.map(|r| {
-                    let at = r.overlay_of()?.index();
-                    self.overlay_texts[at].as_ref().map(|(_, faces)| *faces)
-                }),
+                texts: QuickRow::ALL.map(|r| self.named_texts[r.named()?].as_ref().map(|(_, faces)| *faces)),
                 faces: self.quick_menu_faces.as_ref(),
                 disabled: QuickRow::ALL.map(|r| self.quick_disabled(r)),
             }

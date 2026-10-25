@@ -64,10 +64,14 @@ pub enum QuickRow {
     Ps1Shader,
     Ps1Dithering,
     Ps1Overlay,
+    Font,
+    Online,
+    Clock,
+    Saving,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 51] = [
+    pub const ALL: [QuickRow; 55] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -119,18 +123,26 @@ impl QuickRow {
         QuickRow::Ps1Shader,
         QuickRow::Ps1Dithering,
         QuickRow::Ps1Overlay,
+        QuickRow::Font,
+        QuickRow::Online,
+        QuickRow::Clock,
+        QuickRow::Saving,
     ];
 
     #[cfg(not(feature = "brick"))]
     pub const MAIN: [QuickRow; 4] = [QuickRow::Screen, QuickRow::Game, QuickRow::Library, QuickRow::System];
     #[cfg(not(feature = "brick"))]
-    pub const SYSTEM: [QuickRow; 2] = [QuickRow::DateTime, QuickRow::About];
+    pub const SYSTEM: [QuickRow; 5] = [QuickRow::DateTime, QuickRow::Font, QuickRow::Rumble, QuickRow::BatteryShutdown, QuickRow::About];
 
     #[cfg(feature = "brick")]
-    pub const MAIN: [QuickRow; 8] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update,QuickRow::System];
-    /// System: the Brick's lights, its clock, and what Slot is.
+    pub const MAIN: [QuickRow; 5] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Online,QuickRow::System];
+    /// System: the Brick's lights, its clock, the font, rumble, the battery, and what Slot is.
     #[cfg(feature = "brick")]
-    pub const SYSTEM: [QuickRow; 4] = [QuickRow::Lights,QuickRow::DateTime,QuickRow::AutoClock,QuickRow::About];
+    pub const SYSTEM: [QuickRow; 6] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::BatteryShutdown,QuickRow::About];
+    /// Clock: setting it by hand, and from the internet.
+    pub const CLOCK: [QuickRow; 2] = [QuickRow::DateTime,QuickRow::AutoClock];
+    /// Online: what needs Wi-Fi, and Wi-Fi itself.
+    pub const ONLINE: [QuickRow; 4] = [QuickRow::Wifi,QuickRow::CartArt,QuickRow::Achievements,QuickRow::Update];
     pub const LIGHTS: [QuickRow; 6] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedColor,QuickRow::LedEffect];
     /// The Brick Pro's: its sticks have lights of their own.
     pub const LIGHTS_PRO: [QuickRow; 7] = [QuickRow::LedMode,QuickRow::LedTop,QuickRow::LedButtons,QuickRow::LedTriggers,QuickRow::LedSticks,QuickRow::LedColor,QuickRow::LedEffect];
@@ -145,7 +157,9 @@ impl QuickRow {
 
     /// Library: how the shelves are ordered, whether they hold only the favorites, and what is
     /// printed around them.
-    pub const LIBRARY: [QuickRow; 4] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryPlayTime, QuickRow::LibraryTitleCard];
+    pub const LIBRARY: [QuickRow; 4] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryTitleCard, QuickRow::LibraryPlayTime];
+    /// Gameplay → Saving: when a game is saved without being asked.
+    pub const SAVING: [QuickRow; 2] = [QuickRow::AutoSave, QuickRow::EjectSave];
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 5] =
@@ -158,6 +172,16 @@ impl QuickRow {
     pub const SCREEN_PS1: [QuickRow; 3] = [QuickRow::Ps1Shader, QuickRow::Ps1Dithering, QuickRow::Ps1Overlay];
 
     /// The system an Overlay row picks the overlay for.
+    /// Rows that read a name rather than a fixed value (an overlay's, the font's), numbered:
+    /// the overlay rows by their platform, then Font.
+    pub const NAMED: usize = slot_store::Platform::ALL.len() + 1;
+    pub fn named(self) -> Option<usize> {
+        match self {
+            QuickRow::Font => Some(slot_store::Platform::ALL.len()),
+            _ => self.overlay_of().map(|p| p.index()),
+        }
+    }
+
     pub fn overlay_of(self) -> Option<slot_store::Platform> {
         use slot_store::Platform;
         Some(match self {
@@ -171,15 +195,12 @@ impl QuickRow {
         })
     }
 
-    pub const GAME: [QuickRow; 8] = [
+    pub const GAME: [QuickRow; 5] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
         QuickRow::Turbo,
-        QuickRow::Rumble,
-        QuickRow::EjectSave,
-        QuickRow::AutoSave,
-        QuickRow::BatteryShutdown,
+        QuickRow::Saving,
     ];
 
     pub fn index(self) -> usize {
@@ -199,16 +220,23 @@ impl QuickRow {
             QuickRow::NesShader | QuickRow::NesOverlay => &QuickRow::SCREEN_NES,
             QuickRow::SnesShader | QuickRow::SnesOverlay => &QuickRow::SCREEN_SNES,
             QuickRow::Ps1Shader | QuickRow::Ps1Dithering | QuickRow::Ps1Overlay => &QuickRow::SCREEN_PS1,
-            QuickRow::FastForward
-            | QuickRow::FastForwardSound
-            | QuickRow::Rewind
-            | QuickRow::Turbo
+            QuickRow::FastForward | QuickRow::FastForwardSound | QuickRow::Rewind | QuickRow::Turbo | QuickRow::Saving => &QuickRow::GAME,
+            QuickRow::AutoSave | QuickRow::EjectSave => &QuickRow::SAVING,
+            #[cfg(feature = "brick")]
+            QuickRow::DateTime | QuickRow::AutoClock => &QuickRow::CLOCK,
+            #[cfg(not(feature = "brick"))]
+            QuickRow::DateTime | QuickRow::AutoClock => &QuickRow::SYSTEM,
+            QuickRow::Lights
+            | QuickRow::Clock
+            | QuickRow::Font
             | QuickRow::Rumble
-            | QuickRow::EjectSave
-            | QuickRow::AutoSave
-            | QuickRow::BatteryShutdown => &QuickRow::GAME,
-            QuickRow::Lights | QuickRow::DateTime | QuickRow::AutoClock | QuickRow::About => &QuickRow::SYSTEM,
-            QuickRow::LibrarySort | QuickRow::LibraryShow | QuickRow::LibraryPlayTime | QuickRow::LibraryTitleCard => &QuickRow::LIBRARY,
+            | QuickRow::BatteryShutdown
+            | QuickRow::About => &QuickRow::SYSTEM,
+            QuickRow::LibrarySort
+            | QuickRow::LibraryShow
+            | QuickRow::LibraryPlayTime
+            | QuickRow::LibraryTitleCard => &QuickRow::LIBRARY,
+            QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update => &QuickRow::ONLINE,
             _ => &QuickRow::MAIN,
         }
     }
@@ -224,6 +252,10 @@ impl QuickRow {
             QuickRow::Ps1Shader => Some(QuickRow::ScreenPs1),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::LibrarySort => Some(QuickRow::Library),
+            QuickRow::Wifi => Some(QuickRow::Online),
+            QuickRow::AutoSave => Some(QuickRow::Saving),
+            #[cfg(feature = "brick")]
+            QuickRow::DateTime => Some(QuickRow::Clock),
             first if first == QuickRow::SYSTEM[0] => Some(QuickRow::System),
             _ => None,
         }
@@ -241,6 +273,9 @@ impl QuickRow {
             QuickRow::Game => Some(QuickRow::GAME[0]),
             QuickRow::System => Some(QuickRow::SYSTEM[0]),
             QuickRow::Library => Some(QuickRow::LIBRARY[0]),
+            QuickRow::Online => Some(QuickRow::ONLINE[0]),
+            QuickRow::Clock => Some(QuickRow::CLOCK[0]),
+            QuickRow::Saving => Some(QuickRow::SAVING[0]),
             _ => None,
         }
     }
@@ -256,9 +291,13 @@ impl QuickRow {
             QuickRow::Achievements => "RetroAchievements",
             QuickRow::Update => "Update",
             QuickRow::System => "System",
+            QuickRow::Online => "Online",
+            QuickRow::Clock => "Clock",
+            QuickRow::Saving => "Saving",
             QuickRow::AutoClock => "Auto Clock",
+            QuickRow::Font => "Font",
             QuickRow::Lights => "LEDs",
-            QuickRow::LedMode => "Lights",
+            QuickRow::LedMode => "All LEDs",
             QuickRow::LedTop => "Top Bar",
             QuickRow::LedButtons => "Buttons",
             QuickRow::LedTriggers => "Triggers",
@@ -272,7 +311,7 @@ impl QuickRow {
             QuickRow::LibraryTitleCard => "Title Card",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
-            QuickRow::Screen => "Screen",
+            QuickRow::Screen => "Emulation",
             QuickRow::Rumble => "Rumble",
             QuickRow::DateTime => "Date & Time",
             QuickRow::About => "About",
@@ -288,7 +327,7 @@ impl QuickRow {
             QuickRow::ScreenSnes => "SNES",
             QuickRow::ScreenPs1 => "PlayStation",
             QuickRow::Game => "Gameplay",
-            QuickRow::EjectSave => "Auto Save on Eject",
+            QuickRow::EjectSave => "Save on Eject",
             QuickRow::AutoSave => "Auto Save",
             QuickRow::BatteryShutdown => "Low Battery Shutdown",
             QuickRow::Turbo => "Turbo Buttons",

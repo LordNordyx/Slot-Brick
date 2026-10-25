@@ -47,10 +47,11 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **Brick and Brick Hammer integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
 | **Brick Pro (experimental)** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. Not yet tested on a Brick Pro; reports welcome ([#45](../../issues/45)). |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
-| **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under Gameplay → Low Battery Shutdown). |
+| **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under System → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
 | **Updates** | Update Slot from the menu over Wi-Fi: signed and checked, with your games, saves and settings left alone. |
 | **Library** | The selected game's name on a title card under its cart for a moment, play time beside the battery (minutes, or hours and minutes), favorites with a star, and shelves sorted A–Z, by last played or by most played, or showing only your favorites. |
+| **Fonts** | HOME → System → Font: Slot's own font, GohuFont, or any `.ttf` / `.otf` you put in `Slot/Fonts`. |
 | **Auto clock** | The clock sets itself from an internet time server whenever Wi-Fi is on. |
 | **Wireless connectivity** | Wi-Fi, with its status shown beside the clock, and an experimental two-player link over Wi-Fi. |
 | **Startup handling** | Support for slow-mounting SD cards. See the known startup issue below. |
@@ -144,13 +145,13 @@ Put the card in the Brick and turn it on. On its first start, Slot OS grows the 
 
 #### 5. Add your games and saves
 
-The card now shows one drive in Windows, **SLOT**, with a `Slot` folder. From your backup, copy into `Slot/`: `Games`, `Saves`, `States`, `BIOS`, `Labels`, and `Config` for your settings. Join your Wi-Fi again under **HOME → Wi-Fi**: networks saved on stock firmware are kept on the Brick, not on the card.
+The card now shows one drive in Windows, **SLOT**, with a `Slot` folder. From your backup, copy into `Slot/`: `Games`, `Saves`, `States`, `BIOS`, `Labels`, and `Config` for your settings. Join your Wi-Fi again under **HOME → Online → Wi-Fi**: networks saved on stock firmware are kept on the Brick, not on the card.
 
 #### What is different on Slot OS
 
 - Holding `Power` shuts down: there is no stock OS to exit to.
 - The stock firmware apps (below) are not there; take the card out to use the stock OS.
-- **HOME → Update** updates Slot OS itself as well as Slot. If an update does not start, the previous version is put back.
+- **HOME → Online → Update** updates Slot OS itself as well as Slot. If an update does not start, the previous version is put back.
 - If the Brick loses power while running, the card is checked and repaired at the next start.
 
 #### Going back to stock firmware
@@ -182,7 +183,7 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
 | `Y` | Mark the game as a favorite (a star on its cart), or unmark it |
 | `SELECT` | Sort the shelves: A–Z, last played, most played |
-| `HOME` | Open the menu: Screen, Gameplay, Library, Wi-Fi, Cart Art, RetroAchievements, Update, and System (LEDs, Date & Time, Auto Clock, About) |
+| `HOME` | Open the menu: Emulation, Gameplay, Library, Online (Wi-Fi, Cart Art, RetroAchievements, Update), and System (LEDs, Clock, Font, Rumble, Low Battery Shutdown, About) |
 
 ### In game
 
@@ -271,7 +272,7 @@ Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
 <details>
 <summary><h2>Overlays</h2></summary>
 
-Slot comes with [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays)'s overlays, made for the Brick and Brick Hammer: the *Vanilla* set for GB, GBC and GBA, and the *CRT* set for NES and SNES. Open **HOME → Screen**, choose the system, and pick one on its **Overlay** row. They're off until you do.
+Slot comes with [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays)'s overlays, made for the Brick and Brick Hammer: the *Vanilla* set for GB, GBC and GBA, and the *CRT* set for NES and SNES. Open **HOME → Emulation**, choose the system, and pick one on its **Overlay** row. They're off until you do.
 
 To add your own, put 1024×768 PNG overlays in `Slot/Overlays/GB`, `GBC`, `GBA`, `NES` or `SNES`. The game shows through the part of the overlay that isn't fully opaque.
 
@@ -279,6 +280,22 @@ The game is scaled to fill that area without stretching. While an overlay is on,
 
 More of KrutzOtrem's sets are in their [repository](https://github.com/KrutzOtrem/Trimui-Brick-Overlays): copy the `GB`, `GBC` and `GBA` folders from a handheld set into `Slot/Overlays`.
 
+
+</details>
+
+<a name="fonts"></a>
+<details>
+<summary><h2>Fonts</h2></summary>
+
+**HOME → System → Font** picks the font all of Slot's text is drawn in. Each font's name is shown in that font, and Slot restarts to use a new one when you close the menu.
+
+| Font | Where |
+| :--- | :--- |
+| Slot's own (Open Sans Bold) | Built in |
+| [GohuFont](https://font.gohu.org/), by Hugo Chargois | Comes with Slot, in `Slot/System/Fonts` |
+| Your own | Any `.ttf` or `.otf` you put in `Slot/Fonts`; it shows up by its file name |
+
+A character a font doesn't have is drawn in Slot's own font, so game names never show empty boxes. A file that isn't a font Slot can draw leaves Slot's own font in place.
 
 </details>
 
@@ -347,7 +364,7 @@ Brick and Brick Hammer code is gated behind the `brick` Cargo feature.
 ### Making a release
 
 Pushing a `vX.Y` tag builds the card from that tag and publishes it as a release, with
-`update.txt` and `update.txt.sig` beside the zip: what **HOME → Update** finds the release by.
+`update.txt` and `update.txt.sig` beside the zip: what **HOME → Online → Update** finds the release by.
 `update.txt` is signed with the release key, kept in the `UPDATE_SIGNING_KEY` repository
 secret (an Ed25519 private key, PEM); its public half is in `crates/slot/src/update.rs`, and
 Slot installs nothing it doesn't verify. Without the secret, a release refuses to build.
@@ -391,6 +408,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [Brandon T. Kowalski](https://github.com/BrandonKowalski/slot) | Original Slot. frontend and Cart Studio |
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
+| [Hugo Chargois](https://font.gohu.org/) | GohuFont, one of the fonts under HOME → System → Font, WTFPL |
 | [TrimUI](https://github.com/trimui/firmware_brick), [Debian](https://www.debian.org) | Slot OS (experimental) runs TrimUI's boot chain, kernel, drivers and firmware from their firmware 1.1.1, and Debian 12 packages (glibc, ALSA, busybox, wpa_supplicant, hostapd); licences in `slot-os/licenses` on a Slot OS card |
 
 

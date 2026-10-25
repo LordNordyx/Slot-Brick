@@ -28,12 +28,20 @@ press a
 snap menu-gameplay
 press b
 press up
-press up      # System: LEDs, Date & Time and About
+press up      # System: LEDs, Clock, Font, Rumble, Low Battery Shutdown, About
 press a
 snap menu-system
 press down
+press down    # Font: each named in itself
+press right
+snap menu-font-gohufont
+press left    # back to Slot's own: no restart on closing
+press up      # Clock: Date & Time and Auto Clock
+press a
+snap menu-clock
 press a
 snap menu-date-time
+press b
 press b
 press b
 press b

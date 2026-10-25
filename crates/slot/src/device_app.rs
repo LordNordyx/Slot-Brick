@@ -161,6 +161,8 @@ pub fn run() {
     // thread of its own, while the screen and sound open. The first to ask waits for it.
     #[cfg(feature = "brick")]
     let _ = std::thread::Builder::new().name("slot-model".into()).spawn(slot_power::model);
+    // The font, before anything is drawn in it.
+    eprintln!("slot: font: {}", slot::fonts::load_chosen(&root));
     // The sound output opens, and the app boots, beside the screen, for Session::boot to take.
     slot::audio::open_early();
     slot::app::App::boot_early(root.clone());

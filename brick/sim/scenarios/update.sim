@@ -1,4 +1,4 @@
-# HOME → Update finds a newer release, shows what is new in it, and asks again before
+# HOME → Online → Update finds a newer release, shows what is new in it, and asks again before
 # installing; B then keeps the Slot there is. L1 / R1 scroll notes too long for the screen.
 # With Wi-Fi off the row is greyed out.
 press a
@@ -6,8 +6,11 @@ phase Shelf
 press menu
 phase QuickMenu
 press up
-press up      # Update
+press up      # Online
+press a
+press up      # Update, the last of Online's rows
 snap menu-update-offline
+press b
 press b
 phase Shelf
 set online 1
@@ -15,6 +18,8 @@ wait 400
 press menu
 phase QuickMenu
 press up
+press up      # Online
+press a
 press up      # Update
 press a
 wait 1000
