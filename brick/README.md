@@ -258,3 +258,6 @@ No router is needed. This hasn't been tested on two physical devices yet. If it 
 **Fonts:** HOME → System → Font picks the font Slot draws its text in: Slot's own, GohuFont (by
 Hugo Chargois, WTFPL, see `Slot/System/licenses`), or any `.ttf` / `.otf` you put in `Slot/Fonts`.
 Slot restarts to use it when you close the menu.
+
+**Sounds:** the pops a favorite's star makes are freesound_community's "Pop" from Pixabay
+(Pixabay Content License, see `Slot/System/licenses`).

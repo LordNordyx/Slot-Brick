@@ -82,6 +82,11 @@ const HALO: [u8; 3] = [0x08, 0x08, 0x0a];
 pub const HALO_PX: u32 = 1;
 
 pub fn haloed(cov: &[u8], cw: u32, ch: u32, colour: [u8; 3]) -> CartFace {
+    haloed_by(cov, cw, ch, |_, _| colour)
+}
+
+/// As `haloed`, with each pixel's colour chosen by where it is in the glyph (x, y).
+fn haloed_by(cov: &[u8], cw: u32, ch: u32, colour: impl Fn(usize, usize) -> [u8; 3]) -> CartFace {
     let pad = HALO_PX as usize;
     let (cw, ch) = (cw as usize, ch as usize);
     let (w, h) = (cw + 2 * pad, ch + 2 * pad);
@@ -105,6 +110,7 @@ pub fn haloed(cov: &[u8], cw: u32, ch: u32, colour: [u8; 3]) -> CartFace {
                 }
             }
             if ink > 0 {
+                let colour = colour(gx as usize, gy as usize);
                 let a = ink as u32;
                 let inv = 255 - a;
                 let mix = |c: u8, s: u8| ((c as u32 * a + s as u32 * inv) / 255) as u8;
@@ -135,6 +141,57 @@ pub fn icon_face(icon: Icon, px: f32, colour: [u8; 3]) -> CartFace {
         };
     };
     haloed(&r.cov, r.w, r.h, colour)
+}
+
+/// A favorite's star, cut like a gem in three golds: each arm is split along its ridge, the
+/// half facing the light (from the top left) lit, the half facing away shaded, and the rest
+/// `base`. Outlined like the other icons.
+pub fn star_face(px: f32, base: [u8; 3], light: [u8; 3], shade: [u8; 3]) -> CartFace {
+    let Some(r) = raster(Icon::Star, px) else {
+        return CartFace { rgba: Vec::new(), w: 0, h: 0 };
+    };
+    let (w, h) = (r.w as usize, r.h as usize);
+    // Its centre, as the ink's balance point: a five-pointed star's is its middle.
+    let (mut sx, mut sy, mut total) = (0.0f32, 0.0f32, 0.0f32);
+    for y in 0..h {
+        for x in 0..w {
+            let a = r.cov[y * w + x] as f32;
+            sx += a * x as f32;
+            sy += a * y as f32;
+            total += a;
+        }
+    }
+    let (cx, cy) = match total > 0.0 {
+        true => (sx / total, sy / total),
+        false => (w as f32 / 2.0, h as f32 / 2.0),
+    };
+    let lit = {
+        let (x, y) = (-1.0f32, -1.2f32);
+        let n = (x * x + y * y).sqrt();
+        (x / n, y / n)
+    };
+    haloed_by(&r.cov, r.w, r.h, |x, y| {
+        let (dx, dy) = (x as f32 + 0.5 - cx, y as f32 + 0.5 - cy);
+        if dx * dx + dy * dy < 1.0 {
+            return base;
+        }
+        // The nearest arm (the first points straight up; y grows downwards), and which side
+        // of its ridge this is.
+        let step = std::f32::consts::TAU / 5.0;
+        let up = -std::f32::consts::FRAC_PI_2;
+        let angle = dy.atan2(dx);
+        let arm = up + ((angle - up) / step).round() * step;
+        let side = (angle - arm).sin().signum();
+        // That half slopes away from the ridge, sideways and a little outwards.
+        let (ax, ay) = (arm.cos(), arm.sin());
+        let (nx, ny) = (0.5 * ax - side * ay, 0.5 * ay + side * ax);
+        let n = (nx * nx + ny * ny).sqrt();
+        match (nx * lit.0 + ny * lit.1) / n {
+            d if d > 0.3 => light,
+            d if d < -0.3 => shade,
+            _ => base,
+        }
+    })
 }
 
 pub fn icon_box(px: f32) -> (u32, u32) {

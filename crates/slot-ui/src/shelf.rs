@@ -81,6 +81,8 @@ pub struct Shelf {
     /// Which carts are favorites, starred on the shelf, and the star.
     favorites: Vec<bool>,
     star: Option<(TexId, u32, u32)>,
+    /// A star going on a cart (true) or coming off it: which cart, and how far along, 0 to 1.
+    star_pop: Option<(usize, f32, bool)>,
     ride: f32,
     vel: f32,
     held: Option<(i32, Millis, usize)>,
@@ -93,6 +95,7 @@ impl Shelf {
             faces: vec![None; carts.len()],
             favorites: vec![false; carts.len()],
             star: None,
+            star_pop: None,
             carts,
             index: 0,
             scroll: 0.0,
@@ -128,12 +131,26 @@ impl Shelf {
         self.favorites.resize(carts.len(), false);
         self.carts = carts;
         self.held = None;
+        self.star_pop = None;
         self.select(at.unwrap_or(0).min(self.carts.len().saturating_sub(1)));
     }
 
+    /// The star goes on with a pop, or comes off with a smaller one (see `update`).
     pub fn set_favorite(&mut self, i: usize, favorite: bool) {
         if let Some(f) = self.favorites.get_mut(i) {
             *f = favorite;
+            self.star_pop = Some((i, 0.0, favorite));
+        }
+    }
+
+    /// How big cart `i`'s star is drawn, 1 its own size; None for no star.
+    pub fn star_scale(&self, i: usize) -> Option<f32> {
+        match self.star_pop {
+            Some((at, t, on)) if at == i => Some(match on {
+                true => pop_in(t),
+                false => pop_out(t),
+            }),
+            _ => self.favorite(i).then_some(1.0),
         }
     }
 
@@ -387,6 +404,12 @@ impl Shelf {
     }
 
     pub fn update(&mut self, dt: f32) {
+        if let Some((_, t, on)) = &mut self.star_pop {
+            *t += dt / if *on { STAR_IN_S } else { STAR_OUT_S };
+            if *t >= 1.0 {
+                self.star_pop = None;
+            }
+        }
         let accel = -2.0 * OMEGA * self.vel - OMEGA * OMEGA * (self.scroll - self.scroll_target());
         self.vel += accel * dt;
         self.scroll += self.vel * dt;
@@ -484,12 +507,14 @@ impl Shelf {
             });
             // A favorite's star sits on its top right corner, a little over the edge; on a
             // disc, on its rim there.
-            if let (true, Some((tex, sw, sh))) = (self.favorite(i), self.star) {
+            // It pops on, and off, about its own centre.
+            if let (Some(pop), Some((tex, sw, sh))) = (self.star_scale(i), self.star) {
                 let (sw, sh) = (sw as f32 * scale, sh as f32 * scale);
                 let (cx, cy) = match self.shells.get(i) {
                     Some(Backing::Disc) => (x + w * 0.854, y + h * 0.146),
                     _ => (x + w - sw * 0.25, y + sh * 0.25),
                 };
+                let (sw, sh) = (sw * pop, sh * pop);
                 out.push(Draw::Tex {
                     x: (cx - sw / 2.0).round(),
                     y: (cy - sh / 2.0).round(),
@@ -501,6 +526,25 @@ impl Shelf {
             }
         }
     }
+}
+
+/// How long a star takes to pop on, and to go.
+const STAR_IN_S: f32 = 0.3;
+const STAR_OUT_S: f32 = 0.18;
+
+/// A star popping on, `t` from 0 to 1: from nothing past its size (about a fifth over), then
+/// settling back to it (an ease-out with overshoot).
+pub fn pop_in(t: f32) -> f32 {
+    const C1: f32 = 2.4;
+    let u = t.clamp(0.0, 1.0) - 1.0;
+    1.0 + (C1 + 1.0) * u * u * u + C1 * u * u
+}
+
+/// A star going, `t` from 0 to 1: it swells a little, then shrinks to nothing.
+pub fn pop_out(t: f32) -> f32 {
+    const C1: f32 = 1.7;
+    let t = t.clamp(0.0, 1.0);
+    1.0 - ((C1 + 1.0) * t * t * t - C1 * t * t)
 }
 
 fn shrink(offset: f32) -> f32 {

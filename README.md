@@ -410,6 +410,7 @@ runs the simulator's unit tests and scenarios before it builds anything.
 | [wargenng](https://github.com/wargenng) | Low-battery LED warning |
 | [KrutzOtrem](https://github.com/KrutzOtrem/Trimui-Brick-Overlays) | The bundled overlays: *Vanilla* (GB, GBC, GBA) and *CRT* (NES, SNES), MIT |
 | [Hugo Chargois](https://font.gohu.org/) | GohuFont, one of the fonts under HOME → System → Font, WTFPL |
+| [freesound_community](https://pixabay.com/sound-effects/film-special-effects-pop-91931/) | The pops a favorite's star makes, Pixabay Content License |
 | [TrimUI](https://github.com/trimui/firmware_brick), [Debian](https://www.debian.org) | Slot OS (experimental) runs TrimUI's boot chain, kernel, drivers and firmware from their firmware 1.1.1, and Debian 12 packages (glibc, ALSA, busybox, wpa_supplicant, hostapd); licences in `slot-os/licenses` on a Slot OS card |
 
 

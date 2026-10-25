@@ -267,3 +267,44 @@ fn a_cart_sound_is_silent_when_muted() {
     let muted = sfx_peak(|s| s.app_mut().apply(slot_input::Action::MuteToggle));
     assert_eq!(muted, 0, "the cart was heard through a mute");
 }
+
+#[test]
+fn a_star_pops_on_with_one_of_five_pops_and_a_lower_softer_one_takes_it_off() {
+    let peak = |s: Sfx| s.render(48_000).iter().map(|v| v.unsigned_abs()).max().unwrap_or(0);
+    let mut takes = Vec::new();
+    for n in 0..slot::audio::POP_TAKES {
+        for s in [Sfx::Pop(n), Sfx::Unpop(n)] {
+            let v = s.render(48_000);
+            assert!(v.chunks_exact(2).all(|c| c[0] == c[1]), "{s:?} is not the same on both sides");
+            assert!(v[..8].iter().all(|x| x.abs() < 400), "{s:?} starts on a step");
+            assert!(v[v.len() - 200..].iter().all(|x| x.abs() < 400), "{s:?} ends on a step");
+            let ms = v.len() as f32 / 2.0 / 48_000.0 * 1000.0;
+            assert!((60.0..200.0).contains(&ms), "{s:?} runs {ms:.0} ms: a pop is short");
+            assert!((s.tail() * 1000.0 - ms).abs() < 1.0);
+        }
+        assert!(peak(Sfx::Unpop(n)) < peak(Sfx::Pop(n)), "taking a star off is the quieter pop");
+        assert!(Sfx::Unpop(n).render(48_000).len() > Sfx::Pop(n).render(48_000).len(), "and the lower, slower one");
+        assert!((8_000..12_000).contains(&peak(Sfx::Pop(n))), "pop {n} is {} loud: the takes are evened out", peak(Sfx::Pop(n)));
+        takes.push(Sfx::Pop(n).render(48_000));
+    }
+    takes.dedup();
+    assert_eq!(takes.len(), slot::audio::POP_TAKES, "two takes are the same");
+    assert!(!Sfx::Pop(0).render(GBA_HZ).is_empty());
+}
+
+#[test]
+fn y_on_the_shelf_pops_the_star_on_and_off_never_with_the_same_pop_twice_running() {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
+    let mut a = common::boot(d.path());
+    let mut last = None;
+    for i in 0..20 {
+        a.apply(slot_input::Action::GbaDown(slot_input::Btn::Y));
+        let n = match (i % 2, a.take_sfx()) {
+            (0, Some(Sfx::Pop(n))) | (1, Some(Sfx::Unpop(n))) => n,
+            (_, other) => panic!("press {i} sounded like {other:?}"),
+        };
+        assert!(n < slot::audio::POP_TAKES);
+        assert_ne!(Some(n), last, "the same pop twice running");
+        last = Some(n);
+    }
+}

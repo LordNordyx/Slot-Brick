@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Favorites: the star now pops onto the cart when you press Y, with one of five pop sounds at random, and pops off again with a lower, softer one. It's shaded too, with a lit and a dark side.
 - Library → Systems: hide the shelves of systems you don't play. The last system with games can't be hidden.
 - System → Reset Settings: puts every setting back to how it came (LEDs and font included). Press A, then A again when it asks "Sure?". Games, saves, states, play time, favorites, the clock, brightness and volume stay.
 - System → About is now a page: the version, whether it is a Dev build or a release, the device, the firmware (stock or Slot OS), and how much of the SD card is free. The label is still there, under About → Label.

@@ -440,6 +440,8 @@ pub struct App {
     updating: bool,
     /// HOME → System → Reset Settings: asked (A again resets) or done, until the menu moves on.
     reset_asked: Option<QuickValue>,
+    /// The pop last played for a star (Sfx::Pop), so the next is another.
+    last_pop: Option<usize>,
     /// HOME → System → About: what each of its rows says (QuickRow::ABOUT_INFO), read as it opens.
     about: [String; QuickRow::ABOUT_INFO.len()],
     /// HOME → Library: every game, A–Z, whatever the shelves show; and play time, last played
@@ -619,6 +621,7 @@ impl App {
             restarting: false,
             updating: false,
             reset_asked: None,
+            last_pop: None,
             about: Default::default(),
             all_carts,
             library: slot_store::Library::default(),
@@ -844,6 +847,7 @@ impl App {
         record.favorite = !record.favorite;
         let favorite = record.favorite;
         self.shelf_mut().set_favorite(at, favorite);
+        self.sfx = Some(if favorite { Sfx::Pop(self.next_pop()) } else { Sfx::Unpop(self.next_pop()) });
         self.save_library();
         // A game that is no longer a favorite leaves a shelf of favorites.
         if self.state.favorites_only {
@@ -888,6 +892,17 @@ impl App {
                 eprintln!("slot: font: {e}");
             }
         }
+    }
+
+    /// One of the pops at random, never the one just played.
+    fn next_pop(&mut self) -> usize {
+        let (n, roll) = (crate::audio::POP_TAKES, system_nanos() as usize);
+        let next = match self.last_pop {
+            Some(last) => (last + 1 + roll % (n - 1)) % n,
+            None => roll % n,
+        };
+        self.last_pop = Some(next);
+        next
     }
 
     /// The library written out, on a thread of its own: it is small, but the card may be slow.
@@ -5686,6 +5701,13 @@ fn clock_screen(utc: i64, offset_min: i16, from_menu: bool) -> Phase {
         seed: utc - utc.rem_euclid(60),
         from_menu,
     }
+}
+
+/// The clock's nanoseconds, as a cheap random number (which pop plays).
+fn system_nanos() -> u32 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos())
 }
 
 fn system_secs() -> i64 {
