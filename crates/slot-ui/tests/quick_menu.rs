@@ -165,7 +165,7 @@ fn the_values_read_as_the_menu_prints_them() {
             "Grid",
             "Dot",
             "Simpletex", "Stock", "Low", "Medium", "High", "White", "Blue", "Green", "Amber", "Red", "Purple", "Steady", "Breathe", "Unavailable",
-            "1 min", "5 min", "10 min", "3%", "5%", "10%", "A–Z", "Last Played", "Most Played", "All Games", "Favorites", "Minutes", "Hours"
+            "1 min", "5 min", "10 min", "3%", "5%", "10%", "A–Z", "Last Played", "Most Played", "All Games", "Favorites", "Minutes", "Hours", "Sure?", "Done"
         ]
     );
     assert_eq!(

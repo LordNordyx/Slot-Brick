@@ -193,6 +193,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             auto_clock: true,
             library_sort: slot_store::LibrarySort::Az,
             favorites_only: false,
+            hidden_systems: [false; Platform::ALL.len()],
             play_time_hours: false,
             title_card: true,
             rumble: true,
@@ -473,4 +474,67 @@ fn an_overlay_is_kept_per_system_by_name_and_a_path_is_never_taken_for_one() {
     std::fs::write(d.path().join("Config/slot.state"), format!("{known}overlay_snes=../x.png\noverlay_gbc=ok.png\n")).unwrap();
     let back = read_slot_state(d.path());
     assert_eq!((back.overlay(Platform::Snes), back.overlay(Platform::Gbc)), (None, Some("ok.png")));
+}
+
+#[test]
+fn hidden_systems_round_trip_and_a_card_from_before_them_hides_none() {
+    let d = tmp_root();
+    let mut s = SlotState { clock_set: true, ..SlotState::default() };
+    s.hidden_systems[slot_store::Platform::Nes.index()] = true;
+    s.hidden_systems[slot_store::Platform::Ps1.index()] = true;
+    write_slot_state(d.path(), &s).unwrap();
+    assert_eq!(read_slot_state(d.path()), s);
+    let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
+    assert!(text.lines().any(|l| l == "hidden_systems=nes,ps1"), "{text:?}");
+    // Without the line (an older card), or with a system it doesn't know, every shelf shows.
+    for line in ["hidden_systems=nes,ps1\n", "hidden_systems=nes, ps1,n64\n", "hidden_systems=gba\nhidden_systems=nes\n"] {
+        let older = text.replace("hidden_systems=nes,ps1\n", "");
+        std::fs::write(d.path().join("Config/slot.state"), &older).unwrap();
+        assert_eq!(read_slot_state(d.path()).hidden_systems, [false; 6]);
+        std::fs::write(d.path().join("Config/slot.state"), format!("{older}{line}")).unwrap();
+        assert!(!read_slot_state(d.path()).shows(slot_store::Platform::Nes), "{line}");
+        assert!(read_slot_state(d.path()).shows(slot_store::Platform::Gba), "{line}");
+    }
+}
+
+#[test]
+fn a_reset_keeps_the_game_the_clock_and_the_levels_and_nothing_else() {
+    let mut s = SlotState {
+        cart: Some("Pixel Racer".into()),
+        cart_platform: Some(slot_store::Platform::Gba),
+        brightness: 8,
+        blue_light: 3,
+        volume: 20,
+        volume_hp: 30,
+        muted: true,
+        muted_hp: true,
+        clock_set: true,
+        utc_offset_min: 120,
+        auto_clock: false,
+        favorites_only: true,
+        rumble: false,
+        shader_gba: Shader::Dot,
+        autosave_min: 10,
+        ..SlotState::default()
+    };
+    s.hidden_systems[0] = true;
+    s.set_overlay(slot_store::Platform::Gba, Some("SP.png".into()));
+    let reset = s.reset();
+    assert_eq!(
+        reset,
+        SlotState {
+            cart: s.cart.clone(),
+            cart_platform: s.cart_platform,
+            brightness: 8,
+            blue_light: 3,
+            volume: 20,
+            volume_hp: 30,
+            muted: true,
+            muted_hp: true,
+            clock_set: true,
+            utc_offset_min: 120,
+            auto_clock: false,
+            ..SlotState::default()
+        }
+    );
 }

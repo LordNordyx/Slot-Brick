@@ -307,6 +307,8 @@ struct QuickClock {
 struct AboutFace {
     tex: Option<TexId>,
     battery: Option<u8>,
+    /// The card's space, read once each time About opens.
+    card: Option<Option<(u64, u64)>>,
 }
 
 /// A favorite's star on the shelf: its size at full scale, and its gold.
@@ -1174,16 +1176,20 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
 
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {
     if !matches!(app.phase(), Phase::About) {
+        state.card = None;
         return;
     }
     let battery = app.battery().map(|b| b.percent);
-    if state.tex.is_some() && state.battery == battery {
+    let opened = state.card.is_none();
+    let card = *state.card.get_or_insert_with(|| app.card_space());
+    if state.tex.is_some() && state.battery == battery && !opened {
         return;
     }
     state.battery = battery;
     let build = Build::current();
     let face = sticker_face(&StickerFields {
         battery,
+        card,
         serial: &build.serial(),
         dirty_digit: build.dirty_digit(),
     });

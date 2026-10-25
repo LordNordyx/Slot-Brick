@@ -68,10 +68,18 @@ pub enum QuickRow {
     Online,
     Clock,
     Saving,
+    LibrarySystems,
+    ShowGba,
+    ShowGb,
+    ShowGbc,
+    ShowNes,
+    ShowSnes,
+    ShowPs1,
+    ResetSettings,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 55] = [
+    pub const ALL: [QuickRow; 63] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -127,18 +135,27 @@ impl QuickRow {
         QuickRow::Online,
         QuickRow::Clock,
         QuickRow::Saving,
+        QuickRow::LibrarySystems,
+        QuickRow::ShowGba,
+        QuickRow::ShowGb,
+        QuickRow::ShowGbc,
+        QuickRow::ShowNes,
+        QuickRow::ShowSnes,
+        QuickRow::ShowPs1,
+        QuickRow::ResetSettings,
     ];
 
     #[cfg(not(feature = "brick"))]
     pub const MAIN: [QuickRow; 4] = [QuickRow::Screen, QuickRow::Game, QuickRow::Library, QuickRow::System];
     #[cfg(not(feature = "brick"))]
-    pub const SYSTEM: [QuickRow; 5] = [QuickRow::DateTime, QuickRow::Font, QuickRow::Rumble, QuickRow::BatteryShutdown, QuickRow::About];
+    pub const SYSTEM: [QuickRow; 6] = [QuickRow::DateTime, QuickRow::Font, QuickRow::Rumble, QuickRow::BatteryShutdown, QuickRow::ResetSettings, QuickRow::About];
 
     #[cfg(feature = "brick")]
     pub const MAIN: [QuickRow; 5] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Online,QuickRow::System];
-    /// System: the Brick's lights, its clock, the font, rumble, the battery, and what Slot is.
+    /// System: the Brick's lights, its clock, the font, rumble, the battery, every setting back
+    /// to how it came, and what Slot is.
     #[cfg(feature = "brick")]
-    pub const SYSTEM: [QuickRow; 6] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::BatteryShutdown,QuickRow::About];
+    pub const SYSTEM: [QuickRow; 7] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::BatteryShutdown,QuickRow::ResetSettings,QuickRow::About];
     /// Clock: setting it by hand, and from the internet.
     pub const CLOCK: [QuickRow; 2] = [QuickRow::DateTime,QuickRow::AutoClock];
     /// Online: what needs Wi-Fi, and Wi-Fi itself.
@@ -155,9 +172,12 @@ impl QuickRow {
     }
     pub fn led_setting(self) -> bool { Self::LIGHTS_PRO.contains(&self) }
 
-    /// Library: how the shelves are ordered, whether they hold only the favorites, and what is
-    /// printed around them.
-    pub const LIBRARY: [QuickRow; 4] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibraryTitleCard, QuickRow::LibraryPlayTime];
+    /// Library: how the shelves are ordered, whether they hold only the favorites, which
+    /// systems have a shelf, and what is printed around them.
+    pub const LIBRARY: [QuickRow; 5] = [QuickRow::LibrarySort, QuickRow::LibraryShow, QuickRow::LibrarySystems, QuickRow::LibraryTitleCard, QuickRow::LibraryPlayTime];
+    /// Library → Systems: each system's shelf shown or hidden, in the shelves' order.
+    pub const SYSTEMS: [QuickRow; 6] =
+        [QuickRow::ShowGba, QuickRow::ShowGb, QuickRow::ShowGbc, QuickRow::ShowNes, QuickRow::ShowSnes, QuickRow::ShowPs1];
     /// Gameplay → Saving: when a game is saved without being asked.
     pub const SAVING: [QuickRow; 2] = [QuickRow::AutoSave, QuickRow::EjectSave];
 
@@ -180,6 +200,20 @@ impl QuickRow {
             QuickRow::Font => Some(slot_store::Platform::ALL.len()),
             _ => self.overlay_of().map(|p| p.index()),
         }
+    }
+
+    /// The system a Library → Systems row shows or hides.
+    pub fn shelf_of(self) -> Option<slot_store::Platform> {
+        use slot_store::Platform;
+        Some(match self {
+            QuickRow::ShowGba => Platform::Gba,
+            QuickRow::ShowGb => Platform::Gb,
+            QuickRow::ShowGbc => Platform::Gbc,
+            QuickRow::ShowNes => Platform::Nes,
+            QuickRow::ShowSnes => Platform::Snes,
+            QuickRow::ShowPs1 => Platform::Ps1,
+            _ => return None,
+        })
     }
 
     pub fn overlay_of(self) -> Option<slot_store::Platform> {
@@ -231,9 +265,17 @@ impl QuickRow {
             | QuickRow::Font
             | QuickRow::Rumble
             | QuickRow::BatteryShutdown
+            | QuickRow::ResetSettings
             | QuickRow::About => &QuickRow::SYSTEM,
+            QuickRow::ShowGba
+            | QuickRow::ShowGb
+            | QuickRow::ShowGbc
+            | QuickRow::ShowNes
+            | QuickRow::ShowSnes
+            | QuickRow::ShowPs1 => &QuickRow::SYSTEMS,
             QuickRow::LibrarySort
             | QuickRow::LibraryShow
+            | QuickRow::LibrarySystems
             | QuickRow::LibraryPlayTime
             | QuickRow::LibraryTitleCard => &QuickRow::LIBRARY,
             QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update => &QuickRow::ONLINE,
@@ -252,6 +294,7 @@ impl QuickRow {
             QuickRow::Ps1Shader => Some(QuickRow::ScreenPs1),
             QuickRow::FastForward => Some(QuickRow::Game),
             QuickRow::LibrarySort => Some(QuickRow::Library),
+            QuickRow::ShowGba => Some(QuickRow::LibrarySystems),
             QuickRow::Wifi => Some(QuickRow::Online),
             QuickRow::AutoSave => Some(QuickRow::Saving),
             #[cfg(feature = "brick")]
@@ -273,6 +316,7 @@ impl QuickRow {
             QuickRow::Game => Some(QuickRow::GAME[0]),
             QuickRow::System => Some(QuickRow::SYSTEM[0]),
             QuickRow::Library => Some(QuickRow::LIBRARY[0]),
+            QuickRow::LibrarySystems => Some(QuickRow::SYSTEMS[0]),
             QuickRow::Online => Some(QuickRow::ONLINE[0]),
             QuickRow::Clock => Some(QuickRow::CLOCK[0]),
             QuickRow::Saving => Some(QuickRow::SAVING[0]),
@@ -309,6 +353,14 @@ impl QuickRow {
             QuickRow::LibraryShow => "Show",
             QuickRow::LibraryPlayTime => "Play Time",
             QuickRow::LibraryTitleCard => "Title Card",
+            QuickRow::LibrarySystems => "Systems",
+            QuickRow::ShowGba => "Game Boy Advance",
+            QuickRow::ShowGb => "Game Boy",
+            QuickRow::ShowGbc => "Game Boy Color",
+            QuickRow::ShowNes => "NES",
+            QuickRow::ShowSnes => "SNES",
+            QuickRow::ShowPs1 => "PlayStation",
+            QuickRow::ResetSettings => "Reset Settings",
             QuickRow::FastForward => "Fast Forward",
             QuickRow::FastForwardSound => "Fast Forward Sound",
             QuickRow::Screen => "Emulation",
@@ -340,6 +392,7 @@ impl QuickRow {
         matches!(
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
+                | QuickRow::LibrarySystems | QuickRow::ResetSettings
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1
         )
     }
@@ -393,10 +446,14 @@ pub enum QuickValue {
     Favorites,
     Minutes,
     Hours,
+    /// Reset Settings, asked once: A again to go ahead.
+    ResetAsk,
+    /// Reset Settings, done.
+    ResetDone,
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 36] = [
+    pub const ALL: [QuickValue; 38] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -433,6 +490,8 @@ impl QuickValue {
         QuickValue::Favorites,
         QuickValue::Minutes,
         QuickValue::Hours,
+        QuickValue::ResetAsk,
+        QuickValue::ResetDone,
     ];
 
     pub fn index(self) -> usize {
@@ -477,6 +536,8 @@ impl QuickValue {
             QuickValue::Favorites => "Favorites",
             QuickValue::Minutes => "Minutes",
             QuickValue::Hours => "Hours",
+            QuickValue::ResetAsk => "Sure?",
+            QuickValue::ResetDone => "Done",
         }
     }
 
@@ -619,11 +680,12 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 3] {
+pub fn quick_legend_faces() -> [UndoFace; 4] {
     [
         hint_face("B", "Back"),
         arrows_hint_face("Change"),
         hint_face("A", "Open"),
+        hint_face("A", "Reset"),
     ]
 }
 
@@ -631,7 +693,8 @@ pub struct QuickMenuFaces {
     pub labels: Vec<(TexId, u32, u32)>,
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 3],
+    /// Back, Change, Open, Reset.
+    pub legend: [(TexId, u32); 4],
 }
 
 pub struct QuickMenu<'a> {
@@ -694,9 +757,14 @@ impl QuickMenu<'_> {
             push(out, tex, vx, y, w, h);
             push(out, left_tex, vx + pad - CARET_GAP - lw as f32, y, lw, lh);
         }
-        let [back, change, open] = faces.legend;
-        let other = if self.row.opens() { open } else { change };
-        let hints: &[(TexId, u32)] = if self.disabled[self.row.index()] { &[back] } else { &[back, other] };
+        let [back, change, open, reset] = faces.legend;
+        let other = match self.row {
+            QuickRow::ResetSettings => reset,
+            row if row.opens() => open,
+            _ => change,
+        };
+        let done = self.values[self.row.index()] == Some(QuickValue::ResetDone);
+        let hints: &[(TexId, u32)] = if self.disabled[self.row.index()] || done { &[back] } else { &[back, other] };
         for (tex, w, x) in centred_hints(hints, LEGEND_GAP) {
             push(out, tex, x, LEGEND_Y, w, HINT_H);
         }

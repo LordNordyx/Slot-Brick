@@ -1,9 +1,10 @@
 mod common;
 
-use common::{app_booting_at, tmp_root_with_carts};
+use common::{app_booting_at, tmp_root_with_carts, write_gb_cart};
 use slot::app::{App, Phase};
 use slot_input::{Action, Btn};
-use slot_store::{write_slot_state, Library, LibrarySort, SlotState, LIBRARY_FILE};
+use slot_store::{read_slot_state, write_slot_state, Library, LibrarySort, Platform, SlotState, LIBRARY_FILE};
+use slot_ui::QuickRow;
 
 fn order(a: &App) -> String {
     a.carts().map(|c| c.stem.as_str()).collect::<Vec<_>>().join(" ")
@@ -86,4 +87,99 @@ fn the_title_card_names_the_selected_game_unless_turned_off() {
     assert_eq!(a.title_card_text().as_deref(), Some("Beta"));
     let (_d2, b) = library_app("", SlotState { title_card: false, ..SlotState::default() });
     assert_eq!(b.title_card_text(), None);
+}
+
+fn press(a: &mut App, btn: Btn) {
+    a.apply(Action::GbaDown(btn));
+    a.apply(Action::GbaUp(btn));
+}
+
+/// HOME → Library → Systems, with the bar on `row`.
+fn open_systems_at(a: &mut App, row: QuickRow) {
+    while a.quick_menu().is_some() {
+        press(a, Btn::B);
+    }
+    a.apply(Action::QuickMenu);
+    for _ in 0..QuickRow::Library.position() {
+        press(a, Btn::Down);
+    }
+    press(a, Btn::A);
+    for _ in 0..QuickRow::LibrarySystems.position() {
+        press(a, Btn::Down);
+    }
+    press(a, Btn::A);
+    for _ in 0..row.position() {
+        press(a, Btn::Down);
+    }
+    assert_eq!(a.quick_menu(), Some(row));
+}
+
+fn two_systems(state: SlotState) -> (tempfile::TempDir, App) {
+    let d = tmp_root_with_carts(&["Alpha", "Beta"]);
+    write_gb_cart(&d, "Pocket", "POCKET");
+    write_slot_state(d.path(), &SlotState { clock_set: true, ..state }).unwrap();
+    let (a, _) = app_booting_at(d.path(), 1_800_000_000);
+    (d, a)
+}
+
+#[test]
+fn a_hidden_system_has_no_shelf_and_stays_hidden() {
+    let (d, mut a) = two_systems(SlotState::default());
+    assert_eq!(order(&a), "Alpha Beta Pocket");
+    open_systems_at(&mut a, QuickRow::ShowGba);
+    assert_eq!(a.quick_value(QuickRow::ShowGba), Some(slot_ui::QuickValue::On));
+    press(&mut a, Btn::Right);
+    assert_eq!(a.quick_value(QuickRow::ShowGba), Some(slot_ui::QuickValue::Off));
+    assert_eq!(order(&a), "Pocket");
+    assert!(!read_slot_state(d.path()).shows(Platform::Gba));
+    // Back on the shelf, the Game Boy's is the one there is.
+    for _ in 0..3 {
+        press(&mut a, Btn::B);
+    }
+    assert!(matches!(a.phase(), Phase::Shelf));
+    assert_eq!(a.selected_stem(), Some("Pocket"));
+    let (_d2, b) = two_systems(read_slot_state(d.path()));
+    assert_eq!(order(&b), "Pocket");
+}
+
+#[test]
+fn the_last_system_with_games_cannot_be_hidden() {
+    let mut state = SlotState::default();
+    state.hidden_systems[Platform::Gba.index()] = true;
+    let (d, mut a) = two_systems(state);
+    open_systems_at(&mut a, QuickRow::ShowGb);
+    press(&mut a, Btn::Right);
+    assert_eq!(a.quick_value(QuickRow::ShowGb), Some(slot_ui::QuickValue::On));
+    assert_eq!(order(&a), "Pocket");
+    assert!(read_slot_state(d.path()).shows(Platform::Gb));
+    // A system with no games can be hidden all the same.
+    open_systems_at(&mut a, QuickRow::ShowNes);
+    press(&mut a, Btn::Right);
+    assert!(!read_slot_state(d.path()).shows(Platform::Nes));
+}
+
+#[test]
+fn with_every_system_that_has_games_hidden_all_are_shown() {
+    let mut state = SlotState::default();
+    state.hidden_systems[Platform::Gba.index()] = true;
+    state.hidden_systems[Platform::Gb.index()] = true;
+    let (d, mut a) = two_systems(state);
+    assert_eq!(order(&a), "Alpha Beta Pocket");
+    // Showing one again is never refused.
+    open_systems_at(&mut a, QuickRow::ShowGb);
+    press(&mut a, Btn::Right);
+    assert!(read_slot_state(d.path()).shows(Platform::Gb));
+    assert_eq!(order(&a), "Pocket");
+}
+
+#[test]
+fn favorites_only_counts_the_favorites_on_shown_systems() {
+    let mut state = SlotState { favorites_only: true, ..SlotState::default() };
+    state.hidden_systems[Platform::Gb.index()] = true;
+    let d = tmp_root_with_carts(&["Alpha", "Beta"]);
+    write_gb_cart(&d, "Pocket", "POCKET");
+    write_slot_state(d.path(), &SlotState { clock_set: true, ..state }).unwrap();
+    std::fs::write(d.path().join(LIBRARY_FILE), "GB\tPocket\t0\t0\t1\n").unwrap();
+    let (a, _) = app_booting_at(d.path(), 1_800_000_000);
+    assert_eq!(order(&a), "Alpha Beta", "the only favorite is on a hidden shelf");
 }
