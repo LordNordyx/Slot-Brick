@@ -435,6 +435,8 @@ pub struct App {
     powering_off: bool,
     /// An update was swapped in: Slot ends, for launch.sh to start the new one.
     updating: bool,
+    /// HOME → System → Reset Settings: asked (A again resets) or done, until the menu moves on.
+    reset_asked: Option<QuickValue>,
     /// HOME → Library: every game, A–Z, whatever the shelves show; and play time, last played
     /// and favorites for each (Config/library.txt).
     all_carts: Vec<Cart>,
@@ -574,6 +576,7 @@ impl App {
             link_transport: None,
             restarting: false,
             updating: false,
+            reset_asked: None,
             all_carts,
             library: slot_store::Library::default(),
             library_dirty: false,
@@ -759,9 +762,14 @@ impl App {
                 }
             }
         }
-        let favorites_only = self.state.favorites_only && self.library.any_favorite(&self.all_carts);
+        // Hidden systems have no shelf; with every system that has games hidden, all are shown.
+        let shown: Vec<Cart> = match self.all_carts.iter().any(|c| self.state.shows(c.platform)) {
+            true => self.all_carts.iter().filter(|c| self.state.shows(c.platform)).cloned().collect(),
+            false => self.all_carts.clone(),
+        };
+        let favorites_only = self.state.favorites_only && self.library.any_favorite(&shown);
         for ((platform, shelf), pick) in self.shelves.iter_mut().zip(picked) {
-            let mut carts: Vec<Cart> = self.all_carts.iter().filter(|c| c.platform == *platform).cloned().collect();
+            let mut carts: Vec<Cart> = shown.iter().filter(|c| c.platform == *platform).cloned().collect();
             slot_store::arrange(&mut carts, self.state.library_sort, favorites_only, &self.library);
             let shelf_faces = carts.iter().map(|c| faces.remove(&(*platform, c.stem.clone()))).collect();
             let starred = carts.iter().map(|c| self.library.get(*platform, &c.stem).favorite).collect();
@@ -795,6 +803,45 @@ impl App {
         // A game that is no longer a favorite leaves a shelf of favorites.
         if self.state.favorites_only {
             self.arrange();
+        }
+    }
+
+    /// HOME → Library → Systems: a system's shelf shown or hidden. The last system with games
+    /// on show can't be hidden: there would be no shelf left.
+    fn toggle_system(&mut self, platform: Platform) {
+        let mut hidden = self.state.hidden_systems;
+        hidden[platform.index()] = !hidden[platform.index()];
+        let left = self.all_carts.iter().any(|c| !hidden[c.platform.index()]);
+        if hidden[platform.index()] && !left && !self.all_carts.is_empty() {
+            self.refuse();
+            return;
+        }
+        self.state.hidden_systems = hidden;
+        self.persist();
+        self.arrange();
+    }
+
+    /// HOME → System → Reset Settings: every setting back to how it came (SlotState::reset says
+    /// what stays), the LEDs and the font too. Games, saves, play time and favorites stay.
+    fn reset_settings(&mut self) {
+        self.state = self.state.reset();
+        self.persist();
+        self.arrange();
+        self.autosave_at = self.now() + self.autosave_ms();
+        #[cfg(feature = "brick")]
+        {
+            if let Some(leds) = self.brick_leds.as_mut() {
+                if let Err(e) = leds.reset() {
+                    eprintln!("slot: LED reset: {e}");
+                    self.refuse();
+                }
+            }
+        }
+        if let Some(root) = &self.root {
+            self.font = crate::fonts::BUILT_IN.to_string();
+            if let Err(e) = crate::fonts::save(root, &self.font) {
+                eprintln!("slot: font: {e}");
+            }
         }
     }
 
@@ -1155,7 +1202,11 @@ impl App {
                 false => QuickValue::Minutes,
             }),
             QuickRow::LibraryTitleCard => Some(QuickValue::flag(self.state.title_card)),
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving => None,
+            QuickRow::ShowGba | QuickRow::ShowGb | QuickRow::ShowGbc | QuickRow::ShowNes | QuickRow::ShowSnes | QuickRow::ShowPs1 => {
+                row.shelf_of().map(|p| QuickValue::flag(self.state.shows(p)))
+            }
+            QuickRow::ResetSettings => self.reset_asked,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems => None,
         }
     }
 
@@ -1933,6 +1984,11 @@ impl App {
             .map(|c| c.stem.as_str())
     }
 
+    /// The SD card's space, for About: (free, size) in bytes.
+    pub fn card_space(&self) -> Option<(u64, u64)> {
+        crate::root::card_space(self.root.as_deref()?)
+    }
+
     pub fn battery(&self) -> Option<Battery> {
         self.battery
     }
@@ -2096,12 +2152,18 @@ impl App {
     }
 
     fn open_quick_menu(&mut self) {
+        self.reset_asked = None;
         self.phase = Phase::QuickMenu {
             row: QuickRow::MAIN[0],
         };
     }
 
     fn quick_menu_input(&mut self, row: QuickRow, action: Action) {
+        // Reset Settings asks once; any other press takes the question back.
+        let pressed = matches!(action, Action::GbaDown(_) | Action::QuickMenu);
+        if pressed && !(row == QuickRow::ResetSettings && action == Action::GbaDown(Btn::A)) {
+            self.reset_asked = None;
+        }
         let row = match action {
             Action::GbaDown(Btn::Up) => row.up(),
             Action::GbaDown(Btn::Down) => row.down(),
@@ -2147,7 +2209,16 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
-            QuickRow::Screen
+            QuickRow::ResetSettings => match self.reset_asked {
+                None => self.reset_asked = Some(QuickValue::ResetAsk),
+                Some(QuickValue::ResetAsk) => {
+                    self.reset_settings();
+                    self.reset_asked = Some(QuickValue::ResetDone);
+                }
+                Some(_) => {}
+            },
+            QuickRow::LibrarySystems
+            | QuickRow::Screen
             | QuickRow::ScreenGb
             | QuickRow::ScreenGba
             | QuickRow::ScreenNes
@@ -2192,6 +2263,12 @@ impl App {
             | QuickRow::LibraryShow
             | QuickRow::LibraryPlayTime
             | QuickRow::LibraryTitleCard
+            | QuickRow::ShowGba
+            | QuickRow::ShowGb
+            | QuickRow::ShowGbc
+            | QuickRow::ShowNes
+            | QuickRow::ShowSnes
+            | QuickRow::ShowPs1
             | QuickRow::Rumble | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect => {}
         }
     }
@@ -2292,6 +2369,12 @@ impl App {
                 self.arrange();
                 return;
             }
+            QuickRow::ShowGba | QuickRow::ShowGb | QuickRow::ShowGbc | QuickRow::ShowNes | QuickRow::ShowSnes | QuickRow::ShowPs1 => {
+                let Some(platform) = row.shelf_of() else {
+                    return;
+                };
+                return self.toggle_system(platform);
+            }
             QuickRow::LibraryPlayTime => s.play_time_hours = !s.play_time_hours,
             QuickRow::LibraryTitleCard => s.title_card = !s.title_card,
             QuickRow::AutoClock => {
@@ -2302,7 +2385,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::ResetSettings => return,
         }
         self.persist();
     }

@@ -50,7 +50,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under System → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
 | **Updates** | Update Slot from the menu over Wi-Fi: signed and checked, with your games, saves and settings left alone. |
-| **Library** | The selected game's name on a title card under its cart for a moment, play time beside the battery (minutes, or hours and minutes), favorites with a star, and shelves sorted A–Z, by last played or by most played, or showing only your favorites. |
+| **Library** | The selected game's name on a title card under its cart for a moment, play time beside the battery (minutes, or hours and minutes), favorites with a star, and shelves sorted A–Z, by last played or by most played, or showing only your favorites. Systems you don't play can be hidden (Library → Systems). |
 | **Fonts** | HOME → System → Font: Slot's own font, GohuFont, or any `.ttf` / `.otf` you put in `Slot/Fonts`. |
 | **Auto clock** | The clock sets itself from an internet time server whenever Wi-Fi is on. |
 | **Wireless connectivity** | Wi-Fi, with its status shown beside the clock, and an experimental two-player link over Wi-Fi. |
@@ -184,7 +184,7 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 | `START` | Customise the cartridge (GBA: also choose the emulator core) |
 | `Y` | Mark the game as a favorite (a star on its cart), or unmark it |
 | `SELECT` | Sort the shelves: A–Z, last played, most played |
-| `HOME` | Open the menu: Emulation, Gameplay, Library, Online (Wi-Fi, Cart Art, RetroAchievements, Update), and System (LEDs, Clock, Font, Rumble, Low Battery Shutdown, About) |
+| `HOME` | Open the menu: Emulation, Gameplay, Library, Online (Wi-Fi, Cart Art, RetroAchievements, Update), and System (LEDs, Clock, Font, Rumble, Low Battery Shutdown, Reset Settings, About) |
 
 ### In game
 

@@ -510,7 +510,7 @@ fn fake_faces(a: &mut App) {
             .map(|i| [(id(200 + i), 60, 40), (id(210 + i), 60, 40)])
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
-        legend: [(id(400), 70), (id(401), 110), (id(402), 80)],
+        legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 80)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
 }
@@ -742,4 +742,50 @@ fn an_overlay_row_steps_through_off_and_the_overlays_there_are_and_saves_each() 
         assert_eq!(a.overlay_text(Platform::Gba), shown);
     }
     assert_eq!(read_slot_state(d.path()).overlay(Platform::Gb), None, "the Game Boy took the GBA's");
+}
+
+#[test]
+fn reset_settings_asks_once_then_puts_every_setting_back() {
+    let (d, mut a, _) = on_carousel_with(SlotState {
+        brightness: 8,
+        utc_offset_min: 60,
+        rumble: false,
+        ff_speed: 2,
+        shader_gba: Shader::Dot,
+        ..SlotState::default()
+    });
+    std::fs::write(d.path().join("Config/font.txt"), "Pixel\n").unwrap();
+    open_at(&mut a, QuickRow::ResetSettings);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), None);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk));
+    assert!(!read_slot_state(d.path()).rumble, "asked, not done");
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetDone));
+    let s = read_slot_state(d.path());
+    assert!(s.rumble);
+    assert_eq!((s.ff_speed, s.shader_gba), (SlotState::default().ff_speed, SlotState::default().shader_gba));
+    assert_eq!((s.brightness, s.utc_offset_min, s.clock_set), (8, 60, true), "the levels and the clock stay");
+    assert_eq!(std::fs::read_to_string(d.path().join("Config/font.txt")).unwrap().trim(), "Slot");
+    // A third A does nothing more; moving off clears the row.
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetDone));
+    press(&mut a, Btn::Down);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), None);
+}
+
+#[test]
+fn reset_settings_asked_and_then_left_changes_nothing() {
+    let (d, mut a, _) = on_carousel_with(SlotState { rumble: false, ..SlotState::default() });
+    open_at(&mut a, QuickRow::ResetSettings);
+    press(&mut a, Btn::A);
+    press(&mut a, Btn::Up);
+    press(&mut a, Btn::Down);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk));
+    press(&mut a, Btn::B);
+    open_at(&mut a, QuickRow::ResetSettings);
+    press(&mut a, Btn::A);
+    assert_eq!(a.quick_value(QuickRow::ResetSettings), Some(QuickValue::ResetAsk), "asked again, from the start");
+    assert!(!read_slot_state(d.path()).rumble);
 }

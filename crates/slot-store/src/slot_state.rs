@@ -41,6 +41,8 @@ pub struct SlotState {
     /// HOME → Library: the order of each shelf, and whether only favorites are on them.
     pub library_sort: crate::LibrarySort,
     pub favorites_only: bool,
+    /// HOME → Library → Systems: the systems kept off the shelves, in the order of Platform::ALL.
+    pub hidden_systems: [bool; Platform::ALL.len()],
     /// Play time in hours and minutes rather than minutes alone.
     pub play_time_hours: bool,
     /// The selected game's name on a card under its cart.
@@ -71,6 +73,30 @@ pub struct SlotState {
 }
 
 impl SlotState {
+    pub fn shows(&self, platform: Platform) -> bool {
+        !self.hidden_systems[platform.index()]
+    }
+
+    /// What HOME → System → Reset Settings leaves: the game in, the clock (and whether it
+    /// sets itself), and the levels set with the buttons (brightness, blue light, volume, mute). Everything else goes back
+    /// to how it came.
+    pub fn reset(&self) -> SlotState {
+        SlotState {
+            cart: self.cart.clone(),
+            cart_platform: self.cart_platform,
+            brightness: self.brightness,
+            blue_light: self.blue_light,
+            volume: self.volume,
+            volume_hp: self.volume_hp,
+            muted: self.muted,
+            muted_hp: self.muted_hp,
+            clock_set: self.clock_set,
+            utc_offset_min: self.utc_offset_min,
+            auto_clock: self.auto_clock,
+            ..SlotState::default()
+        }
+    }
+
     pub fn overlay(&self, platform: Platform) -> Option<&str> {
         self.overlays[platform.index()].as_deref()
     }
@@ -144,6 +170,7 @@ impl Default for SlotState {
             auto_clock: true,
             library_sort: crate::LibrarySort::Az,
             favorites_only: false,
+            hidden_systems: [false; Platform::ALL.len()],
             play_time_hours: false,
             title_card: true,
             rumble: true,
@@ -222,6 +249,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     for platform in Platform::ALL {
         let _ = writeln!(text, "overlay_{}={}", platform_key(platform), s.overlay(platform).unwrap_or(""));
     }
+    let hidden: Vec<String> = Platform::ALL.into_iter().filter(|p| s.hidden_systems[p.index()]).map(platform_key).collect();
+    let _ = writeln!(text, "hidden_systems={}", hidden.join(","));
     atomic_write(&state_path(root), text.as_bytes())
 }
 
@@ -239,6 +268,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut auto_clock = None;
     let mut library_sort = None;
     let mut favorites_only = None;
+    let mut hidden_systems = [false; Platform::ALL.len()];
     let mut play_time_hours = None;
     let mut title_card = None;
     let mut rumble = None;
@@ -279,6 +309,13 @@ fn parse(text: &str) -> Option<SlotState> {
             "auto_clock" => auto_clock = flag(value),
             "library_sort" => library_sort = crate::LibrarySort::parse(value),
             "favorites_only" => favorites_only = flag(value),
+            // hidden_systems=gb,nes: a system not known (or not written) is shown.
+            "hidden_systems" => {
+                hidden_systems = [false; Platform::ALL.len()];
+                for platform in value.split(',').map(str::trim).filter_map(platform_value) {
+                    hidden_systems[platform.index()] = true;
+                }
+            }
             "play_time_hours" => play_time_hours = flag(value),
             "title_card" => title_card = flag(value),
             "rumble" => rumble = flag(value),
@@ -326,6 +363,7 @@ fn parse(text: &str) -> Option<SlotState> {
         auto_clock: auto_clock.unwrap_or(fallback.auto_clock),
         library_sort: library_sort.unwrap_or(fallback.library_sort),
         favorites_only: favorites_only.unwrap_or(fallback.favorites_only),
+        hidden_systems,
         play_time_hours: play_time_hours.unwrap_or(fallback.play_time_hours),
         title_card: title_card.unwrap_or(fallback.title_card),
         rumble: rumble.unwrap_or(fallback.rumble),

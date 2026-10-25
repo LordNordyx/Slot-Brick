@@ -45,7 +45,7 @@ doesn't flash anything to the device.
 | `START`          | Cart colour, finish, shape and label (GBA: and core) |
 | `Y`              | Favorite: a star on the cart, or off again |
 | `SELECT`         | Sort: A–Z, last played, most played     |
-| `HOME`           | Menu (Emulation, Gameplay, Library, Online: Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Clock, Font, Rumble, Low Battery Shutdown, About) |
+| `HOME`           | Menu (Emulation, Gameplay, Library, Online: Wi-Fi, Cart Art, RetroAchievements, Update, and System: LEDs, Clock, Font, Rumble, Low Battery Shutdown, Reset Settings, About) |
 
 ### In game
 
@@ -165,7 +165,12 @@ Beside the battery, the shelf shows how long you have played it: in minutes ("20
 favorite. `SELECT` sorts the shelves A–Z, by the game played last,
 or by the most played, and names the order in the slot; **HOME → Library** has the same order
 (**Sort By**) and **Show: Favorites**, which leaves only your favorites on the shelves (all games,
-while you have none). Play time, last played and favorites are kept in `Slot/Config/library.txt`.
+while you have none). **HOME → Library → Systems** hides the shelves of systems you don't play.
+Play time, last played and favorites are kept in `Slot/Config/library.txt`.
+
+**Reset Settings:** **HOME → System → Reset Settings**, then A again, puts every setting back to how it
+came, the LEDs and the font included. Your games, saves, states, play time, favorites, the clock,
+brightness and volume stay. **About** shows how much of the SD card is used and free.
 
 **Update:** **HOME → Online → Update** (greyed out while Wi-Fi is off) checks for a newer release of Slot
 and shows what is new in it. Choose INSTALL, then press A again: Slot downloads it, checks it,

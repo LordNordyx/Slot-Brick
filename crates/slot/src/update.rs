@@ -360,13 +360,7 @@ fn download(base: &str, m: &Manifest, dir: &Path, progress: &Progress) -> Result
 }
 
 fn free_space(path: &Path) -> Option<u64> {
-    use std::os::unix::ffi::OsStrExt;
-    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
-    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
-    match unsafe { libc::statvfs(c.as_ptr(), &mut st) } {
-        0 => Some(st.f_bavail as u64 * st.f_frsize as u64),
-        _ => None,
-    }
+    crate::root::card_space(path).map(|(free, _)| free)
 }
 
 /// Slot's own files on the card, which an update replaces. Everything else is the player's:

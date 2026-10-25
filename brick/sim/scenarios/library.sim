@@ -23,3 +23,20 @@ snap shelf-favorites-only
 press r1       # no other shelf has a favorite: it stays
 wait 2500      # the title card gone, however fast this machine got here
 snap shelf-favorites-only-r1
+# HOME → Library → Systems: a hidden system's shelf leaves, and L1/R1 skip it.
+press menu
+phase QuickMenu
+press down
+press down     # Library
+press a
+press down
+press down     # Systems
+press a
+snap menu-systems
+press right    # Game Boy Advance: hidden
+press b
+press b
+press b
+phase Shelf
+wait 2500      # the title card gone
+snap shelf-gba-hidden

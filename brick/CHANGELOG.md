@@ -1,6 +1,9 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Library → Systems: hide the shelves of systems you don't play. The last system with games can't be hidden.
+- System → Reset Settings: puts every setting back to how it came (LEDs and font included). Press A, then A again when it asks "Sure?". Games, saves, states, play time, favorites, the clock, brightness and volume stay.
+- System → About: shows how much of the SD card is used and how much is free.
 
 ## v0.50
 **New since v0.44:**

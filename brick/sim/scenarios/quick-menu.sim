@@ -46,3 +46,20 @@ press b
 press b
 press b
 phase Shelf
+# System → Reset Settings asks first, then says it is done.
+press menu
+phase QuickMenu
+press up       # System
+press a
+press down
+press down
+press down
+press down
+press down    # Reset Settings
+press a
+snap menu-reset-ask
+press a
+snap menu-reset-done
+press b
+press b
+phase Shelf

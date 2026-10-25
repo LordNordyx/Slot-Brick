@@ -29,6 +29,8 @@ const TITLE_PX: f32 = 19.0;
 
 pub struct StickerFields<'a> {
     pub battery: Option<u8>,
+    /// The SD card's space in bytes: (free, size).
+    pub card: Option<(u64, u64)>,
     pub serial: &'a str,
     pub dirty_digit: char,
 }
@@ -59,7 +61,7 @@ pub const COPYRIGHT: &str = "SLOT \u{a9} 2026 BRANDON T. KOWALSKI";
 
 pub const HOME: &str = "BRICK PORT BY LORDNORDYX";
 
-pub fn head_rows(f: &StickerFields) -> [String; 3] {
+pub fn head_rows(f: &StickerFields) -> [String; 4] {
     [
         "DEVICE : TRIMUI BRICK".into(),
         format!("PORT : SLOT BRICK {PORT_VERSION}"),
@@ -67,7 +69,44 @@ pub fn head_rows(f: &StickerFields) -> [String; 3] {
             Some(p) => format!("BATTERY : LI-ION ({p}%)"),
             None => "BATTERY : LI-ION".to_string(),
         },
+        match f.card {
+            Some((free, size)) => format!("SD : {} USED, {} FREE", gigabytes(size.saturating_sub(free)), gigabytes(free)),
+            None => "SD : UNKNOWN".to_string(),
+        },
     ]
+}
+
+/// The left column, from the margin to the barcode panel.
+const HEAD_COLUMN: f32 = STICKER_W as f32 * PANEL_FX - 2.0 * MARGIN;
+
+/// The type size a head row is printed at: HEAD_PX, or smaller for a row that would run into
+/// the barcode panel at it (the SD card's, on a large card), but never below HEAD_MIN_PX.
+pub fn head_row_px(line: &str) -> f32 {
+    let w = measure(line, HEAD_PX);
+    match w > HEAD_COLUMN {
+        true => (HEAD_PX * HEAD_COLUMN / w).floor().max(HEAD_MIN_PX),
+        false => HEAD_PX,
+    }
+}
+
+pub const HEAD_MIN_PX: f32 = 9.0;
+
+/// How wide `s` is printed on one line at `px`; nothing without the label font.
+fn measure(s: &str, px: f32) -> f32 {
+    let Some(font) = text::label_font() else {
+        return 0.0;
+    };
+    let layout = text::fit(font, s, f32::MAX, 1, px, px);
+    layout.lines.first().map_or(0.0, |l| text::line_width(font, l, px, layout.tracking))
+}
+
+/// Bytes as the card's own label counts them (a GB is 10^9 bytes): one decimal below 100 GB.
+fn gigabytes(bytes: u64) -> String {
+    let gb = bytes as f64 / 1e9;
+    match gb < 99.95 {
+        true => format!("{gb:.1}GB"),
+        false => format!("{gb:.0}GB"),
+    }
 }
 
 pub fn sticker_lines(f: &StickerFields) -> Vec<String> {
@@ -111,15 +150,7 @@ impl Canvas {
     }
 
     fn print_measure(&self, s: &str, px: f32) -> f32 {
-        let Some(font) = text::label_font() else {
-            return 0.0;
-        };
-        let layout = text::fit(font, s, f32::MAX, 1, px, px);
-        layout
-            .lines
-            .first()
-            .map(|l| text::line_width(font, l, px, layout.tracking))
-            .unwrap_or(0.0)
+        measure(s, px)
     }
 
     fn dc(&mut self, x: f32, y: f32, px: f32, c: [u8; 3]) -> f32 {
@@ -203,7 +234,8 @@ pub fn sticker_face(f: &StickerFields) -> UndoFace {
                 continue;
             }
         }
-        y = c.print(left, y, line, HEAD_PX, WHITE);
+        c.print(left, y, line, head_row_px(line), WHITE);
+        y += HEAD_PX * 1.35;
     }
     y += 3.0;
     for line in CREDITS {
