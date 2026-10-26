@@ -11,9 +11,9 @@ use slot_ui::{
     date_time_text, gb_cart_shadow, hhmm, hint_face, icon_face, menu_face, photo_face,
     quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face, rebuild_count_face,
     rebuild_title_face, set_clock_hint_face, socket_face, sticker_face, title_face, toast_face,
-    wallpaper_face, word_face, GbShell, Icon, LinkBadge, PowerChoice, QuickMenuFaces, QuickRow,
-    QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX, HUD_ICON_PX,
-    HUD_INK, LEGEND,
+    wallpaper_face, word_face, GbShell, Icon, LinkBadge, PauseChoice, PowerChoice, QuickMenuFaces,
+    QuickRow, QuickValue, RebuildScreen, StickerFields, Toast, UndoFace, ALERT_PX, BOLT_PX,
+    HUD_ICON_PX, HUD_INK, LEGEND,
 };
 
 use crate::app::{App, LinkRow, Phase};
@@ -549,6 +549,14 @@ impl Frontend {
             })
             .collect();
         self.session.app_mut().set_power_menu_faces(menu);
+        let pause = PauseChoice::ALL
+            .iter()
+            .map(|c| {
+                let f = menu_face(c.text());
+                (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h)
+            })
+            .collect();
+        self.session.app_mut().set_pause_menu_faces(pause);
         let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
         let labels = QuickRow::ALL
             .iter()

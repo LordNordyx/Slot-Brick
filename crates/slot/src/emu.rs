@@ -73,6 +73,7 @@ pub struct EmuHandle {
 
 enum Cmd {
     Load(Vec<u8>),
+    Reset,
     Save(Sender<Vec<u8>>),
     Sav(Sender<Option<Vec<u8>>>),
     Thumb(Sender<Option<Vec<u8>>>),
@@ -472,6 +473,10 @@ impl Snapshot for EmuSnapshot {
 
     fn load(&self, state: Vec<u8>) {
         request(&self.cmds, &self.shared, Cmd::Load(state));
+    }
+
+    fn reset(&self) {
+        request(&self.cmds, &self.shared, Cmd::Reset);
     }
 
     fn resume_trusted(&self) -> bool {
@@ -982,7 +987,7 @@ impl Worker {
         cable: &mut Option<Cable>,
         link: &Link,
     ) -> bool {
-        let loads = matches!(cmd, Cmd::Load(_));
+        let loads = matches!(cmd, Cmd::Load(_) | Cmd::Reset);
         match cmd {
             Cmd::Save(reply) => match core.serialize() {
                 Ok(state) => {
@@ -995,6 +1000,7 @@ impl Worker {
                     eprintln!("slot: {e}");
                 }
             }
+            Cmd::Reset => core.reset(),
             Cmd::Sav(reply) => {
                 let _ = reply.send(core.save_ram());
             }

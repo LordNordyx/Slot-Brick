@@ -442,6 +442,16 @@ fn fast_forward_sound_plays_sped_up_in_real_time() {
 }
 
 #[test]
+fn a_reset_starts_the_game_over() {
+    let emu = spawn();
+    std::thread::sleep(Duration::from_millis(100));
+    let (frames, _) = held_counts(&emu);
+    assert!(frames > 0, "the core never ran");
+    emu.snapshot().reset();
+    assert_eq!(frame_count(&emu), 0, "the game did not start over");
+}
+
+#[test]
 fn battery_save_ram_reaches_the_core_and_comes_back() {
     let mut sav = vec![0u8; 8 * 1024];
     sav[7] = 0xab;

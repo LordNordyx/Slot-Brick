@@ -83,7 +83,7 @@ pub use plate::{
     CAPTION_Y, HINT_EDGE, HINT_GAP, HINT_H, LEGEND_GAP, LEGEND_Y, TITLE_H, TITLE_W,
 };
 pub use polaroids::{photo_face, PhotoFace, Polaroids, DOT, LEGEND, PHOTO_H, PHOTO_W};
-pub use power_menu::{menu_face, PowerChoice, MENU_PAD};
+pub use power_menu::{menu_face, PauseChoice, PowerChoice, MENU_PAD};
 pub use quick_menu::{
     quick_caret_face, quick_label_face, quick_legend_faces, quick_value_face, quick_value_room, QuickMenu,
     QuickMenuFaces, QuickRow, QuickValue, quick_pitch, set_brick_pro, QUICK_EDGE, QUICK_PITCH, QUICK_SPLIT, QUICK_TOP,

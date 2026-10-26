@@ -194,6 +194,7 @@ The three small buttons on the bottom of the Brick and Brick Hammer are **HOME**
 
 | Input | Action |
 | :--- | :--- |
+| `HOME` | Pause: Resume, Save State, Load State (the save state switcher), Reset Game, or Quit Game. Not during multiplayer |
 | Hold `HOME` | Save state, eject the cartridge, and return to the carousel |
 | Double-tap `HOME` | Open the save state switcher: load, delete, or undo within 30 seconds |
 | `SELECT` + `B` or `HOME` + `B` | Toggle LEDs |
