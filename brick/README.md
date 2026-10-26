@@ -128,6 +128,13 @@ Overlay. Cart Art fetches disc scans (below), or put your own round picture in `
 a disc of a game of several can have its own, named after that disc's file. RetroAchievements
 work, `.chd` included.
 
+**Zipped games:** GB, GBC, GBA, NES and SNES ROMs can be zipped (`.zip`) or 7z'd (`.7z`), one
+ROM in each. The cart takes the archive's name, so `Tetris.gb` zipped as `Tetris.zip` keeps its
+saves, states, label and play time. Starting one unpacks its ROM into `Slot/System/Cache/Unpacked`,
+where only the last game started is kept. An archive holding more than one ROM, locked with a
+password, or packed with anything but deflate (zip) or LZMA / LZMA2 (7z) stays off the shelf, and
+`Slot/Logs/slot.log` says why. PlayStation games can't be zipped.
+
 **Cart art:** connect to Wi-Fi, then open **HOME → Online → Cart Art** (greyed out while Wi-Fi is off).
 **GET CART ART** gives every game with no label a scan of its real cartridge label; labels you
 already have are never replaced. The scans come from the slot art set behind

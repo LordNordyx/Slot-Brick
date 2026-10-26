@@ -8,7 +8,6 @@
 //!   "Cart - Front" picture (images.launchbox-app.com), found by the ROM's file name. Only
 //!   pictures of the standard US cart are used, whose label always sits in the same place.
 use std::collections::HashMap;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
@@ -902,7 +901,7 @@ impl Crcs {
                 return Ok(crc);
             }
         }
-        let crc = crc32_file(rom)?;
+        let crc = slot_store::archive::crc32(rom)?;
         self.known.insert(key, (meta.len(), mtime, crc));
         self.changed = true;
         Ok(crc)
@@ -926,44 +925,6 @@ impl Crcs {
         if let Err(e) = atomic_write(&path, lines.join("\n").as_bytes()) {
             eprintln!("slot: cart art: {CRC_CACHE}: {e}");
         }
-    }
-}
-
-const CRC_TABLE: [u32; 256] = {
-    let mut table = [0u32; 256];
-    let mut i = 0;
-    while i < 256 {
-        let mut c = i as u32;
-        let mut k = 0;
-        while k < 8 {
-            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
-            k += 1;
-        }
-        table[i] = c;
-        i += 1;
-    }
-    table
-};
-
-/// The CRC32 No-Intro and the art set index ROMs by.
-fn crc32(crc: u32, bytes: &[u8]) -> u32 {
-    let mut c = !crc;
-    for &b in bytes {
-        c = CRC_TABLE[((c ^ b as u32) & 0xFF) as usize] ^ (c >> 8);
-    }
-    !c
-}
-
-fn crc32_file(path: &Path) -> std::io::Result<u32> {
-    let mut file = std::fs::File::open(path)?;
-    let mut buf = vec![0u8; 256 << 10];
-    let mut crc = 0;
-    loop {
-        let n = file.read(&mut buf)?;
-        if n == 0 {
-            return Ok(crc);
-        }
-        crc = crc32(crc, &buf[..n]);
     }
 }
 
@@ -1364,7 +1325,7 @@ fn label_target(root: &Path, cart: &Cart) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
 
     /// One-shot-per-connection HTTP server answering from a fixed table.
@@ -1916,12 +1877,6 @@ mod tests {
     }
 
     #[test]
-    fn crc32_matches_the_standard_check_value() {
-        assert_eq!(crc32(0, b"123456789"), 0xCBF4_3926);
-        assert_eq!(crc32(crc32(0, b"1234"), b"56789"), 0xCBF4_3926, "streams in pieces");
-    }
-
-    #[test]
     fn the_label_index_only_yields_label_scan_paths() {
         let json = r#"{"000206C0": {"look": {"ground": "3067a3"}, "support-texture": "GBA/support-texture/000206C0.png", "wheel": "GBA/wheel/000206C0.png"},
             "00202DFA": {"wheel": "GB/wheel/00202DFA.png"},
@@ -2252,7 +2207,7 @@ mod tests {
         rom(root, "GB/homebrew.gb");
         std::fs::write(root.join("Games/GB/homebrew.gb"), b"something else").unwrap();
         std::fs::create_dir_all(root.join("Logs")).unwrap();
-        let crc = crc32(0, &[0u8; 0x200]);
+        let crc = 0xB2AA_7578u32; // 0x200 zero bytes, as rom() writes
         let path = format!("GBA/support-texture/{crc:08X}.png");
         let index = format!(r#"{{"{crc:08X}": {{"support-texture": "{path}"}}}}"#);
         let server = serve(vec![
@@ -2285,7 +2240,19 @@ mod tests {
         std::fs::write(root.join(CRC_CACHE), text).unwrap();
         assert_eq!(Crcs::load(root).of(root, &rom_path).unwrap(), 0x1234_5678, "trusted while size and mtime match");
         std::fs::write(&rom_path, b"patched").unwrap();
-        assert_eq!(Crcs::load(root).of(root, &rom_path).unwrap(), crc32(0, b"patched"));
+        assert_eq!(Crcs::load(root).of(root, &rom_path).unwrap(), 0x83FC_6D73, "the CRC32 of \"patched\"");
+    }
+
+    #[test]
+    fn a_zipped_roms_checksum_is_its_roms() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../slot-store/tests/fixtures");
+        let zip = root.join("Games/GB/Zipped.zip");
+        std::fs::create_dir_all(zip.parent().unwrap()).unwrap();
+        std::fs::copy(fixtures.join("rom.zip"), &zip).unwrap();
+        let plain = slot_store::archive::crc32(&fixtures.join("rom.gb")).unwrap();
+        assert_eq!(Crcs::load(root).of(root, &zip).unwrap(), plain);
     }
 
     #[test]

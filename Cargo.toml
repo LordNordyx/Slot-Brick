@@ -25,6 +25,9 @@ unicode-normalization = "0.1"
 resvg = { version = "0.48", default-features = false }
 ring = "0.17"
 miniz_oxide = "0.8"
+flate2 = "1"
+crc32fast = "1"
+sevenz-rust2 = { version = "0.24", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "1"
 cc = "1"

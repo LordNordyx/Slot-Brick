@@ -84,15 +84,19 @@ fn the_menu_covers_the_game_in_the_case_materials() {
     let mut out = Vec::new();
     a.draw(&mut out);
 
-    let ground = out.iter().position(|d| {
-        matches!(d, Draw::Rect { colour, .. } if *colour == slot_ui::opening())
-    });
+    let ground = out
+        .iter()
+        .position(|d| matches!(d, Draw::Rect { colour, .. } if *colour == slot_ui::opening()));
     let ground = ground.expect("the menu drew no ground");
     let rows = out[ground..]
         .iter()
         .filter(|d| matches!(d, Draw::Tex { tex, .. } if *tex == face))
         .count();
-    assert_eq!(rows, PauseChoice::ALL.len(), "a row is missing over the ground");
+    assert_eq!(
+        rows,
+        PauseChoice::ALL.len(),
+        "a row is missing over the ground"
+    );
 }
 
 #[test]
@@ -114,9 +118,16 @@ fn load_state_opens_the_switcher_and_closing_it_goes_back_to_the_game() {
     choose(&mut a, PauseChoice::LoadState);
     assert!(matches!(a.phase(), Phase::Polaroids { .. }));
     a.apply(Action::GbaDown(Btn::A));
-    assert!(loaded.lock().expect("loaded").is_some(), "the state was not loaded");
+    assert!(
+        loaded.lock().expect("loaded").is_some(),
+        "the state was not loaded"
+    );
     assert!(matches!(a.phase(), Phase::Playing { .. }));
-    assert_eq!(a.pause_menu(), None, "the menu came back over the loaded game");
+    assert_eq!(
+        a.pause_menu(),
+        None,
+        "the menu came back over the loaded game"
+    );
 }
 
 #[test]
@@ -192,7 +203,10 @@ fn game_shortcuts_wait_behind_the_menu() {
     a.apply(Action::SaveState);
     assert_eq!(states(d.path()), 0, "SELECT+R1 saved behind the menu");
     a.apply(Action::GameMenu);
-    assert!(!a.game_menu_open(), "SELECT+HOME opened Host / Join over the menu");
+    assert!(
+        !a.game_menu_open(),
+        "SELECT+HOME opened Host / Join over the menu"
+    );
 }
 
 #[test]
@@ -206,7 +220,10 @@ fn the_next_game_starts_without_the_menu() {
             break;
         }
     }
-    assert!(matches!(a.phase(), Phase::Shelf), "the eject never finished");
+    assert!(
+        matches!(a.phase(), Phase::Shelf),
+        "the eject never finished"
+    );
     a.apply(Action::Insert);
     a.on_core_ready();
     for _ in 0..120 {
@@ -250,7 +267,11 @@ fn the_menu_holds_the_core_still_until_resume() {
 
     step(&mut s, &mut now, vec![RawEvent::Down(Btn::Menu)]);
     step(&mut s, &mut now, vec![RawEvent::Up(Btn::Menu)]);
-    assert_eq!(s.app().pause_menu(), Some(0), "a tap of HOME did not open the menu");
+    assert_eq!(
+        s.app().pause_menu(),
+        Some(0),
+        "a tap of HOME did not open the menu"
+    );
     await_speed(&mut s, &mut now, Speed::Paused);
 
     // Past the double-tap window, so A is the menu's and not the switcher's.

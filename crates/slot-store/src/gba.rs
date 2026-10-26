@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 const TITLE_OFF: u64 = 0xa0;
@@ -17,10 +15,8 @@ pub fn header_code(rom: &Path) -> Option<String> {
 }
 
 pub fn header_title_code(rom: &Path) -> Option<(String, String)> {
-    let mut f = File::open(rom).ok()?;
-    f.seek(SeekFrom::Start(TITLE_OFF)).ok()?;
     let mut head = [0u8; (CODE_OFF - TITLE_OFF) as usize + CODE_LEN];
-    f.read_exact(&mut head).ok()?;
+    crate::archive::read_at(rom, TITLE_OFF, &mut head).ok()?;
     let (title, code) = head.split_at(TITLE_LEN);
     Some((
         text_from_bytes(title).unwrap_or_default(),
@@ -29,23 +25,15 @@ pub fn header_title_code(rom: &Path) -> Option<(String, String)> {
 }
 
 pub fn header_clean(rom: &Path) -> bool {
-    let Ok(mut f) = File::open(rom) else {
-        return false;
-    };
-    let Ok(meta) = f.metadata() else {
-        return false;
-    };
     let mut head = [0u8; 0xB3];
-    f.read_exact(&mut head).is_ok()
+    crate::archive::read_at(rom, 0, &mut head).is_ok()
         && head[3] == 0xEA
         && head[0xB2] == 0x96
-        && meta.len() <= 16 * 1024 * 1024
+        && crate::archive::len(rom).is_ok_and(|len| len <= 16 * 1024 * 1024)
 }
 
 fn field(rom: &Path, off: u64, buf: &mut [u8]) -> Option<String> {
-    let mut f = File::open(rom).ok()?;
-    f.seek(SeekFrom::Start(off)).ok()?;
-    f.read_exact(buf).ok()?;
+    crate::archive::read_at(rom, off, buf).ok()?;
     text_from_bytes(buf)
 }
 
