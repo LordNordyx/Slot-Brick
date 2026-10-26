@@ -39,6 +39,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | Feature | Details |
 | :--- | :--- |
 | **NES and SNES** | Their own shelves of NES and SNES cartridges, running on FCEUmm and Snes9x. No BIOS needed. |
+| **Zipped games** | `.zip` and `.7z` ROMs on the GB, GBC, GBA, NES and SNES shelves, one ROM in each, under the archive's name. Each unpacks when you start it. |
 | **PlayStation** | A shelf of discs that spin into a disc slot, on PCSX ReARMed: `.cue`/`.bin`, `.chd`, `.pbp`, `.iso` and `.m3u`, with a disc picker for games of several discs. |
 | **Custom cartridges** | Change any cart's colour, finish, and shape from the shelf. |
 | **Cart art** | Fetch real cartridge labels for every game at once, or search for one game's label and frame it to fit the cart. |
@@ -100,7 +101,7 @@ Copy **all contents** of the extracted `SD-CARD` folder to the **root of your SD
 
 #### 5. Add your games and saves
 
-Copy your games, save files, save states, and BIOS files from your backup into their respective folders inside `Slot/`.
+Copy your games, save files, save states, and BIOS files from your backup into their respective folders inside `Slot/`. Cartridge ROMs can be zipped (`.zip` or `.7z`, one ROM in each).
 
 > [!TIP]
 > Create game labels (cartridge artwork) with [Cart Studio](https://slot-cfw.fyi/) by Brandon T. Kowalski.
@@ -263,7 +264,7 @@ Both need Wi-Fi and are greyed out in the `HOME` menu while it is off.
 <details>
 <summary><h2>NES and SNES</h2></summary>
 
-- Put `.nes` ROMs in `Slot/Games/NES` and `.sfc` / `.smc` ROMs in `Slot/Games/SNES`.
+- Put `.nes` ROMs in `Slot/Games/NES` and `.sfc` / `.smc` ROMs in `Slot/Games/SNES`, zipped or 7z'd if you like.
 - No BIOS is needed for either.
 - European and Japanese SNES games get the rounder PAL / Super Famicom cart. Slot reads this from the ROM, so ripped ROMs without a region in their name work too.
 - Japanese NES games get the small, coloured Famicom cart. NES ROMs don't say where they were sold, so Slot goes by the name, such as `(Japan)`, and by chips only Famicom carts used. For any other game, choose **Famicom** under `START` → **Shape**.

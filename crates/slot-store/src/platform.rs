@@ -92,4 +92,10 @@ impl Platform {
                     .any(|k| ext.eq_ignore_ascii_case(k))
             })
     }
+
+    /// Whether the shelf takes ROMs zipped or 7z'd. A disc would take too long to unpack on the
+    /// Brick, and a .chd is compressed already.
+    pub fn takes_archives(self) -> bool {
+        !matches!(self, Platform::Ps1)
+    }
 }

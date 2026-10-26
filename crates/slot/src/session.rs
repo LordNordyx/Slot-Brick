@@ -501,10 +501,9 @@ impl Session {
         self.app.set_named_core(opened.named);
         let sav = persist::read_sav(&self.root, platform, stem);
         let ring = self.sink.ring();
-        let emu = match player.filter(|_| platform == Platform::Gba) {
-            Some(p) => EmuHandle::spawn_linked(opened.core, rom, ring, sav, resume, p),
-            None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
-        };
+        let unpack_into = self.root.join(slot_store::archive::UNPACKED_DIR);
+        let linked = player.filter(|_| platform == Platform::Gba);
+        let emu = EmuHandle::spawn_game(opened.core, rom, unpack_into, ring, sav, resume, linked);
         emu.set_volume(self.app.output_volume());
         if platform == Platform::Ps1 {
             emu.set_option("pcsx_rearmed_dithering", crate::core::dithering(self.app.ps1_dithering()));

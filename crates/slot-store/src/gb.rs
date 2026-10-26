@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 const TITLE_OFF: u64 = 0x134;
@@ -85,7 +83,5 @@ fn class_of(flag: Option<u8>) -> Class {
 }
 
 fn read_at(rom: &Path, off: u64, buf: &mut [u8]) -> Option<()> {
-    let mut f = File::open(rom).ok()?;
-    f.seek(SeekFrom::Start(off)).ok()?;
-    f.read_exact(buf).ok()
+    crate::archive::read_at(rom, off, buf).ok()
 }

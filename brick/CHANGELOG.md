@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Zipped games: put `.zip` or `.7z` ROMs in `Slot/Games/GB`, `GBC`, `GBA`, `NES` or `SNES` and they play like the plain ROM, under the archive's name. Zip a ROM under its own name and it keeps its saves, states, label and play time. Each archive needs exactly one ROM in it; it is unpacked into `Slot/System/Cache/Unpacked` when you start it, and only the last one is kept. PlayStation games stay as they are.
 - Slot OS for the Brick Pro (experimental, not yet tried on a Brick Pro): flash `slot-os-brickpro-…-sd-card.img.xz`. It is built from TrimUI's Brick Pro firmware, reads the Pro's own button layout, and its left stick works as the D-pad, as on stock firmware. Please report how it goes in issue #65.
 - Sounds: the HOME menu now makes a soft pop as you move, change a setting, open a page and go back; a GBA cart pops as it opens for the core picker, and snaps shut as it closes; and a label slaps down as it lands on its cart.
 - System → System Sounds: set how loud Slot's own sounds are (Volume, 0–100%, on top of the Brick's volume), and turn each kind on or off: Menu, Favorite Star, Cart In & Out, Cart Opening and Label On. Sounds in quick succession no longer add up to louder and louder; each takes over from the last.
