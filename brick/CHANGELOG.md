@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Custom cartridges → Shape: NES carts can now take Tengen's own unlicensed black shell, with its narrow stepped head and moulded triangle. It's picked automatically for known Tengen games, or choose it yourself under START → Shape → Tengen.
 - Faster startup with PlayStation games: Slot no longer reads every `.bin` disc image in full while it looks for your games, which could add a minute or more to startup with a few PS1 games on the card.
 - Zipped games: put `.zip` or `.7z` ROMs in `Slot/Games/GB`, `GBC`, `GBA`, `NES` or `SNES` and they play like the plain ROM, under the archive's name. Zip a ROM under its own name and it keeps its saves, states, label and play time. Each archive needs exactly one ROM in it; it is unpacked into `Slot/System/Cache/Unpacked` when you start it, and only the last one is kept. PlayStation games stay as they are.
 - Pause menu: tap HOME in a game to pause it and choose Resume, Save State, Load State (opens the save state switcher), Reset Game or Quit Game. Reset Game starts the game over, as the console's reset button does: its battery save stays, play since your last save is lost. B or HOME resumes. Hold HOME and double-tap HOME work as before. Not during multiplayer, where the game can't pause.

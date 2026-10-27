@@ -459,11 +459,14 @@ impl Frontend {
         let rounded = gb_cart_shadow(GbShell::Rounded);
         let rounded = compositor.create_texture(rounded.w, rounded.h, &rounded.rgba);
         self.session.app_mut().set_gb_cart_shadows(notched, rounded);
-        let [nes, famicom] = [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom].map(|shell| {
-            let face = slot_ui::nes_cart_shadow(shell);
-            compositor.create_texture(face.w, face.h, &face.rgba)
-        });
-        self.session.app_mut().set_nes_cart_shadows(nes, famicom);
+        let [nes, famicom, tengen] =
+            [slot_ui::NesShell::Nes, slot_ui::NesShell::Famicom, slot_ui::NesShell::Tengen].map(
+                |shell| {
+                    let face = slot_ui::nes_cart_shadow(shell);
+                    compositor.create_texture(face.w, face.h, &face.rgba)
+                },
+            );
+        self.session.app_mut().set_nes_cart_shadows(nes, famicom, tengen);
         let [us, pal] = [slot_ui::SnesShell::Us, slot_ui::SnesShell::Pal].map(|shell| {
             let face = slot_ui::snes_cart_shadow(shell);
             compositor.create_texture(face.w, face.h, &face.rgba)

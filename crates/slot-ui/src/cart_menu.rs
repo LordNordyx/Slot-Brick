@@ -58,9 +58,9 @@ pub const SHAPES: [&str; 3] = ["Original", "Game Boy", "Game Boy Color"];
 /// Their faces follow SHAPES' in CartMenuFaces::shapes.
 pub const SNES_SHAPES: [&str; 3] = ["Original", "US", "Europe / Japan"];
 
-/// Looks a NES cart can take: the game's own, the grey NES cart, a Famicom plastic.
-/// Their faces follow SNES_SHAPES'.
-pub const NES_SHAPES: [&str; 3] = ["Original", "NES", "Famicom"];
+/// Looks a NES cart can take: the game's own, the grey NES cart, a Famicom plastic, or
+/// Tengen's own unlicensed black shell. Their faces follow SNES_SHAPES'.
+pub const NES_SHAPES: [&str; 4] = ["Original", "NES", "Famicom", "Tengen"];
 
 const fn solid(name: &'static str, colour: [u8; 3]) -> (&'static str, Shell) {
     (name, Shell { colour, finish: Finish::Solid })
