@@ -10,6 +10,8 @@ pub enum Outline {
     Auto,
     Notched,
     Rounded,
+    /// NES only: Tengen's own unlicensed shell, not Nintendo's mould at all.
+    Tengen,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -35,6 +37,7 @@ impl ShellChoice {
             "auto" => Outline::Auto,
             "notched" => Outline::Notched,
             "rounded" => Outline::Rounded,
+            "tengen" => Outline::Tengen,
             _ => return None,
         };
         let hex = words.next()?;
@@ -61,6 +64,7 @@ impl ShellChoice {
             Outline::Auto => "auto",
             Outline::Notched => "notched",
             Outline::Rounded => "rounded",
+            Outline::Tengen => "tengen",
         };
         let finish = match self.finish {
             ShellFinish::Solid => "solid",

@@ -160,13 +160,52 @@ pub fn shell_for(cart: &Cart) -> Shell {
     }
 }
 
-/// A NES cart's own plastic: grey, but gold for the two that really were. The NES library's
-/// only gold carts are the Zeldas, so the name alone tells them apart.
+/// A NES cart's own plastic: grey, gold for the two Zeldas, black for a title Tengen
+/// published unlicensed — matched to crate::cart::nes_shell_kind's own Tengen detection.
 pub fn nes_plain_shell(stem: &str) -> Shell {
-    match stem.to_lowercase().contains("zelda") {
-        true => NES_GOLD_SHELL,
-        false => NES_SHELL,
+    let lower = stem.to_lowercase();
+    if lower.contains("zelda") {
+        NES_GOLD_SHELL
+    } else if tengen_board(stem) {
+        NES_BLACK_SHELL
+    } else {
+        NES_SHELL
     }
+}
+
+/// Tengen published these titles unlicensed, in its own black shell — not Nintendo's mould.
+/// Matched against the start of the ROM's own name, case-insensitively, tags and all.
+const TENGEN_TITLES: &[&str] = &[
+    "after burner",
+    "alien syndrome",
+    "block out",
+    "caesars palace",
+    "championship pool",
+    "gauntlet",
+    "hard drivin'",
+    "indiana jones and the temple of doom",
+    "klax",
+    "ms. pac-man",
+    "n.a.r.c.",
+    "pac-man",
+    "pac-mania",
+    "r.b.i. baseball",
+    "road runner",
+    "rolling thunder",
+    "shinobi",
+    "skull & crossbones",
+    "super sprint",
+    "tetris",
+    "toobin'",
+    "vindicators",
+    "world class track meet",
+    "xenophobe",
+];
+
+/// A ROM named as one of Tengen's own unlicensed NES titles.
+pub fn tengen_board(stem: &str) -> bool {
+    let lower = stem.to_lowercase();
+    TENGEN_TITLES.iter().any(|title| lower.starts_with(title))
 }
 
 /// A Famicom plastic for a ROM named as a Japanese release, NES grey for the rest.
