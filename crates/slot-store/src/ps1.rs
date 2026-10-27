@@ -38,6 +38,10 @@ pub fn discs(rom: &Path) -> Vec<PathBuf> {
 /// The files a .cue (its tracks) or an .m3u (its discs) names, beside it.
 fn named_by(file: &Path) -> Vec<PathBuf> {
     let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    // Only a .cue or an .m3u names other files: a disc image is hundreds of MB, read for nothing.
+    if ext != "cue" && ext != "m3u" {
+        return Vec::new();
+    }
     let Some(dir) = file.parent() else {
         return Vec::new();
     };
