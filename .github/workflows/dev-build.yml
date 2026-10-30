@@ -1,6 +1,7 @@
 # Every change to main builds the SD card and puts it in the "Dev build" release, replacing
-# the one before, so its download link always gives the latest card. Numbered releases are
-# still made by hand. Changes to the docs, the changelog and the licences alone build nothing
+# the one before, so its download link always gives the latest card. What Slot's Update screen
+# downloads (dev-update.txt and the zips it names) goes to the Updates release instead.
+# Numbered releases are still made by hand. Changes to the docs, the changelog and the licences alone build nothing
 # new, so they are skipped (the next code change brings their notes along).
 name: Dev build
 
@@ -54,7 +55,7 @@ jobs:
         run: sh brick/docker-build.sh
 
       - name: Zip the card
-        run: python3 brick/zip-card.py dist-brick slot-brick-dev-sd-card.zip
+        run: python3 brick/zip-card.py dist-brick slot-stock-dev.zip
 
       # TrimUI's firmware (118 MB) and the boot chain Slot OS is built from, pinned by sha256.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -67,11 +68,11 @@ jobs:
       - name: Build Slot OS
         run: |
           SLOT_OS_VERSION="dev $(git rev-parse --short HEAD)" sh brick/os/build.sh dist-brick
-          mv dist-os/slot-os.img.xz slot-os-dev-sd-card.img.xz
-          mv dist-os/slot-os-update.zip slot-os-dev-update.zip
+          mv dist-os/slot-os.img.xz slot-os-brick-dev.img.xz
+          mv dist-os/slot-os-update.zip slot-os-brick-dev-update.zip
           # The Brick Pro's (experimental): its own boot chain, kernel and drivers.
           SLOT_OS_MODEL=brickpro SLOT_OS_VERSION="dev $(git rev-parse --short HEAD)" sh brick/os/build.sh dist-brick
-          mv dist-os/slot-os-brickpro.img.xz slot-os-brickpro-dev-sd-card.img.xz
+          mv dist-os/slot-os-brickpro.img.xz slot-os-brickpro-dev.img.xz
           mv dist-os/slot-os-brickpro-update.zip slot-os-brickpro-dev-update.zip
 
       # update.txt, signed when the release key is set: what Slot's Update screen finds and
@@ -81,9 +82,16 @@ jobs:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
           version=$(head -1 brick/README.md | grep -o 'v[0-9][0-9.]*')
-          bash brick/update-manifest.sh dev "$version" slot-brick-dev-sd-card.zip update
-          bash brick/update-manifest.sh dev "$version" slot-os-dev-update.zip update update-os.txt
-          bash brick/update-manifest.sh dev "$version" slot-os-brickpro-dev-update.zip update update-os-brickpro.txt
+          bash brick/update-manifest.sh dev "$version" slot-stock-dev.zip update dev-update.txt
+          bash brick/update-manifest.sh dev "$version" slot-os-brick-dev-update.zip update dev-update-os.txt
+          bash brick/update-manifest.sh dev "$version" slot-os-brickpro-dev-update.zip update dev-update-os-brickpro.txt
+          # Dev builds from before the Updates release read update.txt from this release, and
+          # download the zip it names from here too. The same signed files, by their old names.
+          mkdir legacy
+          for name in update.txt update-os.txt update-os-brickpro.txt; do
+              cp "update/dev-$name" "legacy/$name"
+              if [ -f "update/dev-$name.sig" ]; then cp "update/dev-$name.sig" "legacy/$name.sig"; fi
+          done
 
       - name: Replace the Dev build release
         env:
@@ -93,7 +101,18 @@ jobs:
           bash brick/dev-notes.sh > notes.md
           bash brick/os/release-note.sh dev >> notes.md
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
-          gh release create dev slot-brick-dev-sd-card.zip update/update.txt* \
-            slot-os-dev-sd-card.img.xz slot-os-dev-update.zip update/update-os.txt* \
-            slot-os-brickpro-dev-sd-card.img.xz slot-os-brickpro-dev-update.zip update/update-os-brickpro.txt* \
+          # The update files and Slot OS update zips are only here until Dev builds from before
+          # the Updates release have updated past it.
+          gh release create dev slot-stock-dev.zip slot-os-brick-dev.img.xz slot-os-brickpro-dev.img.xz \
+            legacy/* slot-os-brick-dev-update.zip slot-os-brickpro-dev-update.zip \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease
+
+      # The zips first, so the update files never name a zip that is not there yet.
+      - name: Update the Updates release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          bash brick/updates-release.sh
+          gh release upload updates slot-stock-dev.zip slot-os-brick-dev-update.zip slot-os-brickpro-dev-update.zip --clobber
+          gh release upload updates update/* --clobber

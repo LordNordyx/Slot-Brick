@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Tidier downloads: each release now holds only `slot-stock-…zip` for stock firmware and `slot-os-brick-…img.xz` / `slot-os-brickpro-…img.xz` for Slot OS. Online → Update gets its files from a separate Updates release. Coming from v0.60 or older, update to this version by hand once: on stock firmware, copy the new zip's contents over your card; on Slot OS, copy the contents of `slot-os-brick-…-update.zip` (or the Brick Pro's) from the Updates release onto your card. Your games, saves and settings stay.
 
 ## v0.60
 **New since v0.50:**

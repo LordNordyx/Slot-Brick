@@ -53,6 +53,7 @@ a Slot OS build that fails fails the release.
   A new folder of Slot's own on the card must be added there, or updates won't carry it; never
   add a path that holds the player's files (Games, Saves, States, Labels, BIOS, Config,
   Wallpapers, `Apps/BootLogo/Image`).
-- Releases carry `update.txt` and `update.txt.sig`, signed in CI with the `UPDATE_SIGNING_KEY`
-  secret. A change to `update.txt`'s format must keep old Slots able to read it, or bump its
+- The Updates release (tag `updates`) carries `update.txt` and `update.txt.sig`, signed in CI
+  with the `UPDATE_SIGNING_KEY` secret, and the zips they name; the version and Dev releases
+  hold only what people download. A change to `update.txt`'s format must keep old Slots able to read it, or bump its
   header line (`slot-update 1`), which old Slots then refuse.
