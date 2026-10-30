@@ -85,13 +85,6 @@ jobs:
           bash brick/update-manifest.sh dev "$version" slot-stock-dev.zip update dev-update.txt
           bash brick/update-manifest.sh dev "$version" slot-os-brick-dev-update.zip update dev-update-os.txt
           bash brick/update-manifest.sh dev "$version" slot-os-brickpro-dev-update.zip update dev-update-os-brickpro.txt
-          # Dev builds from before the Updates release read update.txt from this release, and
-          # download the zip it names from here too. The same signed files, by their old names.
-          mkdir legacy
-          for name in update.txt update-os.txt update-os-brickpro.txt; do
-              cp "update/dev-$name" "legacy/$name"
-              if [ -f "update/dev-$name.sig" ]; then cp "update/dev-$name.sig" "legacy/$name.sig"; fi
-          done
 
       - name: Replace the Dev build release
         env:
@@ -101,10 +94,7 @@ jobs:
           bash brick/dev-notes.sh > notes.md
           bash brick/os/release-note.sh dev >> notes.md
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
-          # The update files and Slot OS update zips are only here until Dev builds from before
-          # the Updates release have updated past it.
           gh release create dev slot-stock-dev.zip slot-os-brick-dev.img.xz slot-os-brickpro-dev.img.xz \
-            legacy/* slot-os-brick-dev-update.zip slot-os-brickpro-dev-update.zip \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease
 
       # The zips first, so the update files never name a zip that is not there yet.
