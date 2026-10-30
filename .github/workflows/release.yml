@@ -159,7 +159,6 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           bash brick/release-notes.sh "$TAG" > notes.md
-          bash brick/os/release-note.sh "$TAG" >> notes.md
           # Only what people download. What Slot's Update screen downloads goes to the Updates
           # release: the zips first, so the update files never name a zip that is not there yet.
           gh release create "$TAG" "slot-stock-$TAG.zip" "slot-os-brick-$TAG.img.xz" "slot-os-brickpro-$TAG.img.xz" \

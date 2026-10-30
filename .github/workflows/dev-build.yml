@@ -13,7 +13,6 @@ on:
       - 'licenses/**'
       - 'LICENSE'
       - 'brick/os/NOTICE.txt'
-      - 'brick/os/release-note.sh'
   workflow_dispatch:
 
 # Only the release is written; nothing else in the repository.
@@ -92,7 +91,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           bash brick/dev-notes.sh > notes.md
-          bash brick/os/release-note.sh dev >> notes.md
           gh release delete dev --yes --cleanup-tag 2>/dev/null || true
           gh release create dev slot-stock-dev.zip slot-os-brick-dev.img.xz slot-os-brickpro-dev.img.xz \
             --target "$GITHUB_SHA" --title "Dev build" --notes-file notes.md --prerelease

@@ -12,7 +12,6 @@ on:
       - 'licenses/**'
       - 'LICENSE'
       - 'brick/os/NOTICE.txt'
-      - 'brick/os/release-note.sh'
   workflow_dispatch:
 
 permissions:
