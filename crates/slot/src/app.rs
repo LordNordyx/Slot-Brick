@@ -288,9 +288,9 @@ pub struct App {
     net_on: bool,
     /// The three Wi-Fi symbols: on the network, on but not reaching it, off.
     wifi_faces: Option<[(TexId, u32, u32); 3]>,
-    /// Asks GitHub, once a boot, whether a newer Slot is out; the footer then shows `update_face`.
+    /// Asks GitHub, now and then, whether a newer Slot is out; the footer then shows `update_face`.
     #[cfg(feature = "brick")]
-    boot_check: crate::brick_update::BootCheck,
+    auto_check: crate::brick_update::AutoCheck,
     update_face: Option<(TexId, u32, u32)>,
     phase: Phase,
     shelves: Vec<(Platform, Shelf)>,
@@ -588,7 +588,7 @@ impl App {
             net_on: false,
             wifi_faces: None,
             #[cfg(feature = "brick")]
-            boot_check: Default::default(),
+            auto_check: Default::default(),
             update_face: None,
             power_menu: None,
             power_menu_faces: Vec::new(),
@@ -1380,7 +1380,7 @@ impl App {
     /// The footer's update symbol, while a newer Slot is out and the check is on.
     fn update_face(&self) -> Option<(TexId, u32, u32)> {
         #[cfg(feature = "brick")]
-        if self.state.update_check && self.boot_check.newer().is_some() {
+        if self.state.update_check && self.auto_check.newer().is_some() {
             return self.update_face;
         }
         None
@@ -2398,7 +2398,7 @@ impl App {
             },
             QuickRow::Update => {
                 #[cfg(feature = "brick")]
-                if let (true, Some(root)) = (self.net_up, &self.root) {self.wifi=Some(crate::brick_wifi::WifiMenu::update(root,self.boot_check.newer().cloned()));}
+                if let (true, Some(root)) = (self.net_up, &self.root) {self.wifi=Some(crate::brick_wifi::WifiMenu::update(root,self.auto_check.newer().cloned()));}
             },
             QuickRow::DateTime => {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
@@ -3048,7 +3048,7 @@ impl App {
             if let Some(wifi)=&mut self.wifi {wifi.set_battery(battery);wifi.poll();}
             if self.wifi.as_mut().is_some_and(|w|w.take_restart()) {self.updating=true;self.wifi_power=None;}
             for f in self.wifi.as_mut().map(|w|w.take_fetched()).unwrap_or_default() {self.adopt_label(f.platform,&f.stem,f.label);}
-            if let Some(newer)=self.wifi.as_mut().and_then(|w|w.take_update_verdict()) {self.boot_check.set(newer);}
+            if let Some(newer)=self.wifi.as_mut().and_then(|w|w.take_update_verdict()) {let now=self.now();self.auto_check.set(now,newer);}
             if let Some(t)=self.wifi.as_mut().and_then(|w|w.take_test_unlock()) {
                 self.achievement_notice(slot_cheevos::Notice::Unlocked{title:t.title,description:t.description,points:t.points,badge:String::new()},t.badge);
             }
@@ -3066,9 +3066,10 @@ impl App {
                 self.clock_sync_at = 0;
             }
             self.net_on = self.net_up || crate::brick_wifi::radio_on();
+            let in_game = matches!(self.phase, Phase::Playing { .. } | Phase::Inserting { .. });
+            let (now, allowed) = (self.now(), self.state.update_check && self.net_up && !in_game);
             if let Some(root) = &self.root {
-                self.boot_check
-                    .poll(root, self.state.update_check, self.net_up);
+                self.auto_check.poll(root, now, allowed);
             }
             // On but offline: joined with no address, as waking from sleep can leave it, is
             // put right without turning Wi-Fi off and on. Not while the Wi-Fi screen is busy.
@@ -4113,6 +4114,8 @@ impl App {
         self.end_link();
         self.close_game_menu();
         self.flush_eject(&cart);
+        #[cfg(feature = "brick")]
+        self.auto_check.soon();
         self.pending = None;
         self.refusal = None;
         self.refused_from = None;
