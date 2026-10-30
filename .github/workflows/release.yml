@@ -87,6 +87,10 @@ jobs:
         run: sh brick/sim.sh unit
 
       - name: Scenarios
+        # One at a time, as on pull requests: side by side on the runner's two cores they miss
+        # button presses.
+        env:
+          JOBS: 1
         run: sh brick/sim.sh test
 
       - name: Keep the screenshots
