@@ -16,7 +16,7 @@ fi
 export SLOT_BOOT_TIMES="${SLOT_BOOT_TIMES:-$SLOT_ROOT/Logs/boot-times.log}"
 stamp() { echo "$(cut -d' ' -f1 /proc/uptime 2>/dev/null) $*" >> "$SLOT_BOOT_TIMES" 2>/dev/null; }
 stamp launch.sh started
-printf 'slot Brick v0.50\n'
+printf 'slot Brick v0.60\n'
 date
 uname -a
 # Keep inherited NextUI libraries ahead of the stock fallback.
