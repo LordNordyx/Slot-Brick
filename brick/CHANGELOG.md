@@ -1,20 +1,24 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
-- Update symbol: when a newer Slot is out, a small arrow shows in the footer beside Wi-Fi. Slot asks GitHub on your update channel when Wi-Fi connects, every 30 minutes after that, and each time you close a game, never while you play. Online → Update opens straight on what it found, and Install checks once more first, so you never get a build that something newer has replaced since. The symbol goes once you're up to date. Turn it off in System → Check for Updates, and Slot won't contact GitHub on its own.
-- Fixed: Online, Clock and Saving in the HOME menu showed A CHANGE at the bottom instead of A OPEN.
-- Faster startup with PlayStation games: Slot no longer reads every `.bin` disc image in full while it looks for your games, which could add a minute or more to startup with a few PS1 games on the card.
-- Zipped games: put `.zip` or `.7z` ROMs in `Slot/Games/GB`, `GBC`, `GBA`, `NES` or `SNES` and they play like the plain ROM, under the archive's name. Zip a ROM under its own name and it keeps its saves, states, label and play time. Each archive needs exactly one ROM in it; it is unpacked into `Slot/System/Cache/Unpacked` when you start it, and only the last one is kept. PlayStation games stay as they are.
-- Pause menu: tap HOME in a game to pause it and choose Resume, Save State, Load State (opens the save state switcher), Reset Game or Quit Game. Reset Game starts the game over, as the console's reset button does: its battery save stays, play since your last save is lost. B or HOME resumes. Hold HOME and double-tap HOME work as before. Not during multiplayer, where the game can't pause.
-- Slot OS for the Brick Pro (experimental, not yet tried on a Brick Pro): flash `slot-os-brickpro-…-sd-card.img.xz`. It is built from TrimUI's Brick Pro firmware, reads the Pro's own button layout, and its left stick works as the D-pad, as on stock firmware. Please report how it goes in issue #65.
-- Sounds: the HOME menu now makes a soft pop as you move, change a setting, open a page and go back; a GBA cart pops as it opens for the core picker, and snaps shut as it closes; and a label slaps down as it lands on its cart.
-- System → System Sounds: set how loud Slot's own sounds are (Volume, 0–100%, on top of the Brick's volume), and turn each kind on or off: Menu, Favorite Star, Cart In & Out, Cart Opening and Label On. Sounds in quick succession no longer add up to louder and louder; each takes over from the last.
-- Fixed: putting a label on a GBA cart in its own colour (such as Pokémon Ruby's red) showed the cart black while framing the label and as it flew on. And while a label flies on, the cart's empty label slot now shows its plastic, in the colour you picked, rather than black.
-- Favorites: the star now pops onto the cart when you press Y, with one of five pop sounds at random, and pops off again with a lower, softer one. It's shaded too, with a lit and a dark side.
-- Library → Systems: hide the shelves of systems you don't play. The last system with games can't be hidden.
-- System → Reset Settings: puts every setting back to how it came (LEDs and font included). Press A, then A again when it asks "Sure?". Games, saves, states, play time, favorites, the clock, brightness and volume stay.
-- System → About is now a page: the version, whether it is a Dev build or a release, the device, the firmware (stock or Slot OS), and how much of the SD card is free. The label is still there, under About → Label.
-- Fixed: after waking from sleep, Wi-Fi could say it was connected while Cart Art, RetroAchievements and Update stayed greyed out until Wi-Fi was turned off and on. Slot now notices and gets an address again by itself.
+
+## v0.60
+**New since v0.50:**
+
+### Features
+- Added a check for updates: on boot, then every 30 minutes and whenever you slot a game out, while Wi-Fi is on. A small arrow shows in the footer when a newer Slot is out.
+- Added a pause menu: tap HOME in a game to resume, save or load a state, reset or quit. By @kirby-letsgo
+- Added support for zipped games (`.zip` and `.7z`) for every system except PS1. By @kirby-letsgo
+- Favorites got a makeover: press Y on a cartridge and a star pops onto it with a nice sound.
+- Added various system sounds, and you can turn each one on or off in System → System Sounds.
+- Speaking of menus, the settings have been reorganized so related things sit together. They're still rough in places, so expect more changes.
+
+### Fixes
+- Fixed PS1 games slowing down startup. By @TT-Hipster1941
+- Fixed Wi-Fi not showing as connected after waking from sleep.
+- Fixed the GBA cart colour during the label animation.
+
+**Slot OS for the Brick Pro** hasn't been fully tested on a Brick Pro, so if anything acts weird, please open an issue.
 
 ## v0.50
 **New since v0.44:**
