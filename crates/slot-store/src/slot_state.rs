@@ -41,6 +41,9 @@ pub struct SlotState {
     pub utc_offset_min: i16,
     /// The clock is set from an internet time server whenever Wi-Fi is up.
     pub auto_clock: bool,
+    /// HOME → System → Check for Updates: once a boot, when Wi-Fi first comes up, GitHub is
+    /// asked whether a newer Slot is out.
+    pub update_check: bool,
     /// HOME → Library: the order of each shelf, and whether only favorites are on them.
     pub library_sort: crate::LibrarySort,
     pub favorites_only: bool,
@@ -105,6 +108,7 @@ impl SlotState {
             clock_set: self.clock_set,
             utc_offset_min: self.utc_offset_min,
             auto_clock: self.auto_clock,
+            update_check: self.update_check,
             ..SlotState::default()
         }
     }
@@ -180,6 +184,7 @@ impl Default for SlotState {
             clock_set: false,
             utc_offset_min: 0,
             auto_clock: true,
+            update_check: true,
             library_sort: crate::LibrarySort::Az,
             favorites_only: false,
             hidden_systems: [false; Platform::ALL.len()],
@@ -273,6 +278,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         ("sound_cart", s.sound_cart),
         ("sound_cart_open", s.sound_cart_open),
         ("sound_label", s.sound_label),
+        ("update_check", s.update_check),
     ] {
         let _ = writeln!(text, "{key}={}", on as u8);
     }
@@ -294,6 +300,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut clock_set = None;
     let mut utc_offset_min = None;
     let mut auto_clock = None;
+    let mut update_check = None;
     let mut library_sort = None;
     let mut favorites_only = None;
     let mut hidden_systems = [false; Platform::ALL.len()];
@@ -341,6 +348,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "clock_set" => clock_set = Some(level(value, 1)? == 1),
             "utc_offset_min" => utc_offset_min = Some(offset(value)?),
             "auto_clock" => auto_clock = flag(value),
+            "update_check" => update_check = flag(value),
             "library_sort" => library_sort = crate::LibrarySort::parse(value),
             "favorites_only" => favorites_only = flag(value),
             // hidden_systems=gb,nes: a system not known (or not written) is shown.
@@ -401,6 +409,7 @@ fn parse(text: &str) -> Option<SlotState> {
         clock_set: clock_set?,
         utc_offset_min: utc_offset_min?,
         auto_clock: auto_clock.unwrap_or(fallback.auto_clock),
+        update_check: update_check.unwrap_or(fallback.update_check),
         library_sort: library_sort.unwrap_or(fallback.library_sort),
         favorites_only: favorites_only.unwrap_or(fallback.favorites_only),
         hidden_systems,

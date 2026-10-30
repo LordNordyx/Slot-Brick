@@ -481,6 +481,10 @@ impl Frontend {
             (compositor.create_texture(face.w, face.h, &face.rgba), face.w, face.h)
         });
         self.session.app_mut().set_wifi_faces(wifi);
+        // Beside it, while a newer Slot is out.
+        let update = icon_face(Icon::Update, slot_ui::WIFI_PX, HUD_INK);
+        let update = (compositor.create_texture(update.w, update.h, &update.rgba), update.w, update.h);
+        self.session.app_mut().set_update_face(update);
         // A favorite's star, gold with a lit side and a shaded one, outlined so it shows on any
         // plastic.
         let star = slot_ui::star_face(STAR_PX, STAR_INK, STAR_LIGHT, STAR_SHADE);

@@ -1,3 +1,6 @@
+// HeadlessSurface is the Mac's only: elsewhere these run in the Brick simulator's scenarios.
+#![cfg(target_os = "macos")]
+
 use slot_gfx::{
     blue_light_gain, canvas_size, lcd3x_factors, lcd3x_mask, Compositor, Draw, HeadlessSurface,
     ScreenEffect, OUT_H, OUT_W, SRC_H, SRC_W,

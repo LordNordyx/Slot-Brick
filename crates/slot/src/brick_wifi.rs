@@ -379,12 +379,13 @@ impl WifiMenu{
         let status=format!("{} games have a label. A on one twice deletes it",list.games.len());
         Self{worker:None,face:None,dirty:true,on:true,status,networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:Some(list),ra:None,query:None,update:None}
     }
-    pub fn update(root:&Path)->Self{
-        let mut s=Self::cart_art_free();s.update=Some(crate::brick_update::UpdateScreen::open(root));s
+    pub fn update(root:&Path,known:Option<crate::update::Manifest>)->Self{
+        let mut s=Self::cart_art_free();s.update=Some(crate::brick_update::UpdateScreen::open(root,known));s
     }
     fn cart_art_free()->Self{Self{worker:None,face:None,dirty:true,on:true,status:String::new(),networks:Vec::new(),row:0,keyboard:None,refreshed:Instant::now(),art:None,fetched:Vec::new(),list:None,ra:None,query:None,update:None}}
     /// The update is in: Slot should end and start again.
     pub fn take_restart(&mut self)->bool{self.update.as_mut().is_some_and(|u|u.take_restart())}
+    pub fn take_update_verdict(&mut self)->Option<Option<crate::update::Manifest>>{self.update.as_mut().and_then(|u|u.take_verdict())}
     pub fn set_battery(&mut self,battery:Option<(u8,bool)>){if let Some(u)=&mut self.update{u.battery=battery;}}
     pub fn achievements()->Self{
         let account=ra::load(&card_root());

@@ -467,6 +467,34 @@ fn the_other_direction_letting_go_does_not_stop_the_repeat() {
 }
 
 #[test]
+fn a_newer_slot_shows_left_of_the_wifi_symbol_and_alone_takes_its_place() {
+    let (wifi, update) = (TexId::from_raw(7), TexId::from_raw(8));
+    let x_of = |want_wifi: bool, want_update: bool, tex: TexId| {
+        let mut out = Vec::new();
+        let face = |t: TexId| (t, 18, 18);
+        draw_footer(
+            None,
+            Printed::default(),
+            None,
+            want_wifi.then(|| face(wifi)),
+            want_update.then(|| face(update)),
+            Printed { face: None, w: 40 },
+            &mut out,
+        );
+        out.iter()
+            .find_map(|d| match *d {
+                Draw::Tex { x, tex: t, .. } if t == tex => Some(x),
+                _ => None,
+            })
+            .expect("drawn")
+    };
+    let alone = x_of(true, false, wifi);
+    assert_eq!(x_of(true, true, wifi), alone, "the Wi-Fi symbol stays where it was");
+    assert!(x_of(true, true, update) <= alone - 18.0, "the update symbol sits left of it");
+    assert_eq!(x_of(false, true, update), alone);
+}
+
+#[test]
 fn the_gauge_starts_at_the_case_margin() {
     let mut out = Vec::new();
     draw_footer(
@@ -476,6 +504,7 @@ fn the_gauge_starts_at_the_case_margin() {
         }),
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(1)),
+        None,
         None,
         Printed { face: None, w: 40 },
         &mut out,
@@ -500,6 +529,7 @@ fn the_band_prints_the_charge_at_one_margin_and_the_clock_at_the_other() {
         }),
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(1)),
+        None,
         None,
         Printed { face: None, w: 40 },
         &mut out,
@@ -549,6 +579,7 @@ fn the_footer_does_not_move_the_gauge_when_the_charge_state_changes() {
         Printed { face: None, w: 30 },
         None,
         None,
+        None,
         Printed { face: None, w: 40 },
         &mut idle,
     );
@@ -560,6 +591,7 @@ fn the_footer_does_not_move_the_gauge_when_the_charge_state_changes() {
         }),
         Printed { face: None, w: 30 },
         Some(TexId::from_raw(2)),
+        None,
         None,
         Printed { face: None, w: 40 },
         &mut charging,
@@ -578,6 +610,7 @@ fn the_clock_stays_at_the_right_margin() {
     draw_footer(
         None,
         Printed::default(),
+        None,
         None,
         None,
         Printed { face: None, w: 40 },
@@ -599,6 +632,7 @@ fn a_band_with_no_gauge_still_draws_its_clock() {
     draw_footer(
         None,
         Printed::default(),
+        None,
         None,
         None,
         Printed { face: None, w: 40 },

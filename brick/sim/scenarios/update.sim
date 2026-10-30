@@ -1,6 +1,6 @@
 # HOME → Online → Update finds a newer release, shows what is new in it, and asks again before
 # installing; B then keeps the Slot there is. L1 / R1 scroll notes too long for the screen.
-# With Wi-Fi off the row is greyed out.
+# With Wi-Fi off the row is greyed out. Once Wi-Fi is up, the footer shows a newer Slot is out.
 press a
 phase Shelf
 press menu
@@ -14,7 +14,9 @@ press b
 press b
 phase Shelf
 set online 1
-wait 400
+wait 1000
+# Wi-Fi up for the first time this boot: the newer release puts its symbol beside Wi-Fi's.
+snap shelf-update-icon
 press menu
 phase QuickMenu
 press up

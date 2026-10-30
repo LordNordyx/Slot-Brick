@@ -29,10 +29,12 @@ pub enum Icon {
     WifiOff,
     /// A favorite, on its cart on the shelf.
     Star,
+    /// A newer Slot is out, beside the Wi-Fi symbol.
+    Update,
 }
 
 impl Icon {
-    pub const ALL: [Icon; 16] = [
+    pub const ALL: [Icon; 17] = [
         Icon::Volume,
         Icon::VolumeZero,
         Icon::VolumeMuted,
@@ -49,6 +51,7 @@ impl Icon {
         Icon::WifiNoRoute,
         Icon::WifiOff,
         Icon::Star,
+        Icon::Update,
     ];
 
     pub fn index(self) -> usize {
@@ -74,6 +77,7 @@ impl Icon {
             Icon::WifiNoRoute => '\u{f091f}',
             Icon::WifiOff => '\u{f05aa}',
             Icon::Star => '\u{f005}',
+            Icon::Update => '\u{f0ce1}',
         }
     }
 }
