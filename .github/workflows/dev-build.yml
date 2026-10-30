@@ -1,8 +1,8 @@
 # Every change to main builds the SD card and puts it in the "Dev build" release, replacing
 # the one before, so its download link always gives the latest card. What Slot's Update screen
 # downloads (dev-update.txt and the zips it names) goes to the Updates release instead.
-# Numbered releases are still made by hand. Changes to the docs, the changelog and the licences alone build nothing
-# new, so they are skipped (the next code change brings their notes along).
+# Numbered releases are still made by hand. Changes to the docs, the changelog and the licences
+# alone build nothing new, so they are skipped (the next code change brings their notes along).
 name: Dev build
 
 on:
