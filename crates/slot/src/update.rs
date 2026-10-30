@@ -1,5 +1,6 @@
-//! Updating Slot from its GitHub releases. Each release carries `update.txt`, naming the card
-//! zip and its SHA-256, and `update.txt.sig`, its Ed25519 signature by the release key. A zip
+//! Updating Slot from GitHub. The Updates release (tag `updates`) holds what Slot downloads:
+//! `update.txt`, naming the card zip and its SHA-256, `update.txt.sig`, its Ed25519 signature
+//! by the release key, and the zip itself; the version releases hold only what people download. A zip
 //! is only unpacked once both check out. Slot's own files are unpacked beside the old ones and
 //! swapped in, with the old ones kept until the new Slot has shown its first frame: if it never
 //! does, launch.sh puts them back. The player's games, saves and settings are never touched.
@@ -12,6 +13,8 @@ use ring::signature::{UnparsedPublicKey, ED25519};
 
 /// Where releases are downloaded from. SLOT_UPDATE_URL points elsewhere (the simulator, a test).
 pub const RELEASES: &str = "https://github.com/LordNordyx/Slot-Brick/releases";
+/// The release holding every channel's update.txt and the zips they name.
+const UPDATES: &str = "updates";
 
 /// The public half of the release key; the release workflows sign update.txt with the other.
 const RELEASE_KEY: [u8; 32] = [
@@ -220,21 +223,17 @@ fn manifest_name(slot_os: bool, model: slot_power::Model) -> &'static str {
     }
 }
 
-/// Where the manifest and the zip are, for each channel.
+/// Where each channel's manifest is: in the Updates release, the Dev build's named `dev-…`.
 fn manifest_url(base: &str, channel: Channel) -> String {
     let name = manifest_name(slot_power::slot_os(), slot_power::model());
     match channel {
-        Channel::Release => format!("{base}/latest/download/{name}"),
-        Channel::Dev => format!("{base}/download/dev/{name}"),
+        Channel::Release => format!("{base}/download/{UPDATES}/{name}"),
+        Channel::Dev => format!("{base}/download/{UPDATES}/dev-{name}"),
     }
 }
 
 fn zip_url(base: &str, m: &Manifest) -> String {
-    let tag = match m.channel {
-        Channel::Release => m.version.as_str(),
-        Channel::Dev => "dev",
-    };
-    format!("{base}/download/{tag}/{}", m.zip)
+    format!("{base}/download/{UPDATES}/{}", m.zip)
 }
 
 pub fn base() -> String {
@@ -546,7 +545,7 @@ mod tests {
     fn manifest_text(channel: &str, version: &str, size: u64, sha: &str) -> String {
         format!(
             "{HEADER}\nchannel={channel}\nversion={version}\ncommit=0123456789abcdef0123456789abcdef01234567\n\
-             zip=slot-brick-{version}-sd-card.zip\nsize={size}\nsha256={sha}\n\n- Something new.\n\n- And a fix.\n"
+             zip=slot-stock-{version}.zip\nsize={size}\nsha256={sha}\n\n- Something new.\n\n- And a fix.\n"
         )
     }
 
@@ -587,7 +586,7 @@ mod tests {
     fn a_manifest_reads_its_fields_and_notes() {
         let m = Manifest::parse(&manifest_text("release", "v0.44", 12, &"ab".repeat(32))).unwrap();
         assert_eq!((m.channel, m.version.as_str(), m.size, m.short()), (Channel::Release, "v0.44", 12, "0123456"));
-        assert_eq!(m.zip, "slot-brick-v0.44-sd-card.zip");
+        assert_eq!(m.zip, "slot-stock-v0.44.zip");
         assert_eq!(m.notes, ["- Something new.", "- And a fix."]);
     }
 
@@ -743,13 +742,12 @@ mod tests {
         let sha: String = ring::digest::digest(&ring::digest::SHA256, zip).as_ref().iter().map(|b| format!("{b:02x}")).collect();
         let text = manifest_text("release", "v9.0", zip.len() as u64, &sha);
         let at = dir.join("releases");
-        fs::create_dir_all(at.join("latest/download")).unwrap();
-        fs::create_dir_all(at.join("download/v9.0")).unwrap();
-        fs::write(at.join("latest/download/update.txt"), &text).unwrap();
+        fs::create_dir_all(at.join("download/updates")).unwrap();
+        fs::write(at.join("download/updates/update.txt"), &text).unwrap();
         if sign {
-            fs::write(at.join("latest/download/update.txt.sig"), sim_pair().sign(text.as_bytes()).as_ref()).unwrap();
+            fs::write(at.join("download/updates/update.txt.sig"), sim_pair().sign(text.as_bytes()).as_ref()).unwrap();
         }
-        fs::write(at.join("download/v9.0/slot-brick-v9.0-sd-card.zip"), zip).unwrap();
+        fs::write(at.join("download/updates/slot-stock-v9.0.zip"), zip).unwrap();
         format!("file://{}", at.display())
     }
 
@@ -784,17 +782,26 @@ mod tests {
         let swapped: &[(&str, &[u8])] = &[("SD-CARD/Slot/System/slot", b"evil slot")];
         let mut other = card_zip(swapped);
         other.resize(m.size as usize, 0);
-        fs::write(dir.path().join("releases/download/v9.0/slot-brick-v9.0-sd-card.zip"), other).unwrap();
+        fs::write(dir.path().join("releases/download/updates/slot-stock-v9.0.zip"), other).unwrap();
         assert!(install(&base, &m, &card, &Progress::default()).unwrap_err().contains("checksum"));
         assert_eq!(read(&card, "Slot/System/slot"), "old slot");
         assert!(!card.join(DIR).exists());
     }
 
     #[test]
+    fn both_channels_update_from_the_updates_release() {
+        let base = "https://example.org/releases";
+        let m = Manifest::parse(&manifest_text("dev", "v9.0", 1, &"0".repeat(64))).unwrap();
+        assert!(manifest_url(base, Channel::Release).starts_with("https://example.org/releases/download/updates/update"));
+        assert!(manifest_url(base, Channel::Dev).starts_with("https://example.org/releases/download/updates/dev-update"));
+        assert_eq!(zip_url(base, &m), "https://example.org/releases/download/updates/slot-stock-v9.0.zip");
+    }
+
+    #[test]
     fn a_tampered_description_fails_its_signature() {
         let dir = tempfile::tempdir().unwrap();
         let base = publish(dir.path(), &card_zip(NEW_CARD), true);
-        let path = dir.path().join("releases/latest/download/update.txt");
+        let path = dir.path().join("releases/download/updates/update.txt");
         let text = fs::read_to_string(&path).unwrap().replace("v9.0", "v9.1");
         fs::write(&path, text).unwrap();
         assert!(check(&base, Channel::Release).unwrap_err().contains("signature"));

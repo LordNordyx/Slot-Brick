@@ -4,12 +4,12 @@
 Everything goes under SD-CARD/, empty folders included (Games/NES and the like must exist on
 the card), and file modes are kept, so Slot/System/slot stays executable.
 
-Usage: python3 brick/zip-card.py [dist-brick] [slot-brick-dev-sd-card.zip]
+Usage: python3 brick/zip-card.py [dist-brick] [slot-stock-dev.zip]
 """
 import os, stat, sys, zipfile
 
 src = sys.argv[1] if len(sys.argv) > 1 else 'dist-brick'
-out = sys.argv[2] if len(sys.argv) > 2 else 'slot-brick-dev-sd-card.zip'
+out = sys.argv[2] if len(sys.argv) > 2 else 'slot-stock-dev.zip'
 with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
     for root, dirs, files in os.walk(src):
         dirs.sort()

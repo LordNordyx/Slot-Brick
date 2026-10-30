@@ -69,7 +69,7 @@ fresh() {
     # A release to update to, signed with the simulator's key, which only a simulator build takes.
     python3 -I brick/sim/make-update.py "$1/releases"
     openssl pkeyutl -sign -rawin -inkey brick/sim/update-key.pem \
-        -in "$1/releases/latest/download/update.txt" -out "$1/releases/latest/download/update.txt.sig"
+        -in "$1/releases/download/updates/update.txt" -out "$1/releases/download/updates/update.txt.sig"
 }
 
 # Where the cart art and label servers live. Docker looks names up with this machine's DNS;

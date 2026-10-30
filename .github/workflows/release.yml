@@ -130,17 +130,17 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           sh brick/os/build.sh dist-brick
-          mv dist-os/slot-os.img.xz "slot-os-$TAG-sd-card.img.xz"
-          mv dist-os/slot-os-update.zip "slot-os-$TAG-update.zip"
+          mv dist-os/slot-os.img.xz "slot-os-brick-$TAG.img.xz"
+          mv dist-os/slot-os-update.zip "slot-os-brick-$TAG-update.zip"
           # The Brick Pro's (experimental): its own boot chain, kernel and drivers.
           SLOT_OS_MODEL=brickpro sh brick/os/build.sh dist-brick
-          mv dist-os/slot-os-brickpro.img.xz "slot-os-brickpro-$TAG-sd-card.img.xz"
+          mv dist-os/slot-os-brickpro.img.xz "slot-os-brickpro-$TAG.img.xz"
           mv dist-os/slot-os-brickpro-update.zip "slot-os-brickpro-$TAG-update.zip"
 
       - name: Zip the card
         env:
           TAG: ${{ github.ref_name }}
-        run: python3 brick/zip-card.py dist-brick "slot-brick-$TAG-sd-card.zip"
+        run: python3 brick/zip-card.py dist-brick "slot-stock-$TAG.zip"
 
       # update.txt, signed: what Slot's Update screen finds and checks the zip by.
       - name: Describe and sign the update
@@ -148,8 +148,8 @@ jobs:
           TAG: ${{ github.ref_name }}
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
-          bash brick/update-manifest.sh release "$TAG" "slot-brick-$TAG-sd-card.zip" update
-          bash brick/update-manifest.sh release "$TAG" "slot-os-$TAG-update.zip" update update-os.txt
+          bash brick/update-manifest.sh release "$TAG" "slot-stock-$TAG.zip" update
+          bash brick/update-manifest.sh release "$TAG" "slot-os-brick-$TAG-update.zip" update update-os.txt
           bash brick/update-manifest.sh release "$TAG" "slot-os-brickpro-$TAG-update.zip" update update-os-brickpro.txt
 
       - name: Publish the release
@@ -160,8 +160,11 @@ jobs:
         run: |
           bash brick/release-notes.sh "$TAG" > notes.md
           bash brick/os/release-note.sh "$TAG" >> notes.md
-          gh release create "$TAG" "slot-brick-$TAG-sd-card.zip" update/update.txt update/update.txt.sig \
-            "slot-os-$TAG-sd-card.img.xz" "slot-os-$TAG-update.zip" update/update-os.txt update/update-os.txt.sig \
-            "slot-os-brickpro-$TAG-sd-card.img.xz" "slot-os-brickpro-$TAG-update.zip" \
-            update/update-os-brickpro.txt update/update-os-brickpro.txt.sig \
+          # Only what people download. What Slot's Update screen downloads goes to the Updates
+          # release: the zips first, so the update files never name a zip that is not there yet.
+          gh release create "$TAG" "slot-stock-$TAG.zip" "slot-os-brick-$TAG.img.xz" "slot-os-brickpro-$TAG.img.xz" \
             --title "$TAG" --notes-file notes.md --verify-tag
+          bash brick/updates-release.sh
+          gh release upload updates "slot-stock-$TAG.zip" "slot-os-brick-$TAG-update.zip" "slot-os-brickpro-$TAG-update.zip" --clobber
+          gh release upload updates update/update.txt update/update.txt.sig update/update-os.txt update/update-os.txt.sig \
+            update/update-os-brickpro.txt update/update-os-brickpro.txt.sig --clobber
