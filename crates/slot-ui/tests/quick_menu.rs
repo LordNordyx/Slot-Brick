@@ -77,14 +77,34 @@ fn the_fast_forward_row_offers_the_four_ceilings_the_card_can_hold() {
 
 #[test]
 fn the_rows_run_in_the_order_the_user_chose() {
-    #[cfg(not(feature="brick"))]
-    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Library", "System"]);
-    #[cfg(not(feature="brick"))]
-    assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["Date & Time", "About"]);
-    #[cfg(feature="brick")]
-    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Screen", "Gameplay", "Library", "Wi-Fi", "Cart Art", "RetroAchievements", "Update", "System"]);
-    #[cfg(feature="brick")]
-    assert_eq!(QuickRow::SYSTEM.map(QuickRow::label), ["LEDs", "Date & Time", "Auto Clock", "About"]);
+    #[cfg(not(feature = "brick"))]
+    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Emulation", "Gameplay", "Library", "System"]);
+    #[cfg(not(feature = "brick"))]
+    assert_eq!(
+        QuickRow::SYSTEM.map(QuickRow::label),
+        ["Date & Time", "Font", "Rumble", "System Sounds", "Low Battery Shutdown", "Reset Settings", "About"]
+    );
+    #[cfg(feature = "brick")]
+    assert_eq!(QuickRow::MAIN.map(QuickRow::label), ["Emulation", "Gameplay", "Library", "Online", "System"]);
+    #[cfg(feature = "brick")]
+    assert_eq!(
+        QuickRow::SYSTEM.map(QuickRow::label),
+        [
+            "LEDs",
+            "Clock",
+            "Font",
+            "Rumble",
+            "System Sounds",
+            "Low Battery Shutdown",
+            "Check for Updates",
+            "Reset Settings",
+            "About"
+        ]
+    );
+    #[cfg(feature = "brick")]
+    assert_eq!(QuickRow::ONLINE.map(QuickRow::label), ["Wi-Fi", "Cart Art", "RetroAchievements", "Update"]);
+    #[cfg(feature = "brick")]
+    assert_eq!(QuickRow::CLOCK.map(QuickRow::label), ["Date & Time", "Auto Clock"]);
     assert_eq!(QuickRow::SCREEN.map(QuickRow::label), ["Game Boy / GBC", "Game Boy Advance", "NES", "SNES", "PlayStation"]);
     assert_eq!(
         QuickRow::SCREEN_GB.map(QuickRow::label),
@@ -100,50 +120,34 @@ fn the_rows_run_in_the_order_the_user_chose() {
     assert_eq!(systems, [Platform::Gb, Platform::Gbc, Platform::Gba, Platform::Nes, Platform::Snes, Platform::Ps1]);
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
-        [
-            "Fast Forward",
-            "Fast Forward Sound",
-            "Rewind",
-            "Turbo Buttons",
-            "Rumble",
-            "Auto Save on Eject",
-            "Auto Save",
-            "Low Battery Shutdown"
-        ]
+        ["Fast Forward", "Fast Forward Sound", "Rewind", "Turbo Buttons", "Saving"]
     );
-    let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
-    assert_eq!(
-        opens,
-        [
-            QuickRow::Screen,
-            QuickRow::DateTime,
-            QuickRow::About,
-            QuickRow::Game,
-            QuickRow::Lights,
-            QuickRow::Wifi,
-            QuickRow::CartArt,
-            QuickRow::Achievements,
-            QuickRow::ScreenGb,
-            QuickRow::ScreenGba,
-            QuickRow::ScreenNes,
-            QuickRow::ScreenSnes,
-            QuickRow::Update,
-            QuickRow::System,
-            QuickRow::Library,
-            QuickRow::ScreenPs1
-        ]
-    );
-    for page in [
+    assert_eq!(QuickRow::SAVING.map(QuickRow::label), ["Auto Save", "Save on Eject"]);
+    // A row with a page under it says A OPEN, not CHANGE.
+    for row in QuickRow::ALL {
+        if row.child().is_some() {
+            assert!(row.opens(), "{row:?} has a page but does not open");
+        }
+    }
+    let mut pages = vec![
         &QuickRow::MAIN[..],
         &QuickRow::SYSTEM[..],
         &QuickRow::LIBRARY[..],
+        &QuickRow::SYSTEMS[..],
+        &QuickRow::SOUNDS[..],
+        &QuickRow::ABOUT[..],
         &QuickRow::SCREEN[..],
         &QuickRow::SCREEN_GB[..],
         &QuickRow::SCREEN_GBA[..],
         &QuickRow::SCREEN_NES[..],
         &QuickRow::SCREEN_SNES[..],
+        &QuickRow::SCREEN_PS1[..],
         &QuickRow::GAME[..],
-    ] {
+        &QuickRow::SAVING[..],
+    ];
+    #[cfg(feature = "brick")]
+    pages.extend([&QuickRow::ONLINE[..], &QuickRow::CLOCK[..]]);
+    for page in pages {
         for &row in page {
             assert_eq!(row.page(), page, "{row:?}");
         }

@@ -191,6 +191,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             clock_set: true,
             utc_offset_min: -300,
             auto_clock: true,
+            update_check: true,
             library_sort: slot_store::LibrarySort::Az,
             favorites_only: false,
             hidden_systems: [false; Platform::ALL.len()],
@@ -231,6 +232,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
     let s = SlotState {
         clock_set: true,
         auto_clock: false,
+        update_check: false,
         library_sort: slot_store::LibrarySort::MostPlayed,
         favorites_only: true,
         play_time_hours: true,
@@ -258,6 +260,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
     let text = std::fs::read_to_string(d.path().join("Config/slot.state")).unwrap();
     for line in [
         "auto_clock=0",
+        "update_check=0",
         "library_sort=most",
         "favorites_only=1",
         "play_time_hours=1",
@@ -504,7 +507,7 @@ fn hidden_systems_round_trip_and_a_card_from_before_them_hides_none() {
 }
 
 #[test]
-fn a_reset_keeps_the_game_the_clock_and_the_levels_and_nothing_else() {
+fn a_reset_keeps_the_game_the_clock_the_levels_and_the_update_check_and_nothing_else() {
     let mut s = SlotState {
         cart: Some("Pixel Racer".into()),
         cart_platform: Some(slot_store::Platform::Gba),
@@ -517,6 +520,7 @@ fn a_reset_keeps_the_game_the_clock_and_the_levels_and_nothing_else() {
         clock_set: true,
         utc_offset_min: 120,
         auto_clock: false,
+        update_check: false,
         favorites_only: true,
         rumble: false,
         shader_gba: Shader::Dot,
@@ -540,6 +544,7 @@ fn a_reset_keeps_the_game_the_clock_and_the_levels_and_nothing_else() {
             clock_set: true,
             utc_offset_min: 120,
             auto_clock: false,
+            update_check: false,
             ..SlotState::default()
         }
     );

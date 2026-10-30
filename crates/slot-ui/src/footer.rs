@@ -32,6 +32,7 @@ pub fn draw_footer(
     percent: Printed,
     bolt: Option<TexId>,
     wifi: Option<(TexId, u32, u32)>,
+    update: Option<(TexId, u32, u32)>,
     clock: Printed,
     out: &mut Vec<Draw>,
 ) {
@@ -39,10 +40,13 @@ pub fn draw_footer(
     draw_gauge(FOOTER_MARGIN, y, battery, percent, bolt, out);
     let clock_x = OUT_W as f32 - FOOTER_MARGIN - clock.w as f32;
     printed(clock_x, clock, out);
-    // To the left of the clock: the two together say what the Brick is doing right now.
-    if let Some((tex, w, h)) = wifi {
+    // To the left of the clock: the two together say what the Brick is doing right now. A
+    // newer Slot, when there is one, is told to the left of those.
+    let mut right = clock_x;
+    for (tex, w, h) in [wifi, update].into_iter().flatten() {
+        right -= WIFI_GAP + w as f32;
         out.push(Draw::Tex {
-            x: (clock_x - WIFI_GAP - w as f32).round(),
+            x: right.round(),
             y: (FOOTER_Y + (HINT_H as f32 - h as f32) / 2.0).round(),
             w: w as f32,
             h: h as f32,

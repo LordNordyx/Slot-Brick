@@ -89,10 +89,11 @@ pub enum QuickRow {
     SoundCartOpen,
     SoundLabel,
     SoundVolume,
+    UpdateCheck,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 76] = [
+    pub const ALL: [QuickRow; 77] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -169,6 +170,7 @@ impl QuickRow {
         QuickRow::SoundCartOpen,
         QuickRow::SoundLabel,
         QuickRow::SoundVolume,
+        QuickRow::UpdateCheck,
     ];
 
     #[cfg(not(feature = "brick"))]
@@ -179,9 +181,9 @@ impl QuickRow {
     #[cfg(feature = "brick")]
     pub const MAIN: [QuickRow; 5] = [QuickRow::Screen,QuickRow::Game,QuickRow::Library,QuickRow::Online,QuickRow::System];
     /// System: the Brick's lights, its clock, the font, rumble, Slot's sounds, the battery,
-    /// every setting back to how it came, and what Slot is.
+    /// asking GitHub for a newer Slot, every setting back to how it came, and what Slot is.
     #[cfg(feature = "brick")]
-    pub const SYSTEM: [QuickRow; 8] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::SystemSounds,QuickRow::BatteryShutdown,QuickRow::ResetSettings,QuickRow::About];
+    pub const SYSTEM: [QuickRow; 9] = [QuickRow::Lights,QuickRow::Clock,QuickRow::Font,QuickRow::Rumble,QuickRow::SystemSounds,QuickRow::BatteryShutdown,QuickRow::UpdateCheck,QuickRow::ResetSettings,QuickRow::About];
     /// System → System Sounds: how loud they all are, and each kind on or off.
     pub const SOUNDS: [QuickRow; 6] = [
         QuickRow::SoundVolume,
@@ -323,6 +325,8 @@ impl QuickRow {
             | QuickRow::BatteryShutdown
             | QuickRow::ResetSettings
             | QuickRow::About => &QuickRow::SYSTEM,
+            #[cfg(feature = "brick")]
+            QuickRow::UpdateCheck => &QuickRow::SYSTEM,
             QuickRow::ShowGba
             | QuickRow::ShowGb
             | QuickRow::ShowGbc
@@ -411,6 +415,7 @@ impl QuickRow {
             QuickRow::Clock => "Clock",
             QuickRow::Saving => "Saving",
             QuickRow::AutoClock => "Auto Clock",
+            QuickRow::UpdateCheck => "Check for Updates",
             QuickRow::Font => "Font",
             QuickRow::Lights => "LEDs",
             QuickRow::LedMode => "All LEDs",
@@ -478,6 +483,7 @@ impl QuickRow {
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
                 | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutLabel | QuickRow::SystemSounds
+                | QuickRow::Online | QuickRow::Clock | QuickRow::Saving
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1
         )
     }

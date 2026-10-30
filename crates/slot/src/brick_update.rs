@@ -49,16 +49,25 @@ pub struct UpdateScreen {
     /// screen last laid them out.
     scroll: usize,
     pub scroll_max: std::cell::Cell<usize>,
+    /// What the last check found for the footer's symbol to follow: the newer Slot, or None.
+    verdict: Option<Option<Manifest>>,
 }
 
 /// Lines L1 / R1 move the notes by.
 const SCROLL_STEP: usize = 3;
 
 impl UpdateScreen {
-    pub fn open(root: &Path) -> Self {
+    /// `known`: the newer Slot this boot's check found, shown straight away rather than asked
+    /// for again.
+    pub fn open(root: &Path, known: Option<Manifest>) -> Self {
         let channel = update::saved_channel(root);
         let mut s = Self::with(root, update::base(), Installed::current(), channel);
-        s.start_check();
+        match known.filter(|m| m.channel == channel) {
+            Some(m) => {
+                s.show(m);
+            }
+            None => s.start_check(),
+        }
         s
     }
 
@@ -80,6 +89,7 @@ impl UpdateScreen {
             restart: false,
             scroll: 0,
             scroll_max: std::cell::Cell::new(0),
+            verdict: None,
         }
     }
 
@@ -96,6 +106,11 @@ impl UpdateScreen {
 
     pub fn busy(&self) -> bool {
         self.check.is_some() || self.installing.is_some()
+    }
+
+    /// What the last check said about a newer Slot, once.
+    pub fn take_verdict(&mut self) -> Option<Option<Manifest>> {
+        self.verdict.take()
     }
 
     /// Swapped in: Slot should end, for launch.sh to start the new one.
@@ -142,12 +157,8 @@ impl UpdateScreen {
             self.check = None;
             match result {
                 Ok(m) => {
-                    let offer = update::offer(&self.installed, &m);
-                    self.status = self.found_line(&m, offer);
-                    self.found = Some((m, offer));
-                    if offer != Offer::UpToDate {
-                        self.row = 1;
-                    }
+                    let offer = self.show(m.clone());
+                    self.verdict = Some((offer == Offer::Newer).then_some(m));
                 }
                 Err(e) => self.status = e,
             }
@@ -185,6 +196,17 @@ impl UpdateScreen {
                 true
             }
         }
+    }
+
+    /// What a check found, on screen, with Install picked when there is something to install.
+    fn show(&mut self, m: Manifest) -> Offer {
+        let offer = update::offer(&self.installed, &m);
+        self.status = self.found_line(&m, offer);
+        self.found = Some((m, offer));
+        if offer != Offer::UpToDate {
+            self.row = 1;
+        }
+        offer
     }
 
     fn found_line(&self, m: &Manifest, offer: Offer) -> String {
@@ -361,6 +383,70 @@ impl UpdateScreen {
     }
 }
 
+/// The footer's update symbol. Once a boot, the first time Wi-Fi is up, the saved channel is
+/// asked for its latest update, as HOME → Update asks it. Nothing is downloaded but that, and a
+/// check that fails is not tried again.
+#[derive(Default)]
+pub struct BootCheck {
+    asked: bool,
+    answer: Option<mpsc::Receiver<Result<Manifest, String>>>,
+    /// The newer Slot found, for HOME → Update to show without asking again.
+    newer: Option<Manifest>,
+}
+
+impl BootCheck {
+    /// Starts the check when it is allowed and Wi-Fi is up, and takes its answer. True when the
+    /// symbol is to come or go.
+    pub fn poll(&mut self, root: &Path, allowed: bool, net_up: bool) -> bool {
+        if !self.asked && allowed && net_up {
+            let (base, channel) = (update::base(), update::saved_channel(root));
+            self.start(move || update::check(&base, channel));
+        }
+        let Some(rx) = &self.answer else { return false };
+        let got = match rx.try_recv() {
+            Ok(got) => got,
+            Err(mpsc::TryRecvError::Empty) => return false,
+            Err(mpsc::TryRecvError::Disconnected) => Err("The check stopped".into()),
+        };
+        self.answer = None;
+        self.found(got, &Installed::current())
+    }
+
+    fn start(&mut self, check: impl FnOnce() -> Result<Manifest, String> + Send + 'static) {
+        self.asked = true;
+        let (tx, rx) = mpsc::channel();
+        let spawned = thread::Builder::new().name("slot-update-check".into()).spawn(move || {
+            let _ = tx.send(check());
+        });
+        match spawned {
+            Ok(_) => self.answer = Some(rx),
+            Err(e) => eprintln!("slot: update check: {e}"),
+        }
+    }
+
+    fn found(&mut self, got: Result<Manifest, String>, installed: &Installed) -> bool {
+        match got {
+            Ok(m) => self.set((update::offer(installed, &m) == Offer::Newer).then_some(m)),
+            Err(e) => {
+                eprintln!("slot: update check: {e}");
+                false
+            }
+        }
+    }
+
+    /// What HOME → Update found, which the boot's check need not ask again. True when the
+    /// symbol is to come or go.
+    pub fn set(&mut self, newer: Option<Manifest>) -> bool {
+        self.asked = true;
+        self.answer = None;
+        std::mem::replace(&mut self.newer, newer).is_some() != self.newer.is_some()
+    }
+
+    pub fn newer(&self) -> Option<&Manifest> {
+        self.newer.as_ref()
+    }
+}
+
 fn mb(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / (1 << 20) as f64)
 }
@@ -397,6 +483,70 @@ mod tests {
         };
         s.found = Some((m, Offer::Newer));
         s.row = 1;
+    }
+
+    fn release(version: &str) -> Manifest {
+        Manifest {
+            channel: Channel::Release,
+            version: version.into(),
+            commit: "abcdef0123".into(),
+            zip: "z.zip".into(),
+            size: 1,
+            sha256: [0; 32],
+            notes: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_boot_check_waits_for_wifi_and_for_the_setting() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut b = BootCheck::default();
+        assert!(!b.poll(dir.path(), true, false));
+        assert!(!b.poll(dir.path(), false, true));
+        assert!(!b.asked && b.answer.is_none());
+    }
+
+    #[test]
+    fn the_symbol_shows_only_for_a_newer_slot_and_goes_once_up_to_date() {
+        let installed = Installed { version: "v0.43".into(), commit: "1111111".into(), channel: Channel::Release };
+        let mut b = BootCheck::default();
+        assert!(!b.found(Ok(release("v0.43")), &installed));
+        assert!(b.newer().is_none());
+        assert!(b.found(Ok(release("v0.44")), &installed));
+        assert_eq!(b.newer().map(|m| m.version.as_str()), Some("v0.44"));
+        assert!(b.set(None));
+        assert!(b.newer().is_none());
+    }
+
+    #[test]
+    fn a_failed_boot_check_shows_nothing_and_is_not_tried_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut b = BootCheck::default();
+        b.start(|| Err("no internet".into()));
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while b.answer.is_some() && std::time::Instant::now() < until {
+            b.poll(dir.path(), true, true);
+        }
+        assert!(b.answer.is_none() && b.newer().is_none());
+        b.poll(dir.path(), true, true);
+        assert!(b.answer.is_none(), "asked a second time");
+    }
+
+    #[test]
+    fn an_update_the_boot_found_is_shown_without_checking_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = UpdateScreen::open(dir.path(), Some(release("v99.0")));
+        assert!(!s.busy(), "checked again");
+        assert_eq!(s.lines()[1], "INSTALL V99.0");
+        assert_eq!(s.row(), 1);
+    }
+
+    #[test]
+    fn a_found_update_for_another_channel_is_checked_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut dev = release("v99.0");
+        dev.channel = Channel::Dev;
+        assert!(UpdateScreen::open(dir.path(), Some(dev)).busy());
     }
 
     #[test]
