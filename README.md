@@ -46,7 +46,7 @@ A port of [Slot.](https://github.com/BrandonKowalski/slot), originally developed
 | **RetroAchievements** | Log in from the menu and earn achievements in softcore mode. |
 | **Overlays** | Frames for GB, GBC, GBA, NES and SNES games, by KrutzOtrem, or your own 1024×768 ones; the game fits itself into the overlay's window. |
 | **Brick and Brick Hammer integration** | Screen and control support, plus LED power, brightness, colour, and effects. |
-| **Brick Pro** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. On Slot OS it has an image of its own (experimental, not yet tried on a Brick Pro). |
+| **Brick Pro** | Recognised by itself: the left stick works as the D-pad, and its stick lights have their own LEDs setting. On Slot OS it has an image of its own (experimental: tried by one player, with the buttons, left stick, LEDs and sleep working). |
 | **Sleep support** | Deep sleep with low battery drain. Auto-sleep after 5 minutes idle in menus or 15 minutes in game. |
 | **Low battery warning** | F1/F2 stay red at 15% or below and blink rapidly at 10% or below (500 ms cycle), even with decorative LEDs off. Charging restores your lights; at 5%, Slot saves and shuts down (3%, 5%, 10% or off under System → Low Battery Shutdown). |
 | **Adaptive performance** | Adaptive CPU clocks for smooth audio. |
@@ -129,7 +129,7 @@ Flashing the image erases **the whole card**. Copy everything on it to your comp
 Download `slot-os-brick-<version>.img.xz` from the [Releases](../../releases) page. There is no need to extract it.
 
 > [!IMPORTANT]
-> On a **Brick Pro**, download `slot-os-brickpro-<version>.img.xz` instead: the Brick Pro is wired differently (screen, buttons, sticks) and needs its own. It is **experimental and has not been tried on a Brick Pro yet**. If you try it, please report how it went in [issue #65](../../issues/65), with the card's `Slot/Logs` folder. Nothing on the Brick Pro is changed: take the card out and it starts as before.
+> On a **Brick Pro**, download `slot-os-brickpro-<version>.img.xz` instead: the Brick Pro is wired differently (screen, buttons, sticks) and needs its own. It is **experimental**: one player has tried it so far, with the buttons, the left stick, the LEDs and sleep working. If you try it, please report how it went in [issue #65](../../issues/65), with the card's `Slot/Logs` folder. Nothing on the Brick Pro is changed: take the card out and it starts as before.
 
 #### 3. Flash it onto the card
 
@@ -157,7 +157,7 @@ The card now shows one drive in Windows, **SLOT**, with a `Slot` folder. From yo
 - The stock firmware apps (below) are not there; take the card out to use the stock OS.
 - **HOME → Online → Update** updates Slot OS itself as well as Slot. If an update does not start, the previous version is put back.
 - If the Brick loses power while running, the card is checked and repaired at the next start.
-- A Brick Pro needs its own image, `slot-os-brickpro-…` (experimental, not yet tried on a Brick Pro). Its left stick works as the D-pad, as on stock firmware.
+- A Brick Pro needs its own image, `slot-os-brickpro-…` (experimental). Its left stick works as the D-pad, as on stock firmware.
 
 #### Going back to stock firmware
 

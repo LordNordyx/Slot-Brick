@@ -1,6 +1,7 @@
 # Changelog — Slot. for TrimUI Brick
 
 ## Unreleased
+- Fixed: on Slot OS, the mute switch did nothing, on the Brick and the Brick Pro. Thanks to @jyav-19 for testing Slot OS on a Brick Pro.
 - Tidier downloads: each release now holds only `slot-stock-…zip` for stock firmware and `slot-os-brick-…img.xz` / `slot-os-brickpro-…img.xz` for Slot OS. Online → Update gets its files from a separate Updates release. Coming from v0.60 or older, update to this version by hand once: on stock firmware, copy what is inside the `SD-CARD` folder of `slot-stock-…zip` onto your card; on Slot OS, do the same with `slot-os-brick-…-update.zip` (or the Brick Pro's) from the Updates release. Your games, saves and settings stay.
 
 ## v0.60
