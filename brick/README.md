@@ -198,7 +198,7 @@ once Wi-Fi connects, unless you have already changed them.
 **Brick Pro:** Slot tells a Brick Pro from a Brick by itself. Its left stick
 works as the D-pad, in menus and in games (in a PlayStation game, as the DualShock's left stick), and **HOME → System → LEDs** gains a **Sticks** row
 for the lights around the sticks (**Triggers** sets the shoulder lights at the back). The right
-stick, the stick clicks and the F1/F2 keys do nothing yet. On Slot OS its sticks don't work yet.
+stick, the stick clicks and the F1/F2 keys do nothing yet.
 
 **Wi-Fi status:** the icon beside the clock shows whether Wi-Fi is connected, on but not
 reaching the network, or off.

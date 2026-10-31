@@ -281,6 +281,11 @@ export SLOT_GPU_READY=/run/gpu-ready
 # before sound plays.
 sh /etc/mixer.sh > /run/alsa.log 2>&1 &
 
+# The mute switch (pin 243, on the Brick and the Brick Pro), which Slot reads from
+# /sys/class/gpio/gpio243/value: exported as an input, as TrimUI's trimui_inputd does on stock.
+[ -d /sys/class/gpio/gpio243 ] || echo 243 > /sys/class/gpio/export 2>/dev/null
+echo in > /sys/class/gpio/gpio243/direction 2>/dev/null
+
 # For working on Slot OS: a script on the card, run before Slot, its output in Logs/debug.log.
 if [ -f "$CARD/slot-os/debug.sh" ]; then
     mkdir -p "$ROOT/Logs"
