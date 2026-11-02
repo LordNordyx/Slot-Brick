@@ -120,12 +120,31 @@ const FAMICOM_LABEL: (u32, u32, u32, u32) = {
     (x0, y0, x1 - x0, y1 - y0)
 };
 
+/// The recess under Tengen's moulded triangle, open to the top edge same as the NES cart's
+/// (tengen_cart_detail.svg's #label inner line: 33.5..206.5 of 240, 92.5..274.5 of 288). The
+/// label picture fills it whole: the TENGEN sidebar, pinstripes and title band are printed
+/// on Tengen's own box art, not drawn by this shell.
+pub const fn tengen_label_panel(w: u32, h: u32) -> (u32, u32, u32, u32) {
+    (
+        (w * 140 + 500) / 1000,
+        (h * 321 + 500) / 1000,
+        (w * 860 + 500) / 1000,
+        (h * 953 + 500) / 1000,
+    )
+}
+
+const TENGEN_LABEL: (u32, u32, u32, u32) = {
+    let (x0, y0, x1, y1) = tengen_label_panel(NES_CART_W, NES_CART_H);
+    (x0, y0, x1 - x0, y1 - y0)
+};
+
 const PAD: u32 = 10;
 const MAX_LINES: usize = 3;
 const MAX_PX: f32 = LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
 const GB_MAX_PX: f32 = (GB_LABEL_H - 2 * PAD) as f32 / MAX_LINES as f32;
 const NES_MAX_PX: f32 = (NES_LABEL_H - 2 * PAD) as f32 / MAX_LINES as f32;
 const FAMICOM_MAX_PX: f32 = FAMICOM_LABEL.3 as f32 / (MAX_LINES as f32 * 1.36);
+const TENGEN_MAX_PX: f32 = (TENGEN_LABEL.3 - 2 * PAD) as f32 / MAX_LINES as f32;
 const SNES_MAX_PX: f32 = SNES_LABEL_H as f32 / (MAX_LINES as f32 * 1.36);
 const SNES_PAL_MAX_PX: f32 = SNES_PAL_LABEL.3 as f32 / (MAX_LINES as f32 * 1.36);
 const MIN_PX: f32 = 10.0;
@@ -229,21 +248,31 @@ pub fn shown_label(cart: &Cart) -> Option<&std::path::Path> {
     }
 }
 
-/// A NES game on the Famicom cart: as chosen in the cart menu (notched is the NES cart,
-/// rounded the Famicom), else a ROM named as a Japanese release or on a Famicom-only board.
-pub fn nes_famicom_of(cart: &Cart) -> bool {
-    cart.platform == Platform::Nes
-        && match cart.shell.map(|c| c.outline) {
-            Some(Outline::Notched) => false,
-            Some(Outline::Rounded) => true,
-            _ => japanese(&cart.stem) || slot_store::region::nes_famicom_board(&cart.rom),
+/// A NES cart's shell: as chosen in the cart menu (notched is the NES cart, rounded the
+/// Famicom, tengen Tengen's own), else a ROM named as a Japanese release or on a Famicom-only
+/// board, else one of Tengen's own unlicensed titles, else the plain NES cart.
+pub fn nes_shell_kind(cart: &Cart) -> NesShell {
+    match cart.shell.map(|c| c.outline) {
+        Some(Outline::Notched) => NesShell::Nes,
+        Some(Outline::Rounded) => NesShell::Famicom,
+        Some(Outline::Tengen) => NesShell::Tengen,
+        _ if japanese(&cart.stem) || slot_store::region::nes_famicom_board(&cart.rom) => {
+            NesShell::Famicom
         }
+        _ if crate::shell::tengen_board(&cart.stem) => NesShell::Tengen,
+        _ => NesShell::Nes,
+    }
+}
+
+/// A NES game on the Famicom cart specifically: narrower than "not the plain NES cart", since
+/// a Tengen cart wants the NES cart's own label fit (`fitted_label`), not the Famicom's.
+pub fn nes_famicom_of(cart: &Cart) -> bool {
+    cart.platform == Platform::Nes && nes_shell_kind(cart) == NesShell::Famicom
 }
 
 fn shape_of(cart: &Cart) -> Shape {
     match (cart.platform, gb_shell_of(cart)) {
-        (Platform::Nes, _) if nes_famicom_of(cart) => Shape::Nes(NesShell::Famicom),
-        (Platform::Nes, _) => Shape::Nes(NesShell::Nes),
+        (Platform::Nes, _) => Shape::Nes(nes_shell_kind(cart)),
         (Platform::Snes, _) => Shape::Snes(snes_shell_of(cart).unwrap_or(SnesShell::Us)),
         (_, None) => Shape::Gba,
         (_, Some(shell)) => Shape::Gb(shell),
@@ -294,6 +323,7 @@ fn spec(shape: Shape) -> Spec {
             label: match shell {
                 NesShell::Nes => (NES_LABEL_X, NES_LABEL_Y, NES_LABEL_W, NES_LABEL_H),
                 NesShell::Famicom => FAMICOM_LABEL,
+                NesShell::Tengen => TENGEN_LABEL,
             },
             mask: nes_cart_mask(shell),
             depth: nes_cart_depth(shell),
@@ -301,10 +331,12 @@ fn spec(shape: Shape) -> Spec {
             max_px: match shell {
                 NesShell::Nes => NES_MAX_PX,
                 NesShell::Famicom => FAMICOM_MAX_PX,
+                NesShell::Tengen => TENGEN_MAX_PX,
             },
             max_h: match shell {
                 NesShell::Nes => (NES_LABEL_H - 2 * PAD) as f32,
                 NesShell::Famicom => f32::INFINITY,
+                NesShell::Tengen => (TENGEN_LABEL.3 - 2 * PAD) as f32,
             },
             rim: NES_RIM,
             board: Board {

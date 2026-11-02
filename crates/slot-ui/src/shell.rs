@@ -160,13 +160,55 @@ pub fn shell_for(cart: &Cart) -> Shell {
     }
 }
 
-/// A NES cart's own plastic: grey, but gold for the two that really were. The NES library's
-/// only gold carts are the Zeldas, so the name alone tells them apart.
+/// A NES cart's own plastic: grey, gold for the two Zeldas, black for a title Tengen
+/// published unlicensed — matched to crate::cart::nes_shell_kind's own Tengen detection.
 pub fn nes_plain_shell(stem: &str) -> Shell {
-    match stem.to_lowercase().contains("zelda") {
-        true => NES_GOLD_SHELL,
-        false => NES_SHELL,
+    let lower = stem.to_lowercase();
+    if lower.contains("zelda") {
+        NES_GOLD_SHELL
+    } else if tengen_board(stem) {
+        NES_BLACK_SHELL
+    } else {
+        NES_SHELL
     }
+}
+
+/// Tengen published these titles unlicensed, in its own black shell — not Nintendo's mould.
+/// Matched against the start of the ROM's own name, case-insensitively; the ROM must also be
+/// tagged `(Unl)` (No-Intro's mark for unlicensed), since Nintendo licensed some of the same
+/// titles (Tetris (USA), Pac-Man (USA)) in its own grey shell.
+const TENGEN_TITLES: &[&str] = &[
+    "after burner",
+    "alien syndrome",
+    "block out",
+    "caesars palace",
+    "championship pool",
+    "gauntlet",
+    "hard drivin'",
+    "indiana jones and the temple of doom",
+    "klax",
+    "ms. pac-man",
+    "n.a.r.c.",
+    "pac-man",
+    "pac-mania",
+    "r.b.i. baseball",
+    "road runner",
+    "rolling thunder",
+    "shinobi",
+    "skull & crossbones",
+    "super sprint",
+    "tetris",
+    "toobin'",
+    "vindicators",
+    "world class track meet",
+    "xenophobe",
+];
+
+/// A ROM named as one of Tengen's own unlicensed NES titles, and tagged `(Unl)`.
+pub fn tengen_board(stem: &str) -> bool {
+    let lower = stem.to_lowercase();
+    TENGEN_TITLES.iter().any(|title| lower.starts_with(title))
+        && region_tags(stem).any(|tag| tag.eq_ignore_ascii_case("unl"))
 }
 
 /// A Famicom plastic for a ROM named as a Japanese release, NES grey for the rest.
@@ -348,4 +390,28 @@ pub fn shell_presets() -> Vec<(&'static str, Shell)> {
         }),
     );
     out
+}
+
+#[cfg(test)]
+mod tengen_tests {
+    use super::tengen_board;
+
+    #[test]
+    fn an_unlicensed_tengen_title_gets_the_black_shell() {
+        assert!(tengen_board("Tetris (USA) (Unl)"));
+        assert!(tengen_board("Indiana Jones and the Temple of Doom (USA) (Unl)"));
+        assert!(tengen_board("Pac-Man (USA) (Unl) [!]"));
+    }
+
+    #[test]
+    fn nintendos_licensed_release_of_the_same_title_does_not() {
+        assert!(!tengen_board("Tetris (USA)"));
+        assert!(!tengen_board("Pac-Man (USA)"));
+        assert!(!tengen_board("Tetris"));
+    }
+
+    #[test]
+    fn an_unlicensed_game_that_is_not_tengens_does_not() {
+        assert!(!tengen_board("Bible Adventures (USA) (Unl)"));
+    }
 }

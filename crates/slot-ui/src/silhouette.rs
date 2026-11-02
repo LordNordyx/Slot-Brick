@@ -14,6 +14,8 @@ const NES_CART_SVG: &str = include_str!("../assets/nes_cart.svg");
 const NES_DETAIL_SVG: &str = include_str!("../assets/nes_cart_detail.svg");
 const FAMICOM_CART_SVG: &str = include_str!("../assets/famicom_cart.svg");
 const FAMICOM_DETAIL_SVG: &str = include_str!("../assets/famicom_cart_detail.svg");
+const TENGEN_CART_SVG: &str = include_str!("../assets/tengen_cart.svg");
+const TENGEN_DETAIL_SVG: &str = include_str!("../assets/tengen_cart_detail.svg");
 const SNES_CART_SVG: &str = include_str!("../assets/snes_cart.svg");
 const SNES_DETAIL_SVG: &str = include_str!("../assets/snes_cart_detail.svg");
 const SNES_PAL_CART_SVG: &str = include_str!("../assets/snes_pal_cart.svg");
@@ -25,11 +27,12 @@ pub enum GbShell {
     Rounded,
 }
 
-/// The NES cart, or the small landscape Famicom one.
+/// The NES cart, the small landscape Famicom one, or Tengen's unlicensed black shell.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum NesShell {
     Nes,
     Famicom,
+    Tengen,
 }
 
 /// The US SNES cart, or the rounder one Europe and Japan (Super Famicom) had.
@@ -69,9 +72,11 @@ pub(crate) fn gb_cart_mask(shell: GbShell) -> &'static [u8] {
 pub(crate) fn nes_cart_mask(shell: NesShell) -> &'static [u8] {
     static NES: OnceLock<Vec<u8>> = OnceLock::new();
     static FAMICOM: OnceLock<Vec<u8>> = OnceLock::new();
+    static TENGEN: OnceLock<Vec<u8>> = OnceLock::new();
     let (lock, svg) = match shell {
         NesShell::Nes => (&NES, NES_CART_SVG),
         NesShell::Famicom => (&FAMICOM, FAMICOM_CART_SVG),
+        NesShell::Tengen => (&TENGEN, TENGEN_CART_SVG),
     };
     lock.get_or_init(|| {
         rasterise_svg(svg, NES_CART_W, NES_CART_H)
@@ -82,21 +87,27 @@ pub(crate) fn nes_cart_mask(shell: NesShell) -> &'static [u8] {
 pub(crate) fn nes_cart_depth(shell: NesShell) -> &'static [u8] {
     static NES: OnceLock<Vec<u8>> = OnceLock::new();
     static FAMICOM: OnceLock<Vec<u8>> = OnceLock::new();
+    static TENGEN: OnceLock<Vec<u8>> = OnceLock::new();
     let lock = match shell {
         NesShell::Nes => &NES,
         NesShell::Famicom => &FAMICOM,
+        NesShell::Tengen => &TENGEN,
     };
     lock.get_or_init(|| depth_map(nes_cart_mask(shell), NES_CART_W as usize, NES_CART_H as usize))
 }
 
 /// NES: the full-height grip, the label recess and its arrow; nothing moulded in. Famicom: the
 /// rim round the front and the step to the tab; its label recess is cut by the cart face itself.
+/// Tengen: the stepped pyramid moulded above the label; the label recess is cut by the cart
+/// face itself, same as Famicom — the publisher's own label art fills it, not this template.
 pub(crate) fn nes_detail_mask(shell: NesShell) -> &'static Detail {
     static NES: OnceLock<Detail> = OnceLock::new();
     static FAMICOM: OnceLock<Detail> = OnceLock::new();
+    static TENGEN: OnceLock<Detail> = OnceLock::new();
     let (lock, svg) = match shell {
         NesShell::Nes => (&NES, NES_DETAIL_SVG),
         NesShell::Famicom => (&FAMICOM, FAMICOM_DETAIL_SVG),
+        NesShell::Tengen => (&TENGEN, TENGEN_DETAIL_SVG),
     };
     lock.get_or_init(|| {
         rasterise_detail(svg, NES_CART_W, NES_CART_H)

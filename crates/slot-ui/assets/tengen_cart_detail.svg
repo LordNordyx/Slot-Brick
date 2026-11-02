@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 288">
+  <defs>
+    <!-- un seul triangle (apex 120,38.6 → base 80-160,80.6), 2 entailles inégales -->
+    <g id="badge">
+      <polygon points="120,38.6 129.8,49 110.2,49"/>
+      <polygon points="104.8,54.7 135.2,54.7 145,65 95,65"/>
+      <polygon points="89,71.4 151,71.4 160,80.6 80,80.6"/>
+    </g>
+    <!-- recess moulée, vide : TENGEN, les filets, la mire et "GAME TEXT"
+         font partie de la jaquette (image par jeu), pas du moule -->
+    <g id="label">
+      <path fill-rule="evenodd"
+        d="M 31 90 L 209 90 L 209 277 L 31 277 Z
+           M 33.5 92.5 L 206.5 92.5 L 206.5 274.5 L 33.5 274.5 Z"/>
+    </g>
+  </defs>
+  <g fill="#fff"><use href="#badge" x="1.1" y="1.1"/><use href="#label" x="1.1" y="1.1"/></g>
+  <g fill="#000"><use href="#badge"/><use href="#label"/></g>
+</svg>
