@@ -4,11 +4,12 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use slot_store::Theme;
 
-use crate::cart::{cart_box, label_colour, label_text, seated_box, SEATED_W};
+use crate::cart::{cart_box, label_colour, label_text, nes_shell_kind, seated_box, SEATED_W};
 use crate::footer::Printed;
 use crate::icon::icon_box;
 use crate::plate::HINT_H;
 use crate::shelf::foot_y;
+use crate::silhouette::NesShell;
 
 pub const ALERT_PX: f32 = 44.0;
 
@@ -89,6 +90,14 @@ const CATCH_IN: f32 = 0.42;
 const CATCH_OUT: f32 = 0.62;
 const CREEP: f32 = 0.03;
 
+/// A real Tengen cart went into an NES upside down, to dodge the lockout chip sitting where
+/// its own board left that corner unconnected. Insert and eject lift it off its feet and spin
+/// it a half-turn counter-clockwise over this fraction of `seat`'s travel, before it carries on
+/// the usual way up or down the rest of the way, the right way up for a Tengen board.
+const TENGEN_FLIP_END: f32 = 0.22;
+/// How high the lift rises while it turns, as a fraction of the cart's shelf height.
+const TENGEN_LIFT: f32 = 0.35;
+
 pub struct SlotChrome<'a> {
     pub cart: &'a Cart,
     pub face: Option<TexId>,
@@ -128,12 +137,26 @@ impl SlotChrome<'_> {
         let (sw, sh) = (sw as f32, sh as f32);
         let (foot0, seated_foot) = (foot_y(ch), SEATED_Y + sh);
         let catch = catch_at(foot0, seated_foot);
-        let travel = travel(seat, catch);
+        let tengen = self.cart.platform == slot_store::Platform::Nes
+            && nes_shell_kind(self.cart) == NesShell::Tengen;
+        let (travel, turn, lift) = if tengen && seat < TENGEN_FLIP_END {
+            let u = ease(seat / TENGEN_FLIP_END);
+            (
+                0.0,
+                -std::f32::consts::PI * u,
+                (std::f32::consts::PI * u).sin() * h0 * TENGEN_LIFT,
+            )
+        } else if tengen {
+            let u = (seat - TENGEN_FLIP_END) / (1.0 - TENGEN_FLIP_END);
+            (travel(u, catch), -std::f32::consts::PI, 0.0)
+        } else {
+            (travel(seat, catch), 0.0, 0.0)
+        };
         let k = (travel / catch).min(1.0);
         let (cw, ch) = (w0 + (sw - w0) * k, h0 + (sh - h0) * k);
         let centre = self.rest + w0 / 2.0;
         let x = centre + (CX - centre) * k - cw / 2.0;
-        let y = foot0 + (seated_foot - foot0) * travel - ch;
+        let y = foot0 + (seated_foot - foot0) * travel - ch - lift;
         let cart_alpha = if seat >= 1.0 { chrome } else { 1.0 };
         out.push(match self.face {
             // A disc spins up as it goes in, and down as it comes out.
@@ -145,6 +168,16 @@ impl SlotChrome<'_> {
                 tex,
                 alpha: cart_alpha,
                 turn: DISC_TURNS * std::f32::consts::TAU * seat * seat,
+            },
+            // Tengen's own board, upside down for the half of the trip it's turned for.
+            Some(tex) if turn != 0.0 => Draw::Turned {
+                x,
+                y,
+                w: cw,
+                h: ch,
+                tex,
+                alpha: cart_alpha,
+                turn,
             },
             Some(tex) => Draw::Tex {
                 x,
