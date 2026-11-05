@@ -561,6 +561,14 @@ impl Frontend {
             })
             .collect();
         self.session.app_mut().set_pause_menu_faces(pause);
+        let buttons = [false, true]
+            .into_iter()
+            .map(|on| {
+                let f = menu_face(slot_ui::swap_ab_text(on));
+                (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h)
+            })
+            .collect();
+        self.session.app_mut().set_pause_buttons_faces(buttons);
         let mut up = |f: UndoFace| (compositor.create_texture(f.w, f.h, &f.rgba), f.w, f.h);
         let labels = QuickRow::ALL
             .iter()

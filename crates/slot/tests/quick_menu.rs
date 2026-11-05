@@ -233,6 +233,20 @@ fn rewind_and_turbo_on_the_game_page_and_save_on_eject_under_saving_flip_and_sav
 }
 
 #[test]
+fn swap_ab_sits_on_the_game_page_between_turbo_and_saving_and_saves() {
+    let (d, mut a, _) = on_carousel();
+    open_at(&mut a, QuickRow::SwapAb);
+    assert!(!read_slot_state(d.path()).swap_ab);
+    assert!(!a.swap_ab());
+    press(&mut a, Btn::Right);
+    assert!(read_slot_state(d.path()).swap_ab);
+    assert!(a.swap_ab());
+    press(&mut a, Btn::Left);
+    assert!(!read_slot_state(d.path()).swap_ab);
+    assert!(!a.swap_ab());
+}
+
+#[test]
 fn autosave_under_saving_and_low_battery_shutdown_in_system_step_and_save() {
     let (d, mut a, _) = on_carousel();
     let card = |d: &TempDir| {

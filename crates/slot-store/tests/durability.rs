@@ -219,6 +219,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,
             turbo: true,
             rewind: true,
+            swap_ab: false,
             gb_palettes: false,
             gb_palette: GbPalette::DEFAULT,
             overlays: Default::default(),
@@ -251,6 +252,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         battery_shutdown: 0,
         turbo: false,
         rewind: false,
+        swap_ab: true,
         gb_palettes: true,
         gb_palette: GbPalette::parse("GBC Dark Green →A").unwrap(),
         ..SlotState::default()
@@ -277,6 +279,7 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         "battery_shutdown=0",
         "turbo=0",
         "rewind=0",
+        "swap_ab=1",
         "gb_palettes=1",
         "gb_palette=GBC Dark Green →A",
     ] {

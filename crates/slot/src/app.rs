@@ -314,6 +314,10 @@ pub struct App {
     power_menu_faces: Vec<(TexId, u32, u32)>,
     pause_menu: Option<usize>,
     pause_menu_faces: Vec<(TexId, u32, u32)>,
+    /// PauseChoice::Buttons drills into this one-row screen rather than closing the menu.
+    pause_buttons: bool,
+    /// Swap A/B's own row: off's face, then on's.
+    pause_buttons_faces: Vec<(TexId, u32, u32)>,
     /// Slot OS: no stock OS to exit to, so holding Power shuts down without asking.
     power_off_only: bool,
     core_picker: Option<CorePicker>,
@@ -594,6 +598,8 @@ impl App {
             power_menu_faces: Vec::new(),
             pause_menu: None,
             pause_menu_faces: Vec::new(),
+            pause_buttons: false,
+            pause_buttons_faces: Vec::new(),
             power_off_only: slot_power::slot_os(),
             core_picker: None,
             disc_picker: None,
@@ -1292,6 +1298,7 @@ impl App {
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
+            QuickRow::SwapAb => Some(QuickValue::flag(self.state.swap_ab)),
             QuickRow::AutoClock => Some(QuickValue::flag(self.state.auto_clock)),
             QuickRow::UpdateCheck => Some(QuickValue::flag(self.state.update_check)),
             QuickRow::LibrarySort => Some(match self.state.library_sort {
@@ -1920,6 +1927,10 @@ impl App {
         self.state.rumble
     }
 
+    pub fn swap_ab(&self) -> bool {
+        self.state.swap_ab
+    }
+
     pub fn ff_speed(&self) -> u8 {
         self.state.ff_speed
     }
@@ -1992,6 +2003,11 @@ impl App {
     pub fn pause_menu(&self) -> Option<usize> {
         self.pause_menu
             .filter(|_| matches!(self.phase, Phase::Playing { .. }))
+    }
+
+    /// On PauseChoice::Buttons' own one-row screen, rather than the list itself.
+    pub fn pause_buttons(&self) -> bool {
+        self.pause_buttons
     }
 
     fn menu_over_game(&self) -> bool {
@@ -2441,6 +2457,7 @@ impl App {
             | QuickRow::BatteryShutdown
             | QuickRow::Turbo
             | QuickRow::Rewind
+            | QuickRow::SwapAb
             | QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::GbColourCorrection
@@ -2578,6 +2595,7 @@ impl App {
             QuickRow::BatteryShutdown => s.battery_shutdown = step(&BATTERY_SHUTDOWNS, s.battery_shutdown, right),
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
+            QuickRow::SwapAb => s.swap_ab = !s.swap_ab,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
             QuickRow::LibrarySort => {
                 let all = slot_store::LibrarySort::ALL;
@@ -3565,7 +3583,13 @@ impl App {
             self.draw_game_menu(menu, out);
         }
         if let Some(index) = self.pause_menu() {
-            draw_menu_screen(&self.pause_menu_faces, index, out);
+            if self.pause_buttons {
+                if let Some(face) = self.pause_buttons_faces.get(self.swap_ab() as usize) {
+                    draw_menu_screen(std::slice::from_ref(face), 0, out);
+                }
+            } else {
+                draw_menu_screen(&self.pause_menu_faces, index, out);
+            }
         }
         self.hud.draw(self.now(), out);
     }
@@ -3661,6 +3685,11 @@ impl App {
 
     pub fn set_pause_menu_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
         self.pause_menu_faces = faces;
+    }
+
+    /// Off's face, then on's.
+    pub fn set_pause_buttons_faces(&mut self, faces: Vec<(TexId, u32, u32)>) {
+        self.pause_buttons_faces = faces;
     }
 
     pub fn set_core_board_faces(&mut self, board: TexId, lid: TexId) {
@@ -4290,12 +4319,23 @@ impl App {
             return self.refuse();
         }
         self.pause_menu = Some(0);
+        self.pause_buttons = false;
     }
 
     fn pause_menu_input(&mut self, action: Action) {
         let Some(index) = self.pause_menu else {
             return;
         };
+        if self.pause_buttons {
+            match action {
+                Action::GbaDown(Btn::B) | Action::QuickMenu => self.pause_buttons = false,
+                Action::GbaDown(Btn::A | Btn::Left | Btn::Right) => {
+                    self.change_setting(QuickRow::SwapAb, true);
+                }
+                _ => {}
+            }
+            return;
+        }
         let last = PauseChoice::ALL.len() - 1;
         match action {
             Action::GbaDown(Btn::Up) => {
@@ -4324,6 +4364,7 @@ impl App {
                         snapshot.reset();
                     }
                 }
+                PauseChoice::Buttons => self.pause_buttons = true,
                 PauseChoice::Quit => self.leave_paused(Self::eject),
             },
             _ => {}

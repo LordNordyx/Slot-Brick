@@ -33,6 +33,45 @@ fn seat_and_autosave(root: &Path) {
 }
 
 #[test]
+fn swap_ab_makes_b_seat_the_cart_instead_of_a() {
+    // Two carts, not one: a single cart on the whole card is seated on its own at boot
+    // (`App::single_cart`), which would leave nothing for a button press to prove here.
+    let d = common::tmp_root_with_gb_carts(&["Tetris", "Zelda"]);
+    let mut state = slot_store::read_slot_state(d.path());
+    state.clock_set = true;
+    state.swap_ab = true;
+    slot_store::write_slot_state(d.path(), &state).expect("write slot.state");
+    let mut s = Session::boot(d.path().to_path_buf());
+    assert!(
+        matches!(s.app().phase(), Phase::Shelf),
+        "did not start on the shelf"
+    );
+
+    s.feed([RawEvent::Down(Btn::A)], 16);
+    s.feed([RawEvent::Up(Btn::A)], 32);
+    s.feed([], 48);
+    assert!(
+        matches!(s.app().phase(), Phase::Shelf),
+        "A still seated the cart with Swap A/B on"
+    );
+
+    s.feed([RawEvent::Down(Btn::B)], 64);
+    s.feed([RawEvent::Up(Btn::B)], 80);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut now = 80;
+    while matches!(s.app().phase(), Phase::Shelf) {
+        assert!(
+            Instant::now() < deadline,
+            "B never seated the cart with Swap A/B on"
+        );
+        now += 16;
+        s.feed([], now);
+        s.update(1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+#[test]
 fn a_game_boy_carts_autosave_lands_under_gb_and_never_under_gba() {
     let d = common::tmp_root_with_gb_carts(&["Tetris", "Zelda"]);
 

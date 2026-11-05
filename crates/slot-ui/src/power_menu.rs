@@ -30,15 +30,17 @@ pub enum PauseChoice {
     SaveState,
     LoadState,
     Reset,
+    Buttons,
     Quit,
 }
 
 impl PauseChoice {
-    pub const ALL: [PauseChoice; 5] = [
+    pub const ALL: [PauseChoice; 6] = [
         PauseChoice::Resume,
         PauseChoice::SaveState,
         PauseChoice::LoadState,
         PauseChoice::Reset,
+        PauseChoice::Buttons,
         PauseChoice::Quit,
     ];
 
@@ -48,8 +50,18 @@ impl PauseChoice {
             PauseChoice::SaveState => "SAVE STATE",
             PauseChoice::LoadState => "LOAD STATE",
             PauseChoice::Reset => "RESET GAME",
+            PauseChoice::Buttons => "BUTTONS",
             PauseChoice::Quit => "QUIT GAME",
         }
+    }
+}
+
+/// HOME → Buttons' own single row: A and B swapped, or not.
+pub fn swap_ab_text(on: bool) -> &'static str {
+    if on {
+        "SWAP A/B: ON"
+    } else {
+        "SWAP A/B: OFF"
     }
 }
 

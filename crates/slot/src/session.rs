@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use slot_input::{Action, Gestures, Millis, RawEvent};
+use slot_input::{Action, Btn, Gestures, Millis, RawEvent};
 use slot_retro::Rumble;
 use slot_store::Platform;
 use slot_ui::FfState;
@@ -31,6 +31,18 @@ pub struct Session {
     reloading: bool,
     driven: bool,
     prefetch: Prefetch,
+}
+
+/// Gameplay → Swap A/B: A and B trade places in both the menus and the game, but a shortcut
+/// held with Select or Home (see `gesture.rs`) still belongs to the physical button it named.
+fn swap_ab(action: Action) -> Action {
+    match action {
+        Action::GbaDown(Btn::A) => Action::GbaDown(Btn::B),
+        Action::GbaDown(Btn::B) => Action::GbaDown(Btn::A),
+        Action::GbaUp(Btn::A) => Action::GbaUp(Btn::B),
+        Action::GbaUp(Btn::B) => Action::GbaUp(Btn::A),
+        other => other,
+    }
 }
 
 impl Session {
@@ -153,13 +165,14 @@ impl Session {
     pub fn feed(&mut self, events: impl IntoIterator<Item = RawEvent>, now: Millis) {
         self.gestures
             .set_triggers_to_game(self.has_core() && self.app.platform() == Platform::Ps1);
+        let swap = self.app.swap_ab();
         let mut actions = Vec::new();
         for ev in events {
             actions.extend(self.gestures.feed(ev, now));
         }
         actions.extend(self.gestures.tick(now));
         for action in actions {
-            self.act(action);
+            self.act(if swap { swap_ab(action) } else { action });
         }
         self.sync_pad();
     }

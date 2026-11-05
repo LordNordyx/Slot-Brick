@@ -173,6 +173,52 @@ fn quit_game_with_one_cart_is_refused_and_the_menu_stays() {
 }
 
 #[test]
+fn buttons_opens_its_own_screen_without_closing_the_menu() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let mut a = app_playing_in(d.path(), "Emerald");
+    choose(&mut a, PauseChoice::Buttons);
+    assert!(a.pause_buttons(), "A on Buttons did not open its screen");
+    assert_eq!(
+        a.pause_menu(),
+        Some(row(PauseChoice::Buttons)),
+        "the menu closed rather than drilling in"
+    );
+    assert!(matches!(a.phase(), Phase::Playing { .. }));
+}
+
+#[test]
+fn a_swaps_ab_from_the_buttons_screen_and_saves_it() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let mut a = app_playing_in(d.path(), "Emerald");
+    choose(&mut a, PauseChoice::Buttons);
+    assert!(!a.swap_ab());
+    a.apply(Action::GbaDown(Btn::A));
+    assert!(a.swap_ab());
+    assert!(slot_store::read_slot_state(d.path()).swap_ab, "not saved");
+    assert!(a.pause_buttons(), "A closed the Buttons screen");
+    a.apply(Action::GbaDown(Btn::A));
+    assert!(!a.swap_ab(), "a second A did not swap back");
+}
+
+#[test]
+fn b_on_the_buttons_screen_backs_out_to_the_list_not_the_game() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let mut a = app_playing_in(d.path(), "Emerald");
+    choose(&mut a, PauseChoice::Buttons);
+    a.apply(Action::GbaDown(Btn::B));
+    assert!(
+        !a.pause_buttons(),
+        "B did not back out of the Buttons screen"
+    );
+    assert_eq!(
+        a.pause_menu(),
+        Some(row(PauseChoice::Buttons)),
+        "B on the Buttons screen reached the game instead of the list"
+    );
+    assert!(matches!(a.phase(), Phase::Playing { .. }));
+}
+
+#[test]
 fn holding_home_in_the_menu_still_ejects() {
     let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
     let mut a = app_playing_in(d.path(), "Emerald");
