@@ -1292,6 +1292,7 @@ impl App {
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
+            QuickRow::SwapAb => Some(QuickValue::flag(self.state.swap_ab)),
             QuickRow::AutoClock => Some(QuickValue::flag(self.state.auto_clock)),
             QuickRow::UpdateCheck => Some(QuickValue::flag(self.state.update_check)),
             QuickRow::LibrarySort => Some(match self.state.library_sort {
@@ -1920,6 +1921,10 @@ impl App {
         self.state.rumble
     }
 
+    pub fn swap_ab(&self) -> bool {
+        self.state.swap_ab
+    }
+
     pub fn ff_speed(&self) -> u8 {
         self.state.ff_speed
     }
@@ -2441,6 +2446,7 @@ impl App {
             | QuickRow::BatteryShutdown
             | QuickRow::Turbo
             | QuickRow::Rewind
+            | QuickRow::SwapAb
             | QuickRow::FastForward
             | QuickRow::FastForwardSound
             | QuickRow::GbColourCorrection
@@ -2578,6 +2584,7 @@ impl App {
             QuickRow::BatteryShutdown => s.battery_shutdown = step(&BATTERY_SHUTDOWNS, s.battery_shutdown, right),
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
+            QuickRow::SwapAb => s.swap_ab = !s.swap_ab,
             QuickRow::GbPalettes => s.gb_palettes = !s.gb_palettes,
             QuickRow::LibrarySort => {
                 let all = slot_store::LibrarySort::ALL;

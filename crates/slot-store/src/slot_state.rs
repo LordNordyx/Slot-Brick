@@ -80,6 +80,8 @@ pub struct SlotState {
     pub battery_shutdown: u8,
     pub turbo: bool,
     pub rewind: bool,
+    /// Gameplay → Swap A/B: A and B trade places, in games and in Slot's own menus.
+    pub swap_ab: bool,
     pub gb_palettes: bool,
     pub gb_palette: GbPalette,
     /// The overlay chosen for each system, by file name in Overlays/<system>, in the order of
@@ -212,6 +214,7 @@ impl Default for SlotState {
             battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,
             turbo: true,
             rewind: true,
+            swap_ab: false,
             gb_palettes: false,
             gb_palette: GbPalette::DEFAULT,
             overlays: Default::default(),
@@ -279,6 +282,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         ("sound_cart_open", s.sound_cart_open),
         ("sound_label", s.sound_label),
         ("update_check", s.update_check),
+        ("swap_ab", s.swap_ab),
     ] {
         let _ = writeln!(text, "{key}={}", on as u8);
     }
@@ -329,6 +333,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut battery_shutdown = None;
     let mut turbo = None;
     let mut rewind = None;
+    let mut swap_ab = None;
     let mut gb_palettes = None;
     let mut gb_palette = None;
     let mut overlays: [Option<String>; Platform::ALL.len()] = Default::default();
@@ -379,6 +384,7 @@ fn parse(text: &str) -> Option<SlotState> {
             "battery_shutdown" => battery_shutdown = choice(value, &BATTERY_SHUTDOWNS),
             "turbo" => turbo = flag(value),
             "rewind" => rewind = flag(value),
+            "swap_ab" => swap_ab = flag(value),
             "gb_palettes" => gb_palettes = flag(value),
             "gb_palette" => gb_palette = GbPalette::parse(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
@@ -437,6 +443,7 @@ fn parse(text: &str) -> Option<SlotState> {
         battery_shutdown: battery_shutdown.unwrap_or(fallback.battery_shutdown),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
+        swap_ab: swap_ab.unwrap_or(fallback.swap_ab),
         gb_palettes: gb_palettes.unwrap_or(fallback.gb_palettes),
         gb_palette: gb_palette.unwrap_or(fallback.gb_palette),
         overlays,
