@@ -1,4 +1,5 @@
-# A tap of Home in a game pauses it under Resume, Save State, Load State, Reset Game and Quit Game.
+# A tap of Home in a game pauses it under Resume, Save State, Load State, Reset Game, Buttons
+# and Quit Game.
 press a
 phase Shelf
 press r1     # GBA -> GB
@@ -22,8 +23,22 @@ phase Playing
 wait 500
 press menu
 press up
-press up     # Reset Game
+press up
+press up     # Reset Game (Quit, then Buttons, then one more to it)
 press a      # the game starts over
+phase Playing
+wait 500
+press menu
+press up
+press up     # Buttons (Quit, then it)
+press a      # its own one-row screen
+snap pause-menu-buttons
+press a      # Swap A/B on
+snap pause-menu-buttons-on
+# On now, so A and B have traded places here too: B is the toggle, back off.
+press b      # Swap A/B off again, leaving the setting as it was
+press b      # back to the list, not the game
+press b      # back to the game
 phase Playing
 wait 500
 press menu
