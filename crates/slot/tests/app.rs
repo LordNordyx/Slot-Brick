@@ -2493,11 +2493,34 @@ fn a_nes_cart_offers_its_shape_and_plastic_and_can_be_made_a_famicom_cart() {
     press(&mut app, Btn::Start);
     // A NES cart's plastic can be chosen: the Zeldas came in gold.
     assert_eq!(rows_of(&mut app), vec![Shape, Colour, Reset]);
+    // Left from the game's own shape steps back through Tengen's to the Famicom's.
+    press(&mut app, Btn::Left);
     press(&mut app, Btn::Left);
     assert_eq!(app.cart_menu().unwrap().1.map(|c| c.outline), Some(slot_store::Outline::Rounded));
     press(&mut app, Btn::A);
     let saved = saved_shell(&d, "Mario (USA)").expect("A saved nothing");
     assert!(saved.starts_with("rounded "), "{saved}");
+}
+
+#[test]
+fn a_nes_cart_can_be_made_a_tengen_cart() {
+    use slot_ui::CartRow::*;
+    let d = common::tmp_root_with_carts(&[]);
+    for stem in ["Mario (USA)", "Zzz (USA)"] {
+        std::fs::write(d.path().join(format!("Games/NES/{stem}.nes")), [0u8; 0x200]).unwrap();
+    }
+    let (d, mut app) = booted_on_shelf(d);
+    press(&mut app, Btn::Start);
+    assert_eq!(rows_of(&mut app), vec![Shape, Colour, Reset]);
+    // Left once from the game's own shape reaches Tengen's, the last of the four.
+    press(&mut app, Btn::Left);
+    assert_eq!(
+        app.cart_menu().unwrap().1.map(|c| c.outline),
+        Some(slot_store::Outline::Tengen)
+    );
+    press(&mut app, Btn::A);
+    let saved = saved_shell(&d, "Mario (USA)").expect("A saved nothing");
+    assert!(saved.starts_with("tengen "), "{saved}");
 }
 
 #[test]
@@ -2509,6 +2532,7 @@ fn a_famicom_cart_offers_its_own_colours() {
     }
     let (d, mut app) = booted_on_shelf(d);
     press(&mut app, Btn::Start);
+    press(&mut app, Btn::Left);
     press(&mut app, Btn::Left);
     assert_eq!(rows_of(&mut app), vec![Shape, Colour, Reset], "the Famicom cart offered no colour");
     let own = app.cart_menu().unwrap().1.unwrap().colour;

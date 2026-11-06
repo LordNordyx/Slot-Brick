@@ -50,6 +50,19 @@ fn nes() -> Cart {
     }
 }
 
+fn tengen() -> Cart {
+    Cart {
+        platform: Platform::Nes,
+        stem: "Tetris (USA) (Unl)".into(),
+        rom: "Games/NES/Tetris (USA) (Unl).nes".into(),
+        label: None,
+        code: String::new(),
+        shell: None,
+        title: String::new(),
+        famicom_label: None,
+    }
+}
+
 fn snes() -> Cart {
     Cart {
         platform: Platform::Snes,
@@ -296,6 +309,34 @@ fn cart_quad(c: &Cart, t: f32) -> Quad {
 
 fn cart_y(c: &Cart, t: f32) -> f32 {
     cart_quad(c, t).y
+}
+
+fn turn_of(d: &Draw) -> f32 {
+    match *d {
+        Draw::Turned { turn, .. } => turn,
+        _ => 0.0,
+    }
+}
+
+fn chrome_faced(c: &Cart, seat: f32, out: &mut Vec<Draw>) {
+    SlotChrome {
+        cart: c,
+        face: Some(TexId::from_raw(9)),
+        rest: centred(c),
+        scale: 1.0,
+        seat,
+        alert: None,
+        dim: 0.0,
+        screen: 0.0,
+        game: false,
+    }
+    .draw(out);
+}
+
+fn cart_turn(c: &Cart, t: f32) -> f32 {
+    let mut out = Vec::new();
+    chrome_faced(c, t.min(0.999), &mut out);
+    turn_of(&out[cart_at(&out)])
 }
 
 fn visible_cart_height(c: &Cart, t: f32) -> f32 {
@@ -546,6 +587,54 @@ fn ejecting_reverses_the_travel() {
             "{name} is not coming out"
         );
     }
+}
+
+#[test]
+fn a_tengen_cart_lifts_off_and_turns_upside_down_before_going_in() {
+    let c = tengen();
+    assert_eq!(cart_turn(&c, 0.0), 0.0, "starts right side up");
+    let rest = cart_y(&c, 0.0);
+    let early: Vec<f32> = (1..20).map(|i| cart_y(&c, i as f32 * 0.01)).collect();
+    assert!(
+        early.iter().any(|&y| y < rest - 1.0),
+        "never lifts off its feet on the way in"
+    );
+    let flipped = -std::f32::consts::PI;
+    assert!(
+        (cart_turn(&c, 0.5) - flipped).abs() < 0.01,
+        "is not upside down well before it seats"
+    );
+    assert!(
+        (cart_turn(&c, 1.0) - flipped).abs() < 0.01,
+        "is not still upside down once fully seated"
+    );
+}
+
+#[test]
+fn only_a_tengen_cart_turns_on_the_way_in() {
+    for (name, c) in both() {
+        assert_eq!(
+            cart_turn(&c, 0.5),
+            0.0,
+            "{name} turned, but only Tengen's own cart should"
+        );
+    }
+}
+
+#[test]
+fn a_tengen_cart_rights_itself_again_on_the_way_out() {
+    let c = tengen();
+    let eject_turn = |t: f32| cart_turn(&c, 1.0 - t);
+    assert_eq!(
+        eject_turn(0.0),
+        -std::f32::consts::PI,
+        "comes out of the slot upside down"
+    );
+    assert_eq!(
+        eject_turn(1.0),
+        0.0,
+        "lands back on the shelf right side up"
+    );
 }
 
 #[test]

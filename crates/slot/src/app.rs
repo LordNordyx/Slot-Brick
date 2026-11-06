@@ -1345,10 +1345,11 @@ impl App {
         }
     }
 
-    pub fn set_nes_cart_shadows(&mut self, nes: TexId, famicom: TexId) {
+    pub fn set_nes_cart_shadows(&mut self, nes: TexId, famicom: TexId, tengen: TexId) {
         for (_, shelf) in &mut self.shelves {
             shelf.set_nes_shadow(slot_ui::NesShell::Nes, nes);
             shelf.set_nes_shadow(slot_ui::NesShell::Famicom, famicom);
+            shelf.set_nes_shadow(slot_ui::NesShell::Tengen, tengen);
         }
     }
 
@@ -6106,6 +6107,9 @@ struct CartMenu {
 }
 
 const OUTLINES: [Outline; 3] = [Outline::Auto, Outline::Notched, Outline::Rounded];
+/// A NES cart's own outline set: one more than every other console's, for Tengen's shell.
+const OUTLINES_NES: [Outline; 4] =
+    [Outline::Auto, Outline::Notched, Outline::Rounded, Outline::Tengen];
 
 /// Labels found for one cart, to flip through: 0 is the label it had.
 /// What the grid is showing, in values cheap enough to work out every frame: the page, how
@@ -6523,7 +6527,8 @@ impl CartMenu {
                         colours.len() - 1
                     }
                 };
-                (colour, finish_at(finish), OUTLINES.iter().position(|o| *o == choice.outline).unwrap_or(0))
+                let outlines = Self::outlines_for(famicom.is_some());
+                (colour, finish_at(finish), outlines.iter().position(|o| *o == choice.outline).unwrap_or(0))
             }
         };
         // NES and SNES carts came in their system's grey: only their shape changes, and a
@@ -6562,14 +6567,27 @@ impl CartMenu {
     /// A NES game on the Famicom cart: its shape as chosen, or its own.
 
 
+    /// This cart's own outline set: NES carts have one more, for Tengen's shell.
+    fn outlines(&self) -> &'static [Outline] {
+        Self::outlines_for(self.famicom.is_some())
+    }
+
+    fn outlines_for(famicom: bool) -> &'static [Outline] {
+        if famicom {
+            &OUTLINES_NES
+        } else {
+            &OUTLINES
+        }
+    }
+
     /// The shell these values make: None while they are all the game's own.
     /// On the Famicom shape a cart is offered the Famicom plastics, on the NES shape the NES
     /// ones. Stepping the shape moves it from one set to the other, so it keeps the plastic it
     /// is wearing if that is in both and falls back to its own if it is not.
     fn fit_colours(&mut self) {
-        let famicom = self.famicom.is_some_and(|(own, _)| match OUTLINES[self.shape] {
+        let famicom = self.famicom.is_some_and(|(own, _)| match self.outlines()[self.shape] {
             Outline::Auto => own,
-            Outline::Notched => false,
+            Outline::Notched | Outline::Tengen => false,
             Outline::Rounded => true,
         });
         self.offered = offered_colours(self.famicom.is_some(), famicom, &self.colours);
@@ -6592,7 +6610,7 @@ impl CartMenu {
             true => slot_ui::FINISHES[self.finish],
             false => picked.map_or(self.own.finish, |s| s.finish),
         };
-        let outline = OUTLINES[self.shape];
+        let outline = self.outlines()[self.shape];
         if picked.is_none() && finish == self.own.finish && outline == Outline::Auto {
             return None;
         }
@@ -6621,7 +6639,7 @@ impl CartMenu {
             }
             slot_ui::CartRow::Finish => self.finish = step(self.finish, slot_ui::FINISHES.len()),
             slot_ui::CartRow::Shape => {
-                self.shape = step(self.shape, OUTLINES.len());
+                self.shape = step(self.shape, self.outlines().len());
                 self.fit_colours();
             }
             slot_ui::CartRow::Reset => {}

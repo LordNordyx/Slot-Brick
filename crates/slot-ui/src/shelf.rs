@@ -2,7 +2,7 @@ use slot_gfx::{Draw, TexId, OUT_H, OUT_W};
 use slot_store::Cart;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::cart::{cart_box, gb_shell_of, nes_famicom_of, snes_shell_of, label_colour, label_text, CART_H, CART_W};
+use crate::cart::{cart_box, gb_shell_of, nes_shell_kind, snes_shell_of, label_colour, label_text, CART_H, CART_W};
 use crate::hud::Millis;
 use crate::silhouette::{GbShell, NesShell, SnesShell};
 use crate::slot_chrome::{draw_empty_slot, MOUTH_H};
@@ -55,8 +55,7 @@ enum Backing {
 
 fn backing(cart: &Cart) -> Backing {
     match cart.platform {
-        slot_store::Platform::Nes if nes_famicom_of(cart) => Backing::Nes(NesShell::Famicom),
-        slot_store::Platform::Nes => Backing::Nes(NesShell::Nes),
+        slot_store::Platform::Nes => Backing::Nes(nes_shell_kind(cart)),
         slot_store::Platform::Snes => Backing::Snes(snes_shell_of(cart).unwrap_or(SnesShell::Us)),
         slot_store::Platform::Ps1 => Backing::Disc,
         _ => gb_shell_of(cart).map_or(Backing::Gba, Backing::Gb),
@@ -73,6 +72,7 @@ pub struct Shelf {
     gbc_shadow: Option<TexId>,
     nes_shadow: Option<TexId>,
     famicom_shadow: Option<TexId>,
+    tengen_shadow: Option<TexId>,
     snes_shadow: Option<TexId>,
     snes_pal_shadow: Option<TexId>,
     disc_shadow: Option<TexId>,
@@ -104,6 +104,7 @@ impl Shelf {
             gbc_shadow: None,
             nes_shadow: None,
             famicom_shadow: None,
+            tengen_shadow: None,
             snes_shadow: None,
             snes_pal_shadow: None,
             disc_shadow: None,
@@ -177,6 +178,7 @@ impl Shelf {
         match shell {
             NesShell::Nes => self.nes_shadow = Some(face),
             NesShell::Famicom => self.famicom_shadow = Some(face),
+            NesShell::Tengen => self.tengen_shadow = Some(face),
         }
     }
 
@@ -464,6 +466,7 @@ impl Shelf {
                     Some(Backing::Gb(GbShell::Rounded)) => self.gbc_shadow,
                     Some(Backing::Nes(NesShell::Nes)) => self.nes_shadow,
                     Some(Backing::Nes(NesShell::Famicom)) => self.famicom_shadow,
+                    Some(Backing::Nes(NesShell::Tengen)) => self.tengen_shadow,
                     Some(Backing::Snes(SnesShell::Us)) => self.snes_shadow,
                     Some(Backing::Snes(SnesShell::Pal)) => self.snes_pal_shadow,
                     Some(Backing::Disc) => self.disc_shadow,
