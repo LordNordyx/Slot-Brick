@@ -606,7 +606,7 @@ fn a_tengen_cart_lifts_off_and_turns_upside_down_before_going_in() {
     );
     assert!(
         (cart_turn(&c, 1.0) - flipped).abs() < 0.01,
-        "turns back right side up before fully seated"
+        "is not still upside down once fully seated"
     );
 }
 

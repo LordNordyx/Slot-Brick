@@ -414,4 +414,24 @@ mod tengen_tests {
     fn an_unlicensed_game_that_is_not_tengens_does_not() {
         assert!(!tengen_board("Bible Adventures (USA) (Unl)"));
     }
+
+    #[test]
+    fn an_empty_name_does_not() {
+        assert!(!tengen_board(""));
+    }
+
+    #[test]
+    fn the_unl_tag_is_not_case_sensitive() {
+        assert!(tengen_board("Tetris (USA) (unl)"));
+    }
+
+    #[test]
+    fn a_title_only_a_tengen_one_starts_with_still_counts() {
+        assert!(tengen_board("Tetris 2 (USA) (Unl)"));
+    }
+
+    #[test]
+    fn the_unl_tag_with_no_region_before_it_still_counts() {
+        assert!(tengen_board("Tetris (Unl)"));
+    }
 }

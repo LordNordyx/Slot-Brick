@@ -6527,7 +6527,7 @@ impl CartMenu {
                         colours.len() - 1
                     }
                 };
-                let outlines: &[Outline] = if famicom.is_some() { &OUTLINES_NES } else { &OUTLINES };
+                let outlines = Self::outlines_for(famicom.is_some());
                 (colour, finish_at(finish), outlines.iter().position(|o| *o == choice.outline).unwrap_or(0))
             }
         };
@@ -6567,19 +6567,23 @@ impl CartMenu {
     /// A NES game on the Famicom cart: its shape as chosen, or its own.
 
 
-    /// The shell these values make: None while they are all the game's own.
-    /// On the Famicom shape a cart is offered the Famicom plastics, on the NES shape the NES
-    /// ones. Stepping the shape moves it from one set to the other, so it keeps the plastic it
-    /// is wearing if that is in both and falls back to its own if it is not.
     /// This cart's own outline set: NES carts have one more, for Tengen's shell.
     fn outlines(&self) -> &'static [Outline] {
-        if self.famicom.is_some() {
+        Self::outlines_for(self.famicom.is_some())
+    }
+
+    fn outlines_for(famicom: bool) -> &'static [Outline] {
+        if famicom {
             &OUTLINES_NES
         } else {
             &OUTLINES
         }
     }
 
+    /// The shell these values make: None while they are all the game's own.
+    /// On the Famicom shape a cart is offered the Famicom plastics, on the NES shape the NES
+    /// ones. Stepping the shape moves it from one set to the other, so it keeps the plastic it
+    /// is wearing if that is in both and falls back to its own if it is not.
     fn fit_colours(&mut self) {
         let famicom = self.famicom.is_some_and(|(own, _)| match self.outlines()[self.shape] {
             Outline::Auto => own,
