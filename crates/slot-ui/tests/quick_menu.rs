@@ -120,7 +120,7 @@ fn the_rows_run_in_the_order_the_user_chose() {
     assert_eq!(systems, [Platform::Gb, Platform::Gbc, Platform::Gba, Platform::Nes, Platform::Snes, Platform::Ps1]);
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
-        ["Fast Forward", "Fast Forward Sound", "Rewind", "Turbo Buttons", "Saving"]
+        ["Fast Forward", "Fast Forward Sound", "Rewind", "Turbo Buttons", "Swap A/B", "Saving"]
     );
     assert_eq!(QuickRow::SAVING.map(QuickRow::label), ["Auto Save", "Save on Eject"]);
     // A row with a page under it says A OPEN, not CHANGE.

@@ -26,6 +26,7 @@ pub enum QuickRow {
     EjectSave,
     Turbo,
     Rewind,
+    SwapAb,
     GbPalettes,
     Lights,
     LedMode,
@@ -93,7 +94,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 77] = [
+    pub const ALL: [QuickRow; 78] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -107,6 +108,7 @@ impl QuickRow {
         QuickRow::EjectSave,
         QuickRow::Turbo,
         QuickRow::Rewind,
+        QuickRow::SwapAb,
         QuickRow::GbPalettes,
         QuickRow::Lights,
         QuickRow::LedMode,
@@ -286,11 +288,12 @@ impl QuickRow {
         })
     }
 
-    pub const GAME: [QuickRow; 5] = [
+    pub const GAME: [QuickRow; 6] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
         QuickRow::Turbo,
+        QuickRow::SwapAb,
         QuickRow::Saving,
     ];
 
@@ -311,7 +314,7 @@ impl QuickRow {
             QuickRow::NesShader | QuickRow::NesOverlay => &QuickRow::SCREEN_NES,
             QuickRow::SnesShader | QuickRow::SnesOverlay => &QuickRow::SCREEN_SNES,
             QuickRow::Ps1Shader | QuickRow::Ps1Dithering | QuickRow::Ps1Overlay => &QuickRow::SCREEN_PS1,
-            QuickRow::FastForward | QuickRow::FastForwardSound | QuickRow::Rewind | QuickRow::Turbo | QuickRow::Saving => &QuickRow::GAME,
+            QuickRow::FastForward | QuickRow::FastForwardSound | QuickRow::Rewind | QuickRow::Turbo | QuickRow::SwapAb | QuickRow::Saving => &QuickRow::GAME,
             QuickRow::AutoSave | QuickRow::EjectSave => &QuickRow::SAVING,
             #[cfg(feature = "brick")]
             QuickRow::DateTime | QuickRow::AutoClock => &QuickRow::CLOCK,
@@ -474,6 +477,7 @@ impl QuickRow {
             QuickRow::BatteryShutdown => "Low Battery Shutdown",
             QuickRow::Turbo => "Turbo Buttons",
             QuickRow::Rewind => "Rewind",
+            QuickRow::SwapAb => "Swap A/B",
             QuickRow::GbPalettes => "GB Palettes",
         }
     }
