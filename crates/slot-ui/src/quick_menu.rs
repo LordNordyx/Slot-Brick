@@ -28,6 +28,9 @@ pub enum QuickRow {
     Rewind,
     SwapAb,
     GbPalettes,
+    SleepAfter,
+    SleepMenu,
+    SleepGame,
     Lights,
     LedMode,
     LedTop,
@@ -94,7 +97,7 @@ pub enum QuickRow {
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 78] = [
+    pub const ALL: [QuickRow; 81] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -110,6 +113,9 @@ impl QuickRow {
         QuickRow::Rewind,
         QuickRow::SwapAb,
         QuickRow::GbPalettes,
+        QuickRow::SleepAfter,
+        QuickRow::SleepMenu,
+        QuickRow::SleepGame,
         QuickRow::Lights,
         QuickRow::LedMode,
         QuickRow::LedTop,
@@ -219,6 +225,8 @@ impl QuickRow {
         [QuickRow::ShowGba, QuickRow::ShowGb, QuickRow::ShowGbc, QuickRow::ShowNes, QuickRow::ShowSnes, QuickRow::ShowPs1];
     /// Gameplay → Saving: when a game is saved without being asked.
     pub const SAVING: [QuickRow; 2] = [QuickRow::AutoSave, QuickRow::EjectSave];
+    /// Gameplay → Sleep After: idle minutes, in a menu or in a game, before Slot dozes off.
+    pub const SLEEP: [QuickRow; 2] = [QuickRow::SleepMenu, QuickRow::SleepGame];
 
     /// Screen: a page for each system, holding that system's own picture settings.
     pub const SCREEN: [QuickRow; 5] =
@@ -288,13 +296,14 @@ impl QuickRow {
         })
     }
 
-    pub const GAME: [QuickRow; 6] = [
+    pub const GAME: [QuickRow; 7] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Rewind,
         QuickRow::Turbo,
         QuickRow::SwapAb,
         QuickRow::Saving,
+        QuickRow::SleepAfter,
     ];
 
     pub fn index(self) -> usize {
@@ -314,8 +323,9 @@ impl QuickRow {
             QuickRow::NesShader | QuickRow::NesOverlay => &QuickRow::SCREEN_NES,
             QuickRow::SnesShader | QuickRow::SnesOverlay => &QuickRow::SCREEN_SNES,
             QuickRow::Ps1Shader | QuickRow::Ps1Dithering | QuickRow::Ps1Overlay => &QuickRow::SCREEN_PS1,
-            QuickRow::FastForward | QuickRow::FastForwardSound | QuickRow::Rewind | QuickRow::Turbo | QuickRow::SwapAb | QuickRow::Saving => &QuickRow::GAME,
+            QuickRow::FastForward | QuickRow::FastForwardSound | QuickRow::Rewind | QuickRow::Turbo | QuickRow::SwapAb | QuickRow::Saving | QuickRow::SleepAfter => &QuickRow::GAME,
             QuickRow::AutoSave | QuickRow::EjectSave => &QuickRow::SAVING,
+            QuickRow::SleepMenu | QuickRow::SleepGame => &QuickRow::SLEEP,
             #[cfg(feature = "brick")]
             QuickRow::DateTime | QuickRow::AutoClock => &QuickRow::CLOCK,
             #[cfg(not(feature = "brick"))]
@@ -374,6 +384,7 @@ impl QuickRow {
             QuickRow::SoundVolume => Some(QuickRow::SystemSounds),
             QuickRow::Wifi => Some(QuickRow::Online),
             QuickRow::AutoSave => Some(QuickRow::Saving),
+            QuickRow::SleepMenu => Some(QuickRow::SleepAfter),
             #[cfg(feature = "brick")]
             QuickRow::DateTime => Some(QuickRow::Clock),
             first if first == QuickRow::SYSTEM[0] => Some(QuickRow::System),
@@ -399,6 +410,7 @@ impl QuickRow {
             QuickRow::Online => Some(QuickRow::ONLINE[0]),
             QuickRow::Clock => Some(QuickRow::CLOCK[0]),
             QuickRow::Saving => Some(QuickRow::SAVING[0]),
+            QuickRow::SleepAfter => Some(QuickRow::SLEEP[0]),
             _ => None,
         }
     }
@@ -479,6 +491,9 @@ impl QuickRow {
             QuickRow::Rewind => "Rewind",
             QuickRow::SwapAb => "Swap A/B",
             QuickRow::GbPalettes => "GB Palettes",
+            QuickRow::SleepAfter => "Sleep After",
+            QuickRow::SleepMenu => "Menu",
+            QuickRow::SleepGame => "Game",
         }
     }
 
@@ -487,7 +502,7 @@ impl QuickRow {
             self,
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game | QuickRow::Lights | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library
                 | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutLabel | QuickRow::SystemSounds
-                | QuickRow::Online | QuickRow::Clock | QuickRow::Saving
+                | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::SleepAfter
                 | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1
         )
     }
@@ -531,6 +546,9 @@ pub enum QuickValue {
     Min1,
     Min5,
     Min10,
+    Min15,
+    Min30,
+    Min60,
     Percent3,
     Percent5,
     Percent10,
@@ -548,7 +566,7 @@ pub enum QuickValue {
 }
 
 impl QuickValue {
-    pub const ALL: [QuickValue; 38] = [
+    pub const ALL: [QuickValue; 41] = [
         QuickValue::Speed2,
         QuickValue::Speed3,
         QuickValue::Speed4,
@@ -575,6 +593,9 @@ impl QuickValue {
         QuickValue::Min1,
         QuickValue::Min5,
         QuickValue::Min10,
+        QuickValue::Min15,
+        QuickValue::Min30,
+        QuickValue::Min60,
         QuickValue::Percent3,
         QuickValue::Percent5,
         QuickValue::Percent10,
@@ -621,6 +642,9 @@ impl QuickValue {
             QuickValue::Min1 => "1 min",
             QuickValue::Min5 => "5 min",
             QuickValue::Min10 => "10 min",
+            QuickValue::Min15 => "15 min",
+            QuickValue::Min30 => "30 min",
+            QuickValue::Min60 => "60 min",
             QuickValue::Percent3 => "3%",
             QuickValue::Percent5 => "5%",
             QuickValue::Percent10 => "10%",
@@ -646,13 +670,16 @@ impl QuickValue {
         }
     }
 
-    /// An autosave interval in minutes, 0 for off.
+    /// A span of minutes, 0 for off: an autosave interval, or how long idle before sleep.
     pub fn minutes(min: u8) -> Option<QuickValue> {
         match min {
             0 => Some(QuickValue::Off),
             1 => Some(QuickValue::Min1),
             5 => Some(QuickValue::Min5),
             10 => Some(QuickValue::Min10),
+            15 => Some(QuickValue::Min15),
+            30 => Some(QuickValue::Min30),
+            60 => Some(QuickValue::Min60),
             _ => None,
         }
     }

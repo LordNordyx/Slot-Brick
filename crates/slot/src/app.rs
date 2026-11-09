@@ -11,7 +11,7 @@ use slot_store::{
     format_stamp, read_slot_state, scan, write_slot_state, Cart, Core, GbPalette, Outline, Platform,
     Shader, ShellChoice, ShellFinish, SlotState, StateEntry, StateRing, Theme, BLUE_LIGHT_MAX,
     AUTOSAVE_MINS, BATTERY_SHUTDOWNS, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX,
-    VOLUME_MAX,
+    SLEEP_MINS, VOLUME_MAX,
 };
 use slot_ui::{
     board_from, board_zoom, draw_backdrop, draw_empty_slot, draw_footer, draw_slot_name,
@@ -1296,6 +1296,8 @@ impl App {
             QuickRow::EjectSave => Some(QuickValue::flag(self.state.eject_save)),
             QuickRow::AutoSave => QuickValue::minutes(self.state.autosave_min),
             QuickRow::BatteryShutdown => QuickValue::percent(self.state.battery_shutdown),
+            QuickRow::SleepMenu => QuickValue::minutes(self.state.sleep_menu_min),
+            QuickRow::SleepGame => QuickValue::minutes(self.state.sleep_game_min),
             QuickRow::Turbo => Some(QuickValue::flag(self.state.turbo)),
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
             QuickRow::SwapAb => Some(QuickValue::flag(self.state.swap_ab)),
@@ -1319,7 +1321,7 @@ impl App {
                 row.shelf_of().map(|p| QuickValue::flag(self.state.shows(p)))
             }
             QuickRow::ResetSettings => self.reset_asked,
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel | QuickRow::SystemSounds | QuickRow::SoundVolume => None,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::SleepAfter | QuickRow::LibrarySystems | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel | QuickRow::SystemSounds | QuickRow::SoundVolume => None,
         }
     }
 
@@ -1931,6 +1933,17 @@ impl App {
         self.state.swap_ab
     }
 
+    /// Gameplay → Sleep After → Menu: idle minutes on the shelf or in a menu before Slot dozes
+    /// off; 0 is off.
+    pub fn sleep_menu_min(&self) -> u8 {
+        self.state.sleep_menu_min
+    }
+
+    /// Gameplay → Sleep After → Game: idle minutes in a game before Slot dozes off; 0 is off.
+    pub fn sleep_game_min(&self) -> u8 {
+        self.state.sleep_game_min
+    }
+
     pub fn ff_speed(&self) -> u8 {
         self.state.ff_speed
     }
@@ -2442,6 +2455,7 @@ impl App {
             | QuickRow::ScreenPs1
             | QuickRow::Game
             | QuickRow::Saving
+            | QuickRow::SleepAfter
             | QuickRow::Clock
             | QuickRow::Online
             | QuickRow::System
@@ -2455,6 +2469,8 @@ impl App {
             QuickRow::EjectSave
             | QuickRow::AutoSave
             | QuickRow::BatteryShutdown
+            | QuickRow::SleepMenu
+            | QuickRow::SleepGame
             | QuickRow::Turbo
             | QuickRow::Rewind
             | QuickRow::SwapAb
@@ -2593,6 +2609,8 @@ impl App {
                 self.autosave_at = self.now() + self.autosave_ms();
             }
             QuickRow::BatteryShutdown => s.battery_shutdown = step(&BATTERY_SHUTDOWNS, s.battery_shutdown, right),
+            QuickRow::SleepMenu => s.sleep_menu_min = step(&SLEEP_MINS, s.sleep_menu_min, right),
+            QuickRow::SleepGame => s.sleep_game_min = step(&SLEEP_MINS, s.sleep_game_min, right),
             QuickRow::Turbo => s.turbo = !s.turbo,
             QuickRow::Rewind => s.rewind = !s.rewind,
             QuickRow::SwapAb => s.swap_ab = !s.swap_ab,
@@ -2628,7 +2646,7 @@ impl App {
                     self.clock_sync_at = 0;
                 }
             }
-            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel | QuickRow::SystemSounds => return,
+            QuickRow::GbOverlay | QuickRow::GbcOverlay | QuickRow::GbaOverlay | QuickRow::NesOverlay | QuickRow::SnesOverlay | QuickRow::Ps1Overlay | QuickRow::Wifi | QuickRow::CartArt | QuickRow::Achievements | QuickRow::Update | QuickRow::System | QuickRow::Library | QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::ScreenGb | QuickRow::ScreenGba | QuickRow::ScreenNes | QuickRow::ScreenSnes | QuickRow::ScreenPs1 | QuickRow::Game | QuickRow::Lights | QuickRow::LedMode | QuickRow::LedTop | QuickRow::LedButtons | QuickRow::LedTriggers | QuickRow::LedSticks | QuickRow::LedColor | QuickRow::LedEffect | QuickRow::Font | QuickRow::Online | QuickRow::Clock | QuickRow::Saving | QuickRow::SleepAfter | QuickRow::LibrarySystems | QuickRow::ResetSettings | QuickRow::AboutVersion | QuickRow::AboutBuild | QuickRow::AboutDevice | QuickRow::AboutFirmware | QuickRow::AboutCard | QuickRow::AboutLabel | QuickRow::SystemSounds => return,
         }
         self.persist();
     }

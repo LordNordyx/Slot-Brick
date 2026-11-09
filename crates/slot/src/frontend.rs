@@ -28,12 +28,9 @@ use crate::session::Session;
 use crate::wallpaper;
 
 const DOZE_TIMEOUT: Duration = Duration::from_secs(180);
-// The Brick has no lid, so an untouched device would otherwise stay lit until
-// the battery is flat. Idle limits before slot dozes (and then suspends).
-#[cfg(feature = "brick")]
-const IDLE_MENU: Duration = Duration::from_secs(5 * 60);
-#[cfg(feature = "brick")]
-const IDLE_GAME: Duration = Duration::from_secs(15 * 60);
+// The Brick has no lid, so an untouched device would otherwise stay lit until the battery is
+// flat. How long before Slot dozes (and then suspends) is Gameplay → Sleep After's own idle
+// limit, one for menus and one for games.
 // After a wake nobody follows up with input (charger plug, bumped key), sleep again soon.
 #[cfg(feature = "brick")]
 const IDLE_AFTER_WAKE: Duration = Duration::from_secs(90);
@@ -75,8 +72,6 @@ pub struct Frontend {
     #[cfg(feature = "brick")]
     wifi_tex: Option<TexId>,
     banner_tex: Option<TexId>,
-    #[cfg(feature = "brick")]
-    auto_sleep: bool,
     #[cfg(feature = "brick")]
     woke_untouched: bool,
 }
@@ -345,8 +340,6 @@ impl Frontend {
     pub fn boot(platform: Box<dyn Platform>) -> Self {
         let now = Instant::now();
         let cart_faces = CartFaces::spawn(platform.root().to_path_buf());
-        #[cfg(feature = "brick")]
-        let session_root = platform.root().to_path_buf();
         let mut session = Session::boot(platform.root().to_path_buf());
         label_cache::forget_old(platform.root());
         let stale = label_cache::stale(platform.root(), session.app().carts());
@@ -392,8 +385,6 @@ impl Frontend {
             #[cfg(feature = "brick")]
             wifi_tex: None,
             banner_tex: None,
-            #[cfg(feature = "brick")]
-            auto_sleep: !platform_root_has(&session_root, "DISABLE_AUTO_SLEEP"),
             #[cfg(feature = "brick")]
             woke_untouched: false,
         }
@@ -956,12 +947,14 @@ impl Frontend {
     /// Doze after a stretch without input; device_app then suspends as for a power press.
     #[cfg(feature = "brick")]
     pub fn idle_sleep(&mut self) {
-        if !self.auto_sleep || self.rebuild.is_some() || self.app().link_active() {return}
-        let limit = match self.app().phase() {
-            Phase::Shelf | Phase::QuickMenu { .. } => IDLE_MENU,
-            Phase::Playing { .. } => IDLE_GAME,
+        if self.rebuild.is_some() || self.app().link_active() {return}
+        let min = match self.app().phase() {
+            Phase::Shelf | Phase::QuickMenu { .. } => self.app().sleep_menu_min(),
+            Phase::Playing { .. } => self.app().sleep_game_min(),
             _ => return,
         };
+        if min == 0 {return}
+        let limit = Duration::from_secs(min as u64 * 60);
         let limit = if self.woke_untouched {limit.min(IDLE_AFTER_WAKE)} else {limit};
         if self.last_input.elapsed() >= limit {
             eprintln!("slot: idle for {}s; sleeping", self.last_input.elapsed().as_secs());
@@ -1434,11 +1427,6 @@ fn upload_rgba(
     }
 }
 
-#[cfg(feature = "brick")]
-fn platform_root_has(root: &std::path::Path, name: &str) -> bool {
-    root.join(name).exists()
-}
-
 #[cfg(all(test,feature="brick"))]
 mod power_render_tests {
     use super::*;
@@ -1467,12 +1455,25 @@ mod power_render_tests {
         assert!(matches!(f.app().phase(),Phase::Doze{..}));
     }
     #[test]
-    fn auto_sleep_can_be_disabled() {
+    fn sleep_after_can_be_turned_off() {
         let dir=tempfile::tempdir().unwrap();crate::root::ensure(dir.path());
-        std::fs::write(dir.path().join("DISABLE_AUTO_SLEEP"),"").unwrap();
-        let mut f=booted(dir.path());
+        let mut state=slot_store::SlotState::default();state.clock_set=true;state.sleep_menu_min=0;
+        slot_store::write_slot_state(dir.path(),&state).unwrap();
+        let mut f=Frontend::boot(Box::new(slot_power::SimPlatform::at(dir.path().into())));
         f.last_input=Instant::now()-Duration::from_secs(3600);f.idle_sleep();
         assert!(matches!(f.app().phase(),Phase::Shelf));
+    }
+
+    #[test]
+    fn the_menu_sleep_setting_sets_its_own_idle_limit() {
+        let dir=tempfile::tempdir().unwrap();crate::root::ensure(dir.path());
+        let mut state=slot_store::SlotState::default();state.clock_set=true;state.sleep_menu_min=1;
+        slot_store::write_slot_state(dir.path(),&state).unwrap();
+        let mut f=Frontend::boot(Box::new(slot_power::SimPlatform::at(dir.path().into())));
+        f.last_input=Instant::now()-Duration::from_secs(59);f.idle_sleep();
+        assert!(matches!(f.app().phase(),Phase::Shelf),"1 minute is not yet up");
+        f.last_input=Instant::now()-Duration::from_secs(61);f.idle_sleep();
+        assert!(matches!(f.app().phase(),Phase::Doze{..}));
     }
     #[test]
     fn idle_redraw_gate_preserves_input_effects_and_periodic_refresh() {

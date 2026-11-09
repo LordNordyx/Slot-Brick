@@ -4,6 +4,7 @@ use common::tmp_root;
 use slot_store::{
     atomic_write, read_slot_state, write_slot_state, GbPalette, Platform, Shader, SlotState,
     AUTOSAVE_MIN_DEFAULT, BATTERY_SHUTDOWN_DEFAULT, FF_SPEEDS, FF_SPEED_DEFAULT,
+    SLEEP_GAME_MIN_DEFAULT, SLEEP_MENU_MIN_DEFAULT,
 };
 use tempfile::tempdir;
 
@@ -217,6 +218,8 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             eject_save: true,
             autosave_min: AUTOSAVE_MIN_DEFAULT,
             battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,
+            sleep_menu_min: SLEEP_MENU_MIN_DEFAULT,
+            sleep_game_min: SLEEP_GAME_MIN_DEFAULT,
             turbo: true,
             rewind: true,
             swap_ab: false,
@@ -250,6 +253,8 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         eject_save: false,
         autosave_min: 10,
         battery_shutdown: 0,
+        sleep_menu_min: 30,
+        sleep_game_min: 0,
         turbo: false,
         rewind: false,
         swap_ab: true,
@@ -277,6 +282,8 @@ fn the_quick_menu_settings_round_trip_as_their_own_lines() {
         "eject_save=0",
         "autosave_min=10",
         "battery_shutdown=0",
+        "sleep_menu_min=30",
+        "sleep_game_min=0",
         "turbo=0",
         "rewind=0",
         "swap_ab=1",
