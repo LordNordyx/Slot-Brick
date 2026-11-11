@@ -27,6 +27,11 @@ pub const AUTOSAVE_MIN_DEFAULT: u8 = 1;
 pub const BATTERY_SHUTDOWNS: [u8; 4] = [0, 3, 5, 10];
 pub const BATTERY_SHUTDOWN_DEFAULT: u8 = 5;
 
+/// Minutes with no input before Slot dozes off; 0 is off.
+pub const SLEEP_MINS: [u8; 7] = [0, 1, 5, 10, 15, 30, 60];
+pub const SLEEP_MENU_MIN_DEFAULT: u8 = 5;
+pub const SLEEP_GAME_MIN_DEFAULT: u8 = 15;
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SlotState {
     pub cart: Option<String>,
@@ -78,6 +83,11 @@ pub struct SlotState {
     pub eject_save: bool,
     pub autosave_min: u8,
     pub battery_shutdown: u8,
+    /// Gameplay → Sleep After → Menu: idle minutes on the shelf or in a menu before Slot dozes
+    /// off; 0 is off.
+    pub sleep_menu_min: u8,
+    /// Gameplay → Sleep After → Game: idle minutes in a game before Slot dozes off; 0 is off.
+    pub sleep_game_min: u8,
     pub turbo: bool,
     pub rewind: bool,
     /// Gameplay → Swap A/B: A and B trade places, in games and in Slot's own menus.
@@ -212,6 +222,8 @@ impl Default for SlotState {
             eject_save: true,
             autosave_min: AUTOSAVE_MIN_DEFAULT,
             battery_shutdown: BATTERY_SHUTDOWN_DEFAULT,
+            sleep_menu_min: SLEEP_MENU_MIN_DEFAULT,
+            sleep_game_min: SLEEP_GAME_MIN_DEFAULT,
             turbo: true,
             rewind: true,
             swap_ab: false,
@@ -287,6 +299,8 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         let _ = writeln!(text, "{key}={}", on as u8);
     }
     let _ = writeln!(text, "sound_volume={}", s.sound_volume);
+    let _ = writeln!(text, "sleep_menu_min={}", s.sleep_menu_min);
+    let _ = writeln!(text, "sleep_game_min={}", s.sleep_game_min);
     let hidden: Vec<String> = Platform::ALL.into_iter().filter(|p| s.hidden_systems[p.index()]).map(platform_key).collect();
     let _ = writeln!(text, "hidden_systems={}", hidden.join(","));
     atomic_write(&state_path(root), text.as_bytes())
@@ -331,6 +345,8 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut eject_save = None;
     let mut autosave_min = None;
     let mut battery_shutdown = None;
+    let mut sleep_menu_min = None;
+    let mut sleep_game_min = None;
     let mut turbo = None;
     let mut rewind = None;
     let mut swap_ab = None;
@@ -382,6 +398,8 @@ fn parse(text: &str) -> Option<SlotState> {
             "eject_save" => eject_save = flag(value),
             "autosave_min" => autosave_min = choice(value, &AUTOSAVE_MINS),
             "battery_shutdown" => battery_shutdown = choice(value, &BATTERY_SHUTDOWNS),
+            "sleep_menu_min" => sleep_menu_min = choice(value, &SLEEP_MINS),
+            "sleep_game_min" => sleep_game_min = choice(value, &SLEEP_MINS),
             "turbo" => turbo = flag(value),
             "rewind" => rewind = flag(value),
             "swap_ab" => swap_ab = flag(value),
@@ -441,6 +459,8 @@ fn parse(text: &str) -> Option<SlotState> {
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         autosave_min: autosave_min.unwrap_or(fallback.autosave_min),
         battery_shutdown: battery_shutdown.unwrap_or(fallback.battery_shutdown),
+        sleep_menu_min: sleep_menu_min.unwrap_or(fallback.sleep_menu_min),
+        sleep_game_min: sleep_game_min.unwrap_or(fallback.sleep_game_min),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),
         swap_ab: swap_ab.unwrap_or(fallback.swap_ab),

@@ -120,9 +120,10 @@ fn the_rows_run_in_the_order_the_user_chose() {
     assert_eq!(systems, [Platform::Gb, Platform::Gbc, Platform::Gba, Platform::Nes, Platform::Snes, Platform::Ps1]);
     assert_eq!(
         QuickRow::GAME.map(QuickRow::label),
-        ["Fast Forward", "Fast Forward Sound", "Rewind", "Turbo Buttons", "Swap A/B", "Saving"]
+        ["Fast Forward", "Fast Forward Sound", "Rewind", "Turbo Buttons", "Swap A/B", "Saving", "Sleep After"]
     );
     assert_eq!(QuickRow::SAVING.map(QuickRow::label), ["Auto Save", "Save on Eject"]);
+    assert_eq!(QuickRow::SLEEP.map(QuickRow::label), ["Menu", "Game"]);
     // A row with a page under it says A OPEN, not CHANGE.
     for row in QuickRow::ALL {
         if row.child().is_some() {
@@ -169,7 +170,7 @@ fn the_values_read_as_the_menu_prints_them() {
             "Grid",
             "Dot",
             "Simpletex", "Stock", "Low", "Medium", "High", "White", "Blue", "Green", "Amber", "Red", "Purple", "Steady", "Breathe", "Unavailable",
-            "1 min", "5 min", "10 min", "3%", "5%", "10%", "A–Z", "Last Played", "Most Played", "All Games", "Favorites", "Minutes", "Hours", "Sure?", "Done"
+            "1 min", "5 min", "10 min", "15 min", "30 min", "60 min", "3%", "5%", "10%", "A–Z", "Last Played", "Most Played", "All Games", "Favorites", "Minutes", "Hours", "Sure?", "Done"
         ]
     );
     assert_eq!(
