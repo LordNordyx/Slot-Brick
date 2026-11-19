@@ -10,6 +10,7 @@ license = "GPL-3.0-or-later"
 [workspace.dependencies]
 lz4_flex = { version = "0.11", default-features = false, features = ["std"] }
 png = "0.17"
+image-webp = "0.2.4"
 fontdue = "0.9"
 libloading = "0.8"
 libc = "0.2"

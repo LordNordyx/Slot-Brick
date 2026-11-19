@@ -29,6 +29,7 @@ libc = { workspace = true }
 lz4_flex = { workspace = true }
 miniz_oxide = { workspace = true }
 png = { workspace = true }
+image-webp = { workspace = true }
 ring = { workspace = true }
 rustls = { workspace = true }
 webpki-roots = { workspace = true }

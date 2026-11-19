@@ -338,9 +338,8 @@ fn fetch_label(cart: &Cart, src: &mut Sources) -> Result<Outcome, String> {
         return Ok(Outcome::NoMatch);
     };
     let path = &path;
-    let png = match get(src.server, &format!("/{path}"), IMAGE_MAX) {
-        Ok(Some(png)) if is_png(&png) => png,
-        Ok(Some(_)) => return Ok(Outcome::Failed(format!("{path}: not a PNG"))),
+    let png = match fetch_scan(src.server, path) {
+        Ok(Some(png)) => png,
         Ok(None) => return Ok(Outcome::NoMatch),
         Err(e) => return Ok(Outcome::Failed(e)),
     };
@@ -832,8 +831,8 @@ fn label_index(root: &Path, server: &str) -> Result<HashMap<u32, String>, String
 }
 
 /// Every "support-texture" (label scan) path in index.json, keyed by the CRC in its name.
-/// Only paths of the exact form `<GB|GBC|GBA>/support-texture/<CRC32>.png` are taken,
-/// so the index can never send a request anywhere else.
+/// Only paths of the exact form `<GB|GBC|GBA>/support-texture/<CRC32>.png` (or `.webp`) are
+/// taken, so the index can never send a request anywhere else.
 fn parse_label_index(json: &str) -> Vec<(u32, String)> {
     let mut out = Vec::new();
     let mut rest = json;
@@ -843,8 +842,8 @@ fn parse_label_index(json: &str) -> Vec<(u32, String)> {
         let after = &rest[open + 1..];
         let Some(close) = after.find('"') else { break };
         if let Some(path) = label_path(&after[..close]) {
-            let crc = &path[path.len() - 12..path.len() - 4];
-            if let Ok(crc) = u32::from_str_radix(crc, 16) {
+            let stem = scan_stem(path).expect("a label path has a scan's file type");
+            if let Ok(crc) = u32::from_str_radix(&stem[stem.len() - 8..], 16) {
                 out.push((crc, path.to_string()));
             }
         }
@@ -854,13 +853,58 @@ fn parse_label_index(json: &str) -> Vec<(u32, String)> {
 }
 
 fn label_path(path: &str) -> Option<&str> {
-    let (system, rest) = path.split_once('/')?;
-    let file = rest.strip_prefix("support-texture/")?;
-    let crc = file.strip_suffix(".png")?;
+    let (system, rest) = scan_stem(path)?.split_once('/')?;
+    let crc = rest.strip_prefix("support-texture/")?;
     let ok = ["GB", "GBC", "GBA"].contains(&system)
         && crc.len() == 8
         && crc.bytes().all(|b| b.is_ascii_hexdigit());
     ok.then_some(path)
+}
+
+/// The label scans' file types, the one the server holds now first: since November 2026 every
+/// scan is a `.webp`, while index.json still names each one `.png`.
+const SCAN_TYPES: [&str; 2] = [".webp", ".png"];
+
+/// A label scan's path without its file type.
+fn scan_stem(path: &str) -> Option<&str> {
+    SCAN_TYPES.iter().find_map(|kind| path.strip_suffix(kind))
+}
+
+/// A label scan as a PNG, whichever file type the server holds it as. Ok(None): it has none.
+fn fetch_scan(server: &str, path: &str) -> Result<Option<Vec<u8>>, String> {
+    let stem = scan_stem(path).ok_or_else(|| format!("{path}: not a label scan"))?;
+    for kind in SCAN_TYPES {
+        let file = format!("{stem}{kind}");
+        if let Some(bytes) = get(server, &format!("/{file}"), IMAGE_MAX)? {
+            return scan_png(bytes).map(Some).ok_or_else(|| format!("{file}: not a PNG or WebP picture"));
+        }
+    }
+    Ok(None)
+}
+
+/// The scan as it is when it is a PNG, else decoded from WebP and written as one: labels on
+/// the card are PNGs.
+fn scan_png(bytes: Vec<u8>) -> Option<Vec<u8>> {
+    if is_png(&bytes) {
+        return Some(bytes);
+    }
+    let (rgba, w, h) = decode_webp(&bytes)?;
+    encode(&rgba, w, h).ok()
+}
+
+fn decode_webp(bytes: &[u8]) -> Option<(Vec<u8>, u32, u32)> {
+    let mut dec = image_webp::WebPDecoder::new(std::io::Cursor::new(bytes)).ok()?;
+    let (w, h) = dec.dimensions();
+    if w == 0 || h == 0 || w > PICTURE_SIDE_MAX || h > PICTURE_SIDE_MAX {
+        return None;
+    }
+    let mut buf = vec![0u8; dec.output_buffer_size()?];
+    dec.read_image(&mut buf).ok()?;
+    let rgba = match dec.has_alpha() {
+        true => buf,
+        false => buf.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+    };
+    Some((rgba, w, h))
 }
 
 /// ROM checksums by path, kept with each file's size and mtime.
@@ -1208,8 +1252,8 @@ fn search(root: &Path, cart: &Cart, query: &str, servers: &Servers, cancel: &Ato
             let name = games.list.iter().find(|g| g.crc == crc).map_or("", |g| g.name.as_str());
             // A search can land on other games: their names say which.
             let source = name.split(" (").next().unwrap_or(name);
-            match get(&servers.labels, &format!("/{path}"), IMAGE_MAX) {
-                Ok(Some(png)) if is_png(&png) => {
+            match fetch_scan(&servers.labels, path) {
+                Ok(Some(png)) => {
                     let Some((w, h)) = png_size(&png) else { continue };
                     let whole = Frame { x: 0, y: 0, w, h };
                     if !offer(&png, &png, whole, caption(source, name)) {
@@ -1402,7 +1446,7 @@ mod tests {
     }
 
     /// The real label server: `SLOT_LIVE_ART=1 ... live_label_server -- --ignored`, and
-    /// SLOT_ART_PREVIEW=<dir> to render one GBA and one GB cart with a real label.
+    /// SLOT_ART_PREVIEW=<dir> to render one GBA, one GB and one GBC cart with a real label.
     #[test]
     #[ignore = "needs internet"]
     fn live_label_server() {
@@ -1413,9 +1457,9 @@ mod tests {
         let root = d.path();
         let index = label_index(root, SLOT_ART).unwrap();
         assert!(index.len() > 5000, "{} label scans", index.len());
-        for system in ["GBA", "GB"] {
+        for system in ["GBA", "GB", "GBC"] {
             let (crc, path) = index.iter().filter(|(_, p)| p.starts_with(&format!("{system}/"))).min().unwrap();
-            let png = get(SLOT_ART, &format!("/{path}"), IMAGE_MAX).unwrap().unwrap();
+            let png = fetch_scan(SLOT_ART, path).unwrap().unwrap();
             assert!(is_png(&png), "{path}");
             if std::env::var_os("SLOT_ART_PREVIEW").is_none() {
                 continue;
@@ -1881,12 +1925,21 @@ mod tests {
         let json = r#"{"000206C0": {"look": {"ground": "3067a3"}, "support-texture": "GBA/support-texture/000206C0.png", "wheel": "GBA/wheel/000206C0.png"},
             "00202DFA": {"wheel": "GB/wheel/00202DFA.png"},
             "DEADBEEF": {"support-texture": "../../etc/passwd"},
-            "0006612D": {"support-texture":"GB/support-texture/0006612D.png"}}"#;
+            "0006612D": {"support-texture":"GB/support-texture/0006612D.png"},
+            "5FF6B852": {"support-texture": "GBC/support-texture/5FF6B852.webp"},
+            "11111111": {"support-texture": "GBC/support-texture/11111111.gif"},
+            "22222222": {"support-texture": "GBC/support-texture/22222222"},
+            "33333333": {"support-texture": "GBC/support-texture/../../33333333.webp"},
+            "44444444": {"support-texture": "GBC/support-texture/4444 444.webp"},
+            "55555555": {"support-texture": "GBC/support-texture/5555555É.webp"},
+            "66666666": {"support-texture": "GBC/support-texture/66666666.png.webp"},
+            "77777777": {"support-texture": "NDS/support-texture/77777777.webp"}}"#;
         assert_eq!(
             parse_label_index(json),
             vec![
                 (0x0002_06C0, "GBA/support-texture/000206C0.png".to_string()),
                 (0x0006_612D, "GB/support-texture/0006612D.png".to_string()),
+                (0x5FF6_B852, "GBC/support-texture/5FF6B852.webp".to_string()),
             ]
         );
     }
@@ -2259,5 +2312,88 @@ mod tests {
     fn a_web_page_is_not_saved_as_a_label() {
         assert!(!is_png(b"<html>not found</html>"));
         assert!(is_png(&png_bytes()));
+    }
+
+    fn webp_bytes(w: u32, h: u32, pixels: &[u8], color: image_webp::ColorType) -> Vec<u8> {
+        let mut out = Vec::new();
+        image_webp::WebPEncoder::new(&mut out).encode(pixels, w, h, color).unwrap();
+        out
+    }
+
+    /// One GBA ROM whose label scan index.json names `.png`, with `files` on the server.
+    fn fetch_scan_of(files: Vec<(&str, u16, Vec<u8>)>) -> (tempfile::TempDir, Result<Summary, String>, String) {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        rom(root, "GBA/game.gba");
+        std::fs::create_dir_all(root.join("Logs")).unwrap();
+        let crc = 0xB2AA_7578u32; // 0x200 zero bytes, as rom() writes
+        let index = format!(r#"{{"{crc:08X}": {{"support-texture": "GBA/support-texture/{crc:08X}.png"}}}}"#);
+        let mut routes = vec![("/index.json".to_string(), 200, index.into_bytes())];
+        routes.extend(files.into_iter().map(|(file, status, body)| (format!("/GBA/support-texture/{crc:08X}{file}"), status, body)));
+        let (_, done) = drain(&ArtJob::start_at(root.to_path_buf(), servers(&serve(routes))));
+        let report = std::fs::read_to_string(root.join(REPORT)).unwrap_or_default();
+        (d, done, report)
+    }
+
+    #[test]
+    fn a_label_scan_the_server_holds_as_webp_is_saved_as_a_png() {
+        let pixels: Vec<u8> = (0..6u8).flat_map(|i| [i * 40, 255 - i * 40, 7, 100 + i]).collect();
+        let (d, done, report) = fetch_scan_of(vec![(".webp", 200, webp_bytes(3, 2, &pixels, image_webp::ColorType::Rgba8))]);
+        assert_eq!(done, Ok(Summary { found: 1, missing: 0, failed: 0 }), "{report}");
+        let label = std::fs::read(d.path().join("Labels/GBA/game.png")).unwrap();
+        assert_eq!(decode_rgba(&label), Some((pixels, 3, 2)));
+    }
+
+    #[test]
+    fn an_opaque_webp_scan_keeps_its_colours() {
+        let (d, done, report) = fetch_scan_of(vec![(".webp", 200, webp_bytes(1, 2, &[10, 20, 30, 40, 50, 60], image_webp::ColorType::Rgb8))]);
+        assert_eq!(done, Ok(Summary { found: 1, missing: 0, failed: 0 }), "{report}");
+        let label = std::fs::read(d.path().join("Labels/GBA/game.png")).unwrap();
+        assert_eq!(decode_rgba(&label), Some((vec![10, 20, 30, 255, 40, 50, 60, 255], 1, 2)));
+    }
+
+    #[test]
+    fn a_label_scan_is_still_found_as_a_png_when_there_is_no_webp() {
+        let (d, done, report) = fetch_scan_of(vec![(".png", 200, png_bytes())]);
+        assert_eq!(done, Ok(Summary { found: 1, missing: 0, failed: 0 }), "{report}");
+        assert_eq!(std::fs::read(d.path().join("Labels/GBA/game.png")).unwrap(), png_bytes());
+    }
+
+    #[test]
+    fn a_label_scan_the_server_has_in_neither_type_is_no_match() {
+        let (d, done, report) = fetch_scan_of(vec![]);
+        assert_eq!(done, Ok(Summary { found: 0, missing: 1, failed: 0 }), "{report}");
+        assert!(!d.path().join("Labels/GBA/game.png").exists());
+    }
+
+    #[test]
+    fn a_label_scan_that_is_no_picture_is_never_saved() {
+        let huge = webp_bytes(PICTURE_SIDE_MAX + 1, 1, &vec![0; (PICTURE_SIDE_MAX as usize + 1) * 4], image_webp::ColorType::Rgba8);
+        let mut cut = webp_bytes(4, 4, &[9; 64], image_webp::ColorType::Rgba8);
+        cut.truncate(cut.len() / 2);
+        let mut bad_header = webp_bytes(4, 4, &[9; 64], image_webp::ColorType::Rgba8);
+        bad_header[..4].copy_from_slice(b"RIFX");
+        for body in [Vec::new(), b"<html>not found</html>".to_vec(), "ラベル".as_bytes().to_vec(), cut, bad_header, huge] {
+            let (d, done, report) = fetch_scan_of(vec![(".webp", 200, body), (".png", 200, png_bytes())]);
+            assert_eq!(done, Ok(Summary { found: 0, missing: 0, failed: 1 }), "{report}");
+            assert!(report.contains("not a PNG or WebP picture"), "{report}");
+            assert!(!d.path().join("Labels/GBA/game.png").exists());
+        }
+    }
+
+    #[test]
+    fn a_label_search_offers_scans_the_server_holds_as_webp() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        games(root, &["GBA\tFEEEBDE4\tBZ4E\tFinal Fantasy IV Advance (USA)"]);
+        let cart = gba_rom(root, "Final Fantasy IV Advance (USA).gba", "BZ4E");
+        let server = serve(vec![
+            ("/index.json".into(), 200, br#"{"FEEEBDE4": {"support-texture": "GBA/support-texture/FEEEBDE4.png"}}"#.to_vec()),
+            ("/GBA/support-texture/FEEEBDE4.webp".into(), 200, webp_bytes(2, 2, &[200; 16], image_webp::ColorType::Rgba8)),
+        ]);
+        let (found, done) = search_all(&LabelSearch::start_at(root.to_path_buf(), cart, "Final Fantasy".into(), servers(&server)));
+        assert_eq!(done, Ok(()));
+        assert_eq!(found.len(), 1);
+        assert_eq!(decode_rgba(&std::fs::read(&found[0].path).unwrap()), Some((vec![200; 16], 2, 2)));
     }
 }
